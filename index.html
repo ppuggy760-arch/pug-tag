@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Pug Tag VR</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#0b1020; font-family:'Trebuchet MS','Segoe UI',system-ui,sans-serif; color:#fff; }
+  #app { position:fixed; inset:0; }
+  canvas { display:block; }
+
+  /* ---- Start overlay ---- */
+  #overlay {
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:24px;
+    background:radial-gradient(circle at 50% 30%, #2a4d6e 0%, #14213a 55%, #0b1020 100%);
+  }
+  #overlay h1 { font-size:clamp(38px,9vw,86px); letter-spacing:2px; margin-bottom:6px;
+    color:#ffd98a; text-shadow:0 4px 0 #a4682f, 0 8px 22px rgba(0,0,0,.6); }
+  #overlay .sub { font-size:clamp(15px,2.6vw,22px); color:#bfe0ff; margin-bottom:22px; }
+  .pugface { font-size:64px; margin-bottom:4px; filter:drop-shadow(0 6px 8px rgba(0,0,0,.5)); }
+  .btns { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; margin:10px 0 26px; }
+  button.play {
+    cursor:pointer; border:none; border-radius:14px; padding:16px 30px;
+    font-size:20px; font-weight:bold; font-family:inherit; color:#26160a;
+    background:linear-gradient(#ffe08a,#ffb347); box-shadow:0 5px 0 #b9772a, 0 8px 18px rgba(0,0,0,.45);
+    transition:transform .06s ease, box-shadow .06s ease;
+  }
+  button.play:hover { transform:translateY(2px); box-shadow:0 3px 0 #b9772a, 0 6px 14px rgba(0,0,0,.4); }
+  button.play.vr { background:linear-gradient(#a0e8ff,#4bb6ff); }
+  #vrmsg { font-size:13px; color:#8fb4d8; min-height:16px; }
+  .howto {
+    max-width:640px; text-align:left; background:rgba(6,14,30,.55); border:1px solid rgba(120,170,220,.25);
+    border-radius:14px; padding:16px 20px; font-size:14px; line-height:1.55; color:#d8e8ff;
+  }
+  .howto b { color:#ffd98a; }
+  .howto .col { display:flex; gap:26px; flex-wrap:wrap; }
+  .howto .col > div { flex:1; min-width:220px; }
+  kbd { background:#26375a; border:1px solid #47628f; border-bottom-width:2px; border-radius:5px;
+    padding:1px 7px; font-family:inherit; font-size:13px; }
+
+  /* ---- In-game HUD ---- */
+  #hud { position:fixed; z-index:10; inset:0; pointer-events:none; display:none; }
+  #status { position:absolute; top:16px; left:50%; transform:translateX(-50%);
+    font-size:clamp(18px,4vw,30px); font-weight:bold; padding:8px 22px; border-radius:30px;
+    background:rgba(10,20,40,.55); border:2px solid rgba(255,255,255,.15); white-space:nowrap;
+    text-shadow:0 2px 6px rgba(0,0,0,.7); transition:all .2s ease; }
+  #status.it { background:rgba(150,20,20,.75); border-color:#ff7a5c; animation:pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{ box-shadow:0 0 0 0 rgba(255,90,60,.5);} 50%{ box-shadow:0 0 0 14px rgba(255,90,60,0);} }
+  #sub2 { position:absolute; top:calc(16px + 52px); left:50%; transform:translateX(-50%);
+    font-size:15px; color:#cfe2ff; text-shadow:0 2px 5px #000; }
+  #banner { position:absolute; top:38%; left:50%; transform:translate(-50%,-50%) scale(1);
+    font-size:clamp(26px,7vw,64px); font-weight:bold; color:#ffe08a; text-shadow:0 4px 0 #a4682f,0 6px 20px #000;
+    opacity:0; transition:opacity .3s ease; text-align:center; }
+  #crosshair { position:absolute; top:50%; left:50%; width:8px; height:8px; margin:-4px 0 0 -4px;
+    border-radius:50%; background:rgba(255,255,255,.75); box-shadow:0 0 0 2px rgba(0,0,0,.35); }
+  #grabhint { position:absolute; bottom:26px; left:50%; transform:translateX(-50%);
+    font-size:14px; color:#dff0ff; background:rgba(10,20,40,.5); padding:6px 16px; border-radius:20px;
+    opacity:0; transition:opacity .2s; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- ================= START OVERLAY ================= -->
+<div id="overlay">
+  <div class="pugface">🐶</div>
+  <h1>PUG&nbsp;TAG</h1>
+  <div class="sub">A legless-pug VR chase game. Climb, swing, and dodge the lava pugs.</div>
+  <div class="btns">
+    <button class="play vr" id="btnVR">Enter VR</button>
+    <button class="play" id="btnDesktop">Play on Desktop</button>
+  </div>
+  <div id="vrmsg">Checking for a VR headset…</div>
+  <div class="howto">
+    <div class="col">
+      <div>
+        <b>🕶️ In VR (Quest, etc.)</b><br>
+        You have <b>long pug arms</b> that reach the floor.<br>
+        Squeeze <b>grip or trigger</b>, push off the <b>ground</b> to slide,<br>
+        grab <b>trees & branches</b> to climb. Swing arm-over-arm to fly.<br>
+        (Left <b>thumbstick</b> also glides, if you prefer.)
+      </div>
+      <div>
+        <b>🖥️ On Desktop (to test)</b><br>
+        <kbd>Mouse</kbd> look · <kbd>W A S D</kbd> move · <kbd>Space</kbd> jump<br>
+        Hold <kbd>Left-Click</kbd> near a tree to <b>grab & climb</b> (look up + W).<br>
+        <kbd>Esc</kbd> releases the mouse.
+      </div>
+    </div>
+    <div style="margin-top:12px"><b>Goal:</b> One pug starts as <b style="color:#ff8a6a">IT</b> (lava). Don't get touched! If a lava pug tags you, <i>you</i> become IT — go tag the others. Climb high to stay safe.</div>
+  </div>
+</div>
+
+<!-- ================= HUD ================= -->
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="status">RUN!</div>
+  <div id="sub2"></div>
+  <div id="banner"></div>
+  <div id="grabhint">✊ grabbing</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+
+// ============================================================
+//  PUG TAG  —  WebXR arm-locomotion chase game
+// ============================================================
+
+// ---------- tunables ----------
+const GRAVITY      = 14;      // m/s^2
+const MAX_SPEED    = 16;      // clamp body speed
+const GRAB_DIST    = 0.35;    // how close a paw must be to a surface to stick
+const ARM_SCALE    = 1.8;     // long-arm reach — your virtual arms are this much longer
+const SHOULDER_SIDE= 0.18;    // shoulder offset from the head (left/right)
+const SHOULDER_DOWN= 0.15;    // shoulder drop below the head
+const STICK_SPEED  = 3.5;     // optional thumbstick glide speed (comfort backup)
+const BODY_R       = 0.16;    // torso collision radius
+const TORSO_UP     = 1.0;     // torso height above rig origin (feet)
+const STEP         = 0.35;    // max ledge you can stand up onto
+const EYE_H        = 1.55;    // desktop eye height
+const GROUND_R     = 46;      // playable radius
+const BOUND_R      = 43;      // wall radius
+const BOT_COUNT    = 6;
+const TAG_DIST     = 1.5;     // horizontal tag range
+const TAG_IMMUNE   = 1.1;     // seconds of immunity after being tagged
+
+// ---------- renderer / scene / camera ----------
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.xr.enabled = true;
+renderer.xr.setReferenceSpaceType('local-floor');
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xbfe3ff, 26, 80);
+
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.05, 600);
+
+// The "rig" is the locomotion body. Moving rig.position moves the player.
+const rig = new THREE.Group();
+rig.add(camera);
+scene.add(rig);
+camera.position.set(0, EYE_H, 0); // used on desktop; overridden by headset in VR
+
+// ---------- lights + sky ----------
+scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x5a6b3a, 1.0));
+const sun = new THREE.DirectionalLight(0xffffff, 1.35);
+sun.position.set(20, 40, 12);
+scene.add(sun);
+
+(function makeSky(){
+  const geo = new THREE.SphereGeometry(400, 32, 20);
+  const top = new THREE.Color(0x2f7fd6), bot = new THREE.Color(0xdff1ff);
+  const pos = geo.attributes.position, colors = [];
+  for (let i=0;i<pos.count;i++){
+    const y = pos.getY(i) / 400;               // -1..1
+    const t = Math.pow(THREE.MathUtils.clamp((y+1)/2,0,1), 0.7);
+    const c = bot.clone().lerp(top, t);
+    colors.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
+  const mat = new THREE.MeshBasicMaterial({ vertexColors:true, side:THREE.BackSide, fog:false });
+  scene.add(new THREE.Mesh(geo, mat));
+})();
+
+// ============================================================
+//  WORLD  +  COLLIDERS
+// ============================================================
+// collider shapes:  {t:'ground'} | {t:'cyl',x,z,y0,y1,r} | {t:'box',min,max} | {t:'sphere',x,y,z,r}
+const colliders = [{ t:'ground' }];
+
+const matBark   = new THREE.MeshStandardMaterial({ color:0x6d4a2f, roughness:1 });
+const matLeaf   = new THREE.MeshStandardMaterial({ color:0x3f8f3a, roughness:1, flatShading:true });
+const matLeaf2  = new THREE.MeshStandardMaterial({ color:0x4fae46, roughness:1, flatShading:true });
+const matWood   = new THREE.MeshStandardMaterial({ color:0x9c6b3f, roughness:1 });
+const matRock   = new THREE.MeshStandardMaterial({ color:0x8a8f96, roughness:1, flatShading:true });
+
+// ground
+(function(){
+  const g = new THREE.Mesh(
+    new THREE.CircleGeometry(GROUND_R, 48),
+    new THREE.MeshStandardMaterial({ color:0x5f9e46, roughness:1 })
+  );
+  g.rotation.x = -Math.PI/2;
+  scene.add(g);
+  // scatter darker patches for depth
+  for (let i=0;i<40;i++){
+    const r = Math.random()*GROUND_R*0.95;
+    const a = Math.random()*Math.PI*2;
+    const p = new THREE.Mesh(new THREE.CircleGeometry(1+Math.random()*2.5, 8),
+      new THREE.MeshStandardMaterial({ color:0x55913f, roughness:1 }));
+    p.rotation.x = -Math.PI/2; p.position.set(Math.cos(a)*r, 0.01, Math.sin(a)*r);
+    scene.add(p);
+  }
+})();
+
+function addBox(min, max, mat){
+  const w=max.x-min.x, h=max.y-min.y, d=max.z-min.z;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.position.set((min.x+max.x)/2,(min.y+max.y)/2,(min.z+max.z)/2);
+  scene.add(m);
+  colliders.push({ t:'box', min:{...min}, max:{...max} });
+  return m;
+}
+
+function makeTree(x, z, scale){
+  const trunkH = 8*scale, r = 0.55*scale;
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(r*0.8, r, trunkH, 12), matBark);
+  trunk.position.set(x, trunkH/2, z);
+  scene.add(trunk);
+  colliders.push({ t:'cyl', x, z, y0:0, y1:trunkH, r });
+
+  // canopy (visual only)
+  for (let i=0;i<3;i++){
+    const cr = (2.6 - i*0.5)*scale;
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(cr, 2.4*scale, 9),
+      i%2? matLeaf : matLeaf2);
+    cone.position.set(x, trunkH - 0.4*scale + i*1.5*scale, z);
+    scene.add(cone);
+  }
+
+  // branches = thin boxes you can stand on & grab
+  const dirs = [[1,0],[-1,0.4],[0.3,1],[-0.5,-0.9]];
+  dirs.forEach((d,i)=>{
+    const len = (2.2+Math.random()*1.4)*scale;
+    const by = (3.2 + i*1.25)*scale;
+    const nx = d[0], nz = d[1];
+    const L = Math.hypot(nx,nz), ux=nx/L, uz=nz/L;
+    const bw = 0.32*scale;
+    // axis-aligned-ish branch: extend mostly along dominant axis for clean box collision
+    const minx = Math.min(x, x+ux*len) - bw, maxx = Math.max(x, x+ux*len) + bw;
+    const minz = Math.min(z, z+uz*len) - bw, maxz = Math.max(z, z+uz*len) + bw;
+    addBox({x:minx,y:by,z:minz}, {x:maxx,y:by+0.34*scale,z:maxz}, matBark);
+  });
+}
+
+// forest layout (spawn area near origin kept clear)
+const treeSpots = [
+  [ 7, -4, 1.2],[ -8, 5, 1.35],[ 12, 8, 1.1],[ -13,-9, 1.4],[ 4, 13, 1.0],
+  [ -5,-14, 1.15],[ 16,-6, 1.25],[ -17, 3, 1.2],[ 9, -16, 1.3],[ -10, 16, 1.1],
+  [ 20, 12, 1.4],[ -20,-13, 1.2],[ 0, 21, 1.25],[ 22,-2, 1.1],[ -22, 9, 1.3]
+];
+treeSpots.forEach(t=> makeTree(t[0], t[1], t[2]));
+
+// a few floating wooden platforms
+addBox({x:-2,y:3.2,z:-6},{x:2,y:3.4,z:-2}, matWood);
+addBox({x:5,y:5.0,z:5},{x:9,y:5.2,z:9}, matWood);
+addBox({x:-9,y:4.2,z:-1},{x:-5,y:4.4,z:3}, matWood);
+addBox({x:-2,y:6.6,z:8},{x:3,y:6.8,z:12}, matWood);
+// bridges linking a couple of platforms
+addBox({x:2,y:5.0,z:6.6},{x:5,y:5.15,z:7.4}, matWood);
+
+// rocks (climbable domes) + tree stumps
+function makeRock(x,z,r){
+  const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), matRock);
+  m.position.set(x, r*0.55, z);
+  scene.add(m);
+  colliders.push({ t:'sphere', x, y:r*0.55, z, r });
+}
+makeRock(3,3,1.1); makeRock(-4,-3,1.4); makeRock(6,-8,1.0); makeRock(-6,8,1.2); makeRock(-14,-2,1.6);
+
+function makeStump(x,z){
+  const h=1.0, r=0.9;
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r*1.05,h,10), matBark);
+  m.position.set(x,h/2,z); scene.add(m);
+  colliders.push({ t:'cyl', x, z, y0:0, y1:h, r });
+}
+makeStump(2,-3); makeStump(-3,4); makeStump(10,2);
+
+// ============================================================
+//  COLLISION HELPERS
+// ============================================================
+// Highest walk-on surface at (x,z) not far above currentY.  Returns floor height.
+function supportHeight(x, z, currentY){
+  let best = -Infinity;
+  const within = (x*x+z*z) < GROUND_R*GROUND_R;
+  if (within) best = 0;
+  for (const c of colliders){
+    if (c.t==='box'){
+      if (x>=c.min.x && x<=c.max.x && z>=c.min.z && z<=c.max.z){
+        const top=c.max.y;
+        if (top <= currentY+STEP && top>best) best=top;
+      }
+    } else if (c.t==='cyl'){
+      const dx=x-c.x, dz=z-c.z;
+      if (dx*dx+dz*dz <= c.r*c.r){
+        const top=c.y1;
+        if (top <= currentY+STEP && top>best) best=top;
+      }
+    } else if (c.t==='sphere'){
+      const dx=x-c.x, dz=z-c.z, hd2=dx*dx+dz*dz;
+      if (hd2 < c.r*c.r){
+        const top = c.y + Math.sqrt(c.r*c.r - hd2);
+        if (top <= currentY+STEP && top>best) best=top;
+      }
+    }
+  }
+  return best;
+}
+
+// Push torso out of vertical obstacles (trees/boxes/rocks). Mutates rig.position (x,z).
+// While climbing (a paw is anchored) we skip obstacle push so the grab doesn't fight it.
+function lateralResolve(climbing){
+  const ty = rig.position.y + TORSO_UP;
+  if (!climbing) for (const c of colliders){
+    if (c.t==='cyl'){
+      if (ty < c.y0-0.1 || ty > c.y1+0.1) continue;
+      const dx = rig.position.x - c.x, dz = rig.position.z - c.z;
+      const d = Math.hypot(dx,dz), min = c.r + BODY_R;
+      if (d>0.0001 && d < min){
+        const push = (min-d);
+        rig.position.x += dx/d*push;
+        rig.position.z += dz/d*push;
+      }
+    } else if (c.t==='box'){
+      if (ty < c.min.y-0.05 || ty > c.max.y+0.05) continue;
+      // only resolve sides (standing handled by support)
+      const cx = THREE.MathUtils.clamp(rig.position.x, c.min.x, c.max.x);
+      const cz = THREE.MathUtils.clamp(rig.position.z, c.min.z, c.max.z);
+      const dx = rig.position.x - cx, dz = rig.position.z - cz;
+      const d = Math.hypot(dx,dz);
+      const inside = (rig.position.x>=c.min.x && rig.position.x<=c.max.x && rig.position.z>=c.min.z && rig.position.z<=c.max.z);
+      if (!inside && d>0.0001 && d < BODY_R){
+        const push=(BODY_R-d);
+        rig.position.x += dx/d*push; rig.position.z += dz/d*push;
+      } else if (inside){
+        // eject to nearest side
+        const toMinX=rig.position.x-c.min.x, toMaxX=c.max.x-rig.position.x;
+        const toMinZ=rig.position.z-c.min.z, toMaxZ=c.max.z-rig.position.z;
+        const m=Math.min(toMinX,toMaxX,toMinZ,toMaxZ);
+        if (m===toMinX) rig.position.x=c.min.x-BODY_R;
+        else if (m===toMaxX) rig.position.x=c.max.x+BODY_R;
+        else if (m===toMinZ) rig.position.z=c.min.z-BODY_R;
+        else rig.position.z=c.max.z+BODY_R;
+      }
+    }
+  }
+  // boundary wall
+  const d = Math.hypot(rig.position.x, rig.position.z);
+  if (d > BOUND_R){ rig.position.x *= BOUND_R/d; rig.position.z *= BOUND_R/d; }
+}
+
+// Nearest distance from a world point to ANY collider surface (for paw grabbing).
+const _v = new THREE.Vector3();     // general scratch
+const _nsv = new THREE.Vector3();   // private scratch for nearestSurfaceDist
+const _eye = new THREE.Vector3();   // desktop head point
+function nearestSurfaceDist(p){
+  let best = Infinity;
+  // ground
+  best = Math.min(best, Math.abs(p.y));
+  for (const c of colliders){
+    if (c.t==='box'){
+      const cx=THREE.MathUtils.clamp(p.x,c.min.x,c.max.x);
+      const cy=THREE.MathUtils.clamp(p.y,c.min.y,c.max.y);
+      const cz=THREE.MathUtils.clamp(p.z,c.min.z,c.max.z);
+      best=Math.min(best, Math.hypot(p.x-cx,p.y-cy,p.z-cz));
+    } else if (c.t==='cyl'){
+      const dx=p.x-c.x, dz=p.z-c.z, horiz=Math.hypot(dx,dz);
+      const yIn = p.y>=c.y0 && p.y<=c.y1;
+      let d;
+      if (yIn) d = Math.abs(horiz - c.r);
+      else {
+        const yy = p.y<c.y0? c.y0 : c.y1;
+        const radial = Math.max(0, horiz - c.r);
+        d = Math.hypot(radial, p.y-yy);
+      }
+      best=Math.min(best,d);
+    } else if (c.t==='sphere'){
+      const d = Math.abs(_nsv.set(p.x-c.x,p.y-c.y,p.z-c.z).length() - c.r);
+      best=Math.min(best,d);
+    }
+  }
+  return best;
+}
+
+// ============================================================
+//  PLAYER PAWS + VR CONTROLLERS
+// ============================================================
+const velocity = new THREE.Vector3();
+let grounded = false;
+
+function makePaw(color){
+  const g = new THREE.Group();
+  const palm = new THREE.Mesh(new THREE.SphereGeometry(0.075,12,10),
+    new THREE.MeshStandardMaterial({ color, roughness:0.9 }));
+  palm.scale.set(1,0.8,1.1); g.add(palm);
+  const toeMat = new THREE.MeshStandardMaterial({ color, roughness:0.9 });
+  for (let i=-1;i<=1;i++){
+    const toe = new THREE.Mesh(new THREE.SphereGeometry(0.03,8,8), toeMat);
+    toe.position.set(i*0.045, 0.02, -0.075); g.add(toe);
+  }
+  const pad = new THREE.Mesh(new THREE.SphereGeometry(0.045,10,8),
+    new THREE.MeshStandardMaterial({ color:0x3a2a22, roughness:1 }));
+  pad.position.set(0,-0.045,0); pad.scale.set(1,0.5,1); g.add(pad);
+  return g;
+}
+
+const PAW_COLOR = 0xe4c79a;
+const armMat = new THREE.MeshStandardMaterial({ color:PAW_COLOR, roughness:0.95 });
+const hands = [];
+for (let i=0;i<2;i++){
+  const grip = renderer.xr.getControllerGrip(i);
+  rig.add(grip);
+  const controller = renderer.xr.getController(i);
+  rig.add(controller);
+  // paw + long arm live in WORLD space, repositioned every frame in updateHandWorld()
+  const paw = makePaw(PAW_COLOR);
+  scene.add(paw);
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.065,1,8), armMat);
+  scene.add(arm);
+  paw.visible = arm.visible = false;   // shown only in VR
+  const hand = { grip, controller, paw, arm, side:(i===0?-1:1),
+                 grab:false, anchored:false, anchor:new THREE.Vector3(),
+                 world:new THREE.Vector3(), real:new THREE.Vector3() };
+  const press = ()=> hand.grab = true;
+  const release = ()=> { hand.grab = false; hand.anchored = false; };
+  controller.addEventListener('selectstart', press);
+  controller.addEventListener('selectend', release);
+  controller.addEventListener('squeezestart', press);
+  controller.addEventListener('squeezeend', release);
+  hands.push(hand);
+}
+
+// ---- long-arm reach: extend each paw from the shoulder so it can touch the ground ----
+const _head=new THREE.Vector3(), _rightV=new THREE.Vector3(), _sh=new THREE.Vector3(),
+      _armV=new THREE.Vector3(), _mid=new THREE.Vector3(), _upVec=new THREE.Vector3(0,1,0);
+function updateHandWorld(h){
+  camera.getWorldPosition(_head);
+  _rightV.setFromMatrixColumn(camera.matrixWorld, 0); _rightV.y=0; _rightV.normalize();
+  _sh.copy(_head).addScaledVector(_rightV, h.side*SHOULDER_SIDE); _sh.y -= SHOULDER_DOWN;
+  h.grip.getWorldPosition(h.real);
+  _armV.copy(h.real).sub(_sh).multiplyScalar(ARM_SCALE);
+  h.world.copy(_sh).add(_armV);                 // extended paw position (physics + grab)
+  h.paw.visible = h.arm.visible = true;
+  h.paw.position.copy(h.world);
+  h.paw.scale.setScalar(h.grab ? 0.8 : 1.0);
+  _mid.copy(_sh).add(h.world).multiplyScalar(0.5);
+  h.arm.position.copy(_mid);
+  const len=_sh.distanceTo(h.world);
+  h.arm.scale.set(1, Math.max(len,0.001), 1);
+  if (len>0.01){ _armV.copy(h.world).sub(_sh).multiplyScalar(1/len); h.arm.quaternion.setFromUnitVectors(_upVec, _armV); }
+}
+
+// ---- optional thumbstick glide (comfort backup; either stick works) ----
+const _sFwd=new THREE.Vector3(), _sRight=new THREE.Vector3();
+function stickMove(dt){
+  const s = renderer.xr.getSession(); if(!s) return;
+  let ax=null;
+  for (const src of s.inputSources){
+    if (src && src.gamepad && src.gamepad.axes && src.gamepad.axes.length>=4){
+      if (src.handedness==='left'){ ax=src.gamepad.axes; break; }
+      if (!ax) ax=src.gamepad.axes;
+    }
+  }
+  if(!ax) return;
+  const sx=ax[2]||0, sy=ax[3]||0;
+  if (Math.hypot(sx,sy) < 0.18) return;         // deadzone
+  _sFwd.setFromMatrixColumn(camera.matrixWorld,2).negate(); _sFwd.y=0; _sFwd.normalize();
+  _sRight.setFromMatrixColumn(camera.matrixWorld,0);        _sRight.y=0; _sRight.normalize();
+  rig.position.addScaledVector(_sFwd,  -sy*STICK_SPEED*dt);
+  rig.position.addScaledVector(_sRight, sx*STICK_SPEED*dt);
+}
+
+// ============================================================
+//  VR LOCOMOTION  (the core arm-push / climb mechanic)
+// ============================================================
+const _disp = new THREE.Vector3();
+function vrLocomotion(dt){
+  rig.updateMatrixWorld(true);   // ensure paw world positions reflect current rig pose
+  let count = 0;
+  _disp.set(0,0,0);
+
+  for (const h of hands){
+    updateHandWorld(h);          // long-arm reach: paw extends from shoulder toward the ground
+    if (h.grab){
+      if (!h.anchored){
+        if (nearestSurfaceDist(h.world) < GRAB_DIST){
+          h.anchored = true;
+          h.anchor.copy(h.world);   // stick to where the paw is (no snap)
+        }
+      }
+      if (h.anchored){
+        _disp.add(_v.copy(h.anchor).sub(h.world)); // move body so anchor stays put
+        count++;
+      }
+    }
+  }
+
+  if (count>0){
+    _disp.multiplyScalar(1/count);
+    rig.position.add(_disp);
+    // body velocity tracks the push, capped
+    velocity.copy(_disp).multiplyScalar(1/Math.max(dt,1e-4));
+    if (velocity.length() > MAX_SPEED) velocity.setLength(MAX_SPEED);
+    grabHint(true);
+  } else {
+    grabHint(false);
+    velocity.y -= GRAVITY*dt;
+    rig.position.addScaledVector(velocity, dt);
+    if (grounded){ velocity.x*=Math.pow(0.02,dt); velocity.z*=Math.pow(0.02,dt); } // friction
+  }
+  if (count===0) stickMove(dt);  // stick glide only when not pulling with your arms
+  resolveStand(dt, count>0);
+}
+
+// shared: keep feet on the highest support, resolve walls, clamp speed
+function resolveStand(dt, climbing){
+  const floorY = supportHeight(rig.position.x, rig.position.z, rig.position.y);
+  if (rig.position.y <= floorY + 0.001){
+    rig.position.y = floorY;
+    if (velocity.y < 0) velocity.y = 0;
+    grounded = true;
+  } else grounded = false;
+  lateralResolve(climbing);
+  if (velocity.length() > MAX_SPEED) velocity.setLength(MAX_SPEED);
+  if (rig.position.y < -18) respawn();
+}
+
+function respawn(){ rig.position.set(0,0,0); velocity.set(0,0,0); }
+
+// ============================================================
+//  DESKTOP CONTROLS (mouse + keyboard fallback for testing)
+// ============================================================
+const keys = {};
+let yaw = 0, pitch = 0, mouseGrab = false, pointerLocked = false;
+const canvas = renderer.domElement;
+
+document.addEventListener('keydown', e=>{ keys[e.code]=true; });
+document.addEventListener('keyup',   e=>{ keys[e.code]=false; });
+document.addEventListener('mousedown', e=>{ if (pointerLocked && e.button===0) mouseGrab=true; });
+document.addEventListener('mouseup',   e=>{ if (e.button===0) mouseGrab=false; });
+document.addEventListener('pointerlockchange', ()=>{ pointerLocked = (document.pointerLockElement===canvas); });
+document.addEventListener('mousemove', e=>{
+  if (!pointerLocked) return;
+  yaw   -= e.movementX * 0.0022;
+  pitch -= e.movementY * 0.0022;
+  pitch = THREE.MathUtils.clamp(pitch, -1.4, 1.4);
+});
+
+const _fwd = new THREE.Vector3(), _right = new THREE.Vector3(), _wish = new THREE.Vector3();
+function desktopLocomotion(dt){
+  rig.rotation.y = yaw;
+  camera.rotation.set(pitch, 0, 0);
+  camera.position.set(0, EYE_H, 0);
+
+  // full look direction
+  _fwd.set(0,0,-1).applyEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+  _right.set(1,0,0).applyEuler(new THREE.Euler(0, yaw, 0, 'YXZ'));
+
+  const f = (keys['KeyW']?1:0) - (keys['KeyS']?1:0);
+  const s = (keys['KeyD']?1:0) - (keys['KeyA']?1:0);
+
+  // grab-to-climb: near a surface + holding => stick & move along view (incl. up)
+  const eye = _eye.set(rig.position.x, rig.position.y+EYE_H, rig.position.z);
+  const nearSurf = nearestSurfaceDist(eye) < 0.9;
+  grabHint(mouseGrab && nearSurf);
+
+  if (mouseGrab && nearSurf){
+    _wish.set(0,0,0)
+      .addScaledVector(_fwd, f)
+      .addScaledVector(_right, s);
+    if (_wish.lengthSq()>0) _wish.normalize();
+    const climbSpeed = 4.2;
+    rig.position.addScaledVector(_wish, climbSpeed*dt);
+    velocity.copy(_wish).multiplyScalar(climbSpeed); // launch on release
+    grounded = false;
+  } else {
+    // ground / air movement with momentum
+    _fwd.y=0; _fwd.normalize(); _right.y=0; _right.normalize();
+    _wish.set(0,0,0).addScaledVector(_fwd,f).addScaledVector(_right,s);
+    if (_wish.lengthSq()>0) _wish.normalize();
+    const accel = grounded? 44 : 12;
+    velocity.x += _wish.x*accel*dt;
+    velocity.z += _wish.z*accel*dt;
+    if (grounded){
+      const fr = Math.pow(0.015, dt);
+      velocity.x*=fr; velocity.z*=fr;
+      if (keys['Space']) velocity.y = 6.2;
+    }
+    velocity.y -= GRAVITY*dt;
+    rig.position.addScaledVector(velocity, dt);
+  }
+  resolveStand(dt);
+}
+
+// ============================================================
+//  PUG BOTS  +  INFECTION TAG
+// ============================================================
+function makePug(scale=1){
+  const g = new THREE.Group();
+  const fawn = new THREE.MeshStandardMaterial({ color:0xe0c08a, roughness:0.95 });
+  const black = new THREE.MeshStandardMaterial({ color:0x241c16, roughness:0.9 });
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.42,14,12), fawn);
+  body.scale.set(1.1,0.9,1.35); body.position.y=0.5; g.add(body);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.34,14,12), fawn);
+  head.position.set(0,0.78,0.42); g.add(head);
+
+  const face = new THREE.Mesh(new THREE.SphereGeometry(0.2,12,10), black);
+  face.scale.set(1,0.8,0.7); face.position.set(0,0.72,0.66); g.add(face);
+  const snout = new THREE.Mesh(new THREE.SphereGeometry(0.07,10,8), black);
+  snout.position.set(0,0.72,0.8); g.add(snout);
+
+  for (const sx of [-1,1]){
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.11,8,8), black);
+    ear.scale.set(0.6,1,0.4); ear.position.set(sx*0.22,0.96,0.4); g.add(ear);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.045,8,8),
+      new THREE.MeshStandardMaterial({color:0x0a0a0a}));
+    eye.position.set(sx*0.12,0.86,0.66); g.add(eye);
+    // stubby legs
+    for (const sz of [-1,1]){
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.09,0.28,7), fawn);
+      leg.position.set(sx*0.26,0.14,sz*0.3); g.add(leg);
+    }
+  }
+  const tail = new THREE.Mesh(new THREE.TorusGeometry(0.1,0.045,6,10), fawn);
+  tail.position.set(0,0.62,-0.5); tail.rotation.x=1.2; g.add(tail);
+
+  g.scale.setScalar(scale);
+  g.userData.body = body; g.userData.head = head; g.userData.fawn = fawn;
+  return g;
+}
+
+const LAVA = new THREE.Color(0xff5a2a);
+const FAWN = new THREE.Color(0xe0c08a);
+
+const bots = [];
+for (let i=0;i<BOT_COUNT;i++){
+  const mesh = makePug(0.85 + Math.random()*0.3);
+  const a = Math.random()*Math.PI*2, r = 12 + Math.random()*20;
+  mesh.position.set(Math.cos(a)*r, 0, Math.sin(a)*r);
+  scene.add(mesh);
+  bots.push({ mesh, pos:mesh.position, vel:new THREE.Vector3(),
+              infected:false, cool:0, hop:Math.random()*6, face:0 });
+}
+
+// player as a taggable entity
+const player = { pos:new THREE.Vector3(), infected:false, cool:0 };
+
+let infectedCount = 0;
+let resetTimer = 0;
+
+function newRound(){
+  bots.forEach(b=>{ b.infected=false; b.cool=0; });
+  player.infected=false; player.cool=TAG_IMMUNE;
+  // one random bot starts IT
+  const it = bots[Math.floor(Math.random()*bots.length)];
+  it.infected = true; it.cool = 0;
+  resetTimer = 0;
+  showBanner('NEW ROUND!  Run! 🐾');
+}
+
+// nearest entity of a given infection state to a position
+function nearestEntity(from, wantInfected, excludeSelf){
+  let best=null, bd=Infinity;
+  const consider = (p, inf, ref)=>{
+    if (ref===excludeSelf) return;
+    if (inf!==wantInfected) return;
+    const d = from.distanceTo(p);
+    if (d<bd){ bd=d; best={pos:p, ref, d}; }
+  };
+  for (const b of bots) consider(b.pos, b.infected, b);
+  consider(player.pos, player.infected, player);
+  return best;
+}
+
+const _steer = new THREE.Vector3(), _to = new THREE.Vector3();
+function updateBots(dt){
+  for (const b of bots){
+    if (b.cool>0) b.cool -= dt;
+    _steer.set(0,0,0);
+
+    if (b.infected){
+      const target = nearestEntity(b.pos, false, b);   // chase a healthy one
+      if (target){ _to.copy(target.pos).sub(b.pos); _to.y=0; if(_to.lengthSq()>0)_to.normalize(); _steer.add(_to); }
+    } else {
+      const threat = nearestEntity(b.pos, true, b);     // flee nearest lava pug
+      if (threat && threat.d < 9){ _to.copy(b.pos).sub(threat.pos); _to.y=0; if(_to.lengthSq()>0)_to.normalize(); _steer.addScaledVector(_to,1.2); }
+      // gentle wander
+      b.face += (Math.random()-0.5)*dt*3;
+      _steer.x += Math.cos(b.face)*0.35; _steer.z += Math.sin(b.face)*0.35;
+    }
+
+    // avoid tree trunks (steer around cylinders just ahead)
+    for (const c of colliders){
+      if (c.t!=='cyl') continue;
+      const dx=b.pos.x-c.x, dz=b.pos.z-c.z, d=Math.hypot(dx,dz);
+      if (d < c.r+2.2 && d>0.001){ _steer.x += dx/d*(c.r+2.2-d)*0.7; _steer.z += dz/d*(c.r+2.2-d)*0.7; }
+    }
+
+    if (_steer.lengthSq()>0){
+      _steer.y=0; _steer.normalize();
+      const speed = b.infected? 5.2 : 4.2;
+      b.vel.x += (_steer.x*speed - b.vel.x)*Math.min(1,dt*4);
+      b.vel.z += (_steer.z*speed - b.vel.z)*Math.min(1,dt*4);
+    }
+    b.pos.x += b.vel.x*dt;
+    b.pos.z += b.vel.z*dt;
+
+    // keep in bounds
+    const d = Math.hypot(b.pos.x,b.pos.z);
+    if (d>BOUND_R-1){ b.pos.x*=(BOUND_R-1)/d; b.pos.z*=(BOUND_R-1)/d; b.vel.multiplyScalar(0.5); }
+
+    // hop + face direction
+    b.hop += dt*10;
+    const moving = b.vel.lengthSq()>0.4;
+    b.pos.y = moving ? Math.abs(Math.sin(b.hop))*0.14 : 0;
+    if (moving) b.mesh.rotation.y = Math.atan2(b.vel.x, b.vel.z);
+
+    // infected look
+    const fawn = b.mesh.userData.fawn;
+    if (b.infected){ fawn.color.copy(LAVA); fawn.emissive.setHex(0x7a1c00); fawn.emissiveIntensity=0.7; }
+    else { fawn.color.copy(FAWN); fawn.emissive.setHex(0x000000); }
+
+    b.mesh.position.copy(b.pos);
+  }
+}
+
+function updateInfection(dt){
+  // player tag point tracks the FEET (rig origin), NOT the head — so standing on the
+  // ground you can be tagged, but climbing high lifts you out of range and keeps you safe.
+  player.pos.set(rig.position.x, rig.position.y + 0.4, rig.position.z);
+  if (player.cool>0) player.cool -= dt;
+
+  // every infected entity can tag every healthy one in range:
+  // horizontal distance gate + a generous vertical tolerance (heights differ a lot).
+  const ents = [...bots, player];
+  for (const A of ents){
+    if (!A.infected) continue;
+    for (const B of ents){
+      if (A===B || B.infected) continue;
+      if (B.cool>0) continue;
+      const dxz = Math.hypot(A.pos.x - B.pos.x, A.pos.z - B.pos.z);
+      const dy  = Math.abs(A.pos.y - B.pos.y);
+      if (dxz < TAG_DIST && dy < 1.6){
+        B.infected = true; B.cool = TAG_IMMUNE;
+        beep(B===player?160:300);
+        if (B===player) showBanner("TAGGED!  You're IT 🔥");
+        else if (A===player) showBanner('Got one! 🎯');
+      }
+    }
+  }
+
+  // count + round reset
+  infectedCount = bots.filter(b=>b.infected).length + (player.infected?1:0);
+  const total = bots.length + 1;
+  if (infectedCount>=total){
+    resetTimer += dt;
+    if (resetTimer>2.2) newRound();
+  } else resetTimer = 0;
+}
+
+// ============================================================
+//  HUD
+// ============================================================
+const elHud = document.getElementById('hud');
+const elStatus = document.getElementById('status');
+const elSub2 = document.getElementById('sub2');
+const elBanner = document.getElementById('banner');
+const elGrab = document.getElementById('grabhint');
+let bannerT = 0;
+
+function showBanner(txt){ elBanner.textContent = txt; elBanner.style.opacity = 1; bannerT = 1.6; }
+function grabHint(on){ elGrab.style.opacity = on? 1 : 0; }
+
+function updateHud(dt){
+  const total = bots.length + 1;
+  if (player.infected){
+    elStatus.textContent = "YOU'RE IT — tag the pugs! 🔥";
+    elStatus.classList.add('it');
+  } else {
+    elStatus.textContent = "RUN! Dodge the lava pugs 🏃";
+    elStatus.classList.remove('it');
+  }
+  elSub2.textContent = `Lava pugs: ${infectedCount} / ${total}` + (player.cool>0 && player.infected?'   (immune…)':'');
+  if (bannerT>0){ bannerT -= dt; if (bannerT<=0) elBanner.style.opacity = 0; }
+}
+
+// ============================================================
+//  AUDIO (tiny blips)
+// ============================================================
+let actx=null;
+function beep(freq){
+  try{
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.frequency.value=freq; o.type='square';
+    g.gain.value=0.06; o.connect(g); g.connect(actx.destination);
+    o.start(); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime+0.18);
+    o.stop(actx.currentTime+0.2);
+  }catch(e){}
+}
+
+// ============================================================
+//  MAIN LOOP
+// ============================================================
+const clock = new THREE.Clock();
+let started = false;
+
+function loop(){
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (started){
+    if (renderer.xr.isPresenting) vrLocomotion(dt);
+    else desktopLocomotion(dt);
+    updateBots(dt);
+    updateInfection(dt);
+    updateHud(dt);
+  }
+  renderer.render(scene, camera);
+}
+renderer.setAnimationLoop(loop);
+
+// ============================================================
+//  ENTRY / OVERLAY
+// ============================================================
+const overlay = document.getElementById('overlay');
+const btnVR = document.getElementById('btnVR');
+const btnDesktop = document.getElementById('btnDesktop');
+const vrmsg = document.getElementById('vrmsg');
+
+function beginGame(){
+  if (started) return;
+  started = true;
+  overlay.style.display = 'none';
+  elHud.style.display = 'block';
+  newRound();
+}
+
+// wire up the official VR button (handles session request) but keep our own styling
+const realVRBtn = VRButton.createButton(renderer);
+btnVR.addEventListener('click', ()=> realVRBtn.click());
+
+if (navigator.xr && navigator.xr.isSessionSupported){
+  navigator.xr.isSessionSupported('immersive-vr').then(ok=>{
+    vrmsg.textContent = ok ? 'VR headset detected — put it on and press Enter VR.'
+                           : 'No VR headset here — use Play on Desktop to test.';
+    btnVR.style.opacity = ok? 1 : 0.5;
+  }).catch(()=>{ vrmsg.textContent='Use Play on Desktop to test.'; });
+} else {
+  vrmsg.textContent = 'This browser has no VR — use Play on Desktop (open in a Quest browser for VR).';
+  btnVR.style.opacity = 0.5;
+}
+
+renderer.xr.addEventListener('sessionstart', beginGame);
+renderer.xr.addEventListener('sessionend', ()=>{ /* keep playing on desktop */ });
+
+btnDesktop.addEventListener('click', ()=>{
+  beginGame();
+  canvas.requestPointerLock();
+});
+// re-grab pointer on click if released
+canvas.addEventListener('click', ()=>{ if (started && !renderer.xr.isPresenting && !pointerLocked) canvas.requestPointerLock(); });
+
+// ---------- resize ----------
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
