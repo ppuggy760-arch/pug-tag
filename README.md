@@ -27,7 +27,16 @@ A pixel-art tag game where you play as a legless pug with long arms. It runs in 
   - **Bubble:** blocks one tag.
   - **Moon Paws:** low gravity.
   - **Tennis balls:** grab and throw them.
-- **Synthesised audio.** Paw taps differ by surface, plus barks, stings, a boing for bouncy surfaces and a chiptune track for each map.
+- **Layered sound design.** Every sound effect is a "recipe" that combines short CC0 sound samples (pitched, sliced, filtered) with synthesized layers (tones, filtered noise, sweeps). Examples are jumps, surface-specific paw taps, landings, tags, pickups, the shop, pug barks/yips/growls and a looping ambience per map. The game bakes each sound effect into a few varied buffers while the title screen shows, and bakes each map's ambience loop the first time that map loads. It plays them with distance fading, stereo panning and voice limits. If baking isn't possible, most sounds fall back to a simple live-synth version. There is also a chiptune track for each map.
 - **VR comforts:** a wrist watch HUD, floating banners, haptics, and snap or smooth turning.
 
 Bones, cosmetics and settings save in your browser (`localStorage`).
+
+## Sound credits
+
+All sampled sound material is dedicated to the public domain (CC0 1.0), embedded as small mono MP3 clips inside `index.html`:
+
+- [Kenney](https://kenney.nl): sound effects from the Starter Kit 3D Platformer, FPS, City Builder and Racing. Each kit's README states: "Assets included in this package (2D sprites, 3D models and sound effects) are CC0 licensed". The Racing kit's skid sound is by [Landeplage](https://github.com/Landeplage), also CC0.
+- [uisfx](https://uisfx.com) (npm package `uisfx`, © Yuki Capital): the UI sound packs. Its audio files are dedicated to the public domain under CC0 1.0 (the package code is MIT; none of it is used here).
+
+These clips are mixed with synthesized layers by the game's sound engine. Attribution isn't required, but thank you, Kenney, Landeplage and uisfx!
