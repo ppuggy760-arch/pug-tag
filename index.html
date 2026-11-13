@@ -1726,9 +1726,25 @@ function buildAvatarGeos() {
   b.box(0, 0, 0, 0.44, 0.46, 0.36, k => k === 'pz' ? AT.belly : AT.fur);
   b.box(0, 0.12, -0.21, 0.09, 0.09, 0.08, AT.fur); b.box(0, 0.2, -0.205, 0.075, 0.075, 0.07, AT.fur); b.box(0, 0.215, -0.14, 0.06, 0.06, 0.06, AT.fur);
   const body = b.geo();
-  b = MB(); b.box(0, 0, 0.5, 0.085, 0.085, 1, AT.fur); const arm = b.geo();
-  b = MB(); b.box(0, 0, 0, 0.125, 0.08, 0.14, AT.dark); for (let i = -1; i <= 1; i++) b.box(i * 0.038, -0.01, 0.08, 0.032, 0.05, 0.03, AT.dark); const paw = b.geo();
-  GEO = { head, body, arm, paw, shadow: new THREE.PlaneGeometry(0.8, 0.8).rotateX(-Math.PI / 2) };
+  // long furry arms: upper arm + forearm (unit length along +z, scaled to the bone) with a chunky elbow
+  // the upper arm is ARM_SEG long (scale.z = length / ARM_SEG) and carries the chunky elbow at its end (one draw call)
+  b = MB(); b.box(0, 0, ARM_SEG / 2, 0.115, 0.115, ARM_SEG, AT.fur); b.box(0, 0, ARM_SEG, 0.145, 0.145, 0.145, AT.fur); const upper = b.geo();
+  b = MB(); b.box(0, 0, 0.5, 0.135, 0.135, 1, AT.fur); const fore = b.geo();
+  { const pa = fore.attributes.position; for (let i = 0; i < pa.count; i++) if (pa.getZ(i) > 0.99) pa.setXY(i, pa.getX(i) * 0.8, pa.getY(i) * 0.8); } // tapers to the wrist
+  // big padded paws: fingers along +z, palm (with toe-bean pads) facing -y, fluffy wrist cuff behind.
+  // [right, left]: the thumb sits on the inner side (+x is the hand's left when +z is forward and +y up)
+  const PAD = C(0xd98a96);
+  const mkHand = side => {
+    const b = MB();
+    b.box(0, 0, 0, 0.17, 0.075, 0.15, AT.dark);                                                     // palm
+    for (let i = 0; i < 4; i++) b.box(-0.06 + i * 0.04, -0.008, 0.1, 0.034, 0.058, 0.06, AT.dark);   // fingers
+    b.box(side * 0.098, -0.012, 0.025, 0.045, 0.052, 0.075, AT.dark, { ry: side * 0.45 });             // thumb
+    b.box(0, -0.041, -0.008, 0.09, 0.012, 0.07, PAD);                                                 // palm pad
+    for (let i = 0; i < 4; i++) b.box(-0.06 + i * 0.04, -0.041, 0.108, 0.024, 0.01, 0.032, PAD);       // toe beans
+    b.box(0, 0, -WRIST, 0.19, 0.13, 0.065, AT.fur);                                                   // wrist cuff (wraps the forearm's end)
+    return b.geo();
+  };
+  GEO = { head, body, upper, fore, hand: [mkHand(1), mkHand(-1)], shadow: new THREE.PlaneGeometry(0.8, 0.8).rotateX(-Math.PI / 2) };
   LAVA_MAT = new THREE.MeshBasicMaterial({ map: furTexture('#e85a1e', true), vertexColors: true });
 }
 
@@ -1815,7 +1831,9 @@ function drawTag(t, text, fg, bg) {
 // =====================================================================
 //  AVATAR CLASS
 // =====================================================================
-const _aq = new THREE.Quaternion(), _av = new THREE.Vector3(), _av2 = new THREE.Vector3(), _ae = new THREE.Euler();
+const _aq = new THREE.Quaternion(), _av = new THREE.Vector3(), _av2 = new THREE.Vector3(), _av3 = new THREE.Vector3(), _av4 = new THREE.Vector3(), _av5 = new THREE.Vector3(), _ae = new THREE.Euler();
+const ARM_SEG = 0.29; // upper arm and forearm length (they stretch for longer reaches)
+const WRIST = 0.095;  // paw-local z of the wrist (cuff centre): the forearm ends there, inside the cuff
 class PugAvatar {
   constructor({ fur = '#d9b07a', equip = {}, name = 'PUG', self = false }) {
     this.self = self; this.fur = fur; this.it = false;
@@ -1824,8 +1842,11 @@ class PugAvatar {
     this.mat = new THREE.MeshBasicMaterial({ map: this.tex, vertexColors: true });
     this.head = new THREE.Mesh(GEO.head, this.mat);
     this.body = new THREE.Mesh(GEO.body, this.mat);
-    this.arms = [new THREE.Mesh(GEO.arm, this.mat), new THREE.Mesh(GEO.arm, this.mat)];
-    this.paws = [new THREE.Mesh(GEO.paw, this.mat), new THREE.Mesh(GEO.paw, this.mat)];
+    // index 0 = the pug's right arm/paw, 1 = its left
+    this.uppers = [0, 1].map(() => new THREE.Mesh(GEO.upper, this.mat));
+    this.fores = [0, 1].map(() => new THREE.Mesh(GEO.fore, this.mat));
+    this.arms = [...this.uppers, ...this.fores];
+    this.paws = [0, 1].map(i => new THREE.Mesh(GEO.hand[i], this.mat));
     this.group.add(this.head, this.body, ...this.arms, ...this.paws);
     this.headSlot = new THREE.Group(); this.head.add(this.headSlot);
     this.bodySlot = new THREE.Group(); this.body.add(this.bodySlot);
@@ -1875,21 +1896,34 @@ class PugAvatar {
     if (on && !this.bubble) { this.bubble = new THREE.Mesh(BUBBLE_GEO, BUBBLE_MAT); this.group.add(this.bubble); if (this.self) this.bubble.layers.set(LAYER_SELF); }
     if (this.bubble) this.bubble.visible = on;
   }
-  // head: world pos ; headQuat: world orientation ; yaw: body yaw ; hands: [Vector3, Vector3]
-  update(head, headQuat, yaw, hands, dt, lean = 0) {
+  // head: world pos ; headQuat: world orientation ; yaw: body yaw ; hands: [Vector3, Vector3] ; pawQ: optional
+  // [Quaternion|null, Quaternion|null] world paw orientations (VR controllers), else the paws follow the forearms
+  update(head, headQuat, yaw, hands, dt, lean = 0, pawQ = null) {
     this.head.position.copy(head); this.head.quaternion.copy(headQuat);
     _aq.setFromEuler(_ae.set(lean, yaw, 0, 'YXZ'));
     this.body.position.set(0, -0.4, -0.03).applyQuaternion(_aq).add(head);
     this.body.quaternion.copy(_aq);
     for (let i = 0; i < 2; i++) {
-      const s = i === 0 ? -1 : 1;
-      _av.set(s * 0.235, 0.13, 0.04).applyQuaternion(_aq).add(this.body.position);
-      const a = this.arms[i], p = this.paws[i];
-      a.position.copy(_av);
-      const L = _av.distanceTo(hands[i]);
-      if (L > 1e-3) a.lookAt(hands[i]);
-      a.scale.set(1, 1, Math.max(0.05, L));
-      p.position.copy(hands[i]); p.quaternion.copy(a.quaternion);
+      const s = i === 0 ? -1 : 1, H = hands[i], Q = pawQ && pawQ[i];
+      const S = _av.set(s * 0.235, 0.13, 0.04).applyQuaternion(_aq).add(this.body.position); // shoulder
+      // the forearm ends at the wrist, inside the cuff. A given paw orientation (VR controller): reach for its wrist.
+      // Otherwise the paw follows the forearm, so the forearm bone runs on to the paw centre (WRIST longer).
+      const T = Q ? _av5.set(0, 0, -WRIST).applyQuaternion(Q).add(H) : H, L2 = Q ? ARM_SEG : ARM_SEG + WRIST;
+      // two-bone IK: the elbow points out, down and back (knuckle-walker arms); past full reach the arm straightens and stretches.
+      // (pole chosen so its two dead directions, where the elbow would swing around, are out-down-back and in front of the chin:
+      // a pole straight back-out put one right where hands meet in front of the chest)
+      const d = Math.max(1e-4, S.distanceTo(T)), dir = _av2.copy(T).sub(S).multiplyScalar(1 / d), E = _av4;
+      if (d >= (ARM_SEG + L2) * 0.999) E.copy(S).addScaledVector(dir, d * ARM_SEG / (ARM_SEG + L2));
+      else {
+        const pole = _av3.set(s * 0.72, -0.42, -0.55).applyQuaternion(_aq);
+        pole.addScaledVector(dir, -pole.dot(dir)); if (pole.lengthSq() < 1e-6) pole.set(0, -1, 0); pole.normalize();
+        const a = (d * d + ARM_SEG * ARM_SEG - L2 * L2) / (2 * d), h = Math.sqrt(Math.max(0, ARM_SEG * ARM_SEG - a * a));
+        E.copy(S).addScaledVector(dir, a).addScaledVector(pole, h);
+      }
+      const up = this.uppers[i], fo = this.fores[i], p = this.paws[i];
+      up.position.copy(S); up.lookAt(E); up.scale.set(1, 1, Math.max(0.05, S.distanceTo(E)) / ARM_SEG);
+      fo.position.copy(E); fo.lookAt(T); fo.scale.set(1, 1, Math.max(0.05, E.distanceTo(T) - (Q ? 0 : WRIST)));
+      p.position.copy(H); p.quaternion.copy(Q || fo.quaternion);
     }
     this.tag.position.set(head.x, head.y + 0.42, head.z);
     if (this.chatT > 0) { this.chatT -= dt; this.chat.position.set(head.x, head.y + 0.62, head.z); if (this.chatT <= 0) this.chat.visible = false; }
@@ -2140,7 +2174,7 @@ function buildMirror(x, y, z, ry, w, h) {
 //  NAV GRAPH  — sampled automatically from the collision world
 // =====================================================================
 const STAND_H = 0.72;              // head height above the floor when resting
-const BOT_VMAX = 8.4;              // bot max launch speed (≈ a strong VR push)
+const BOT_VMAX = 10.2;             // bot max launch speed (≈ a strong VR push)
 function addNav(x, y, z) { const P = xfPoint(x, y, z); world.navExtra.push(new THREE.Vector3(P[0], P[1], P[2])); }
 function standOK(x, y, z) {
   const a = nearest(x, y + STAND_H + 0.04, z, 0.3); if (a.d < 0.16) return false;
@@ -2408,7 +2442,7 @@ class Bot {
         if (dh < 0.9 && Math.abs(dy) < 0.9 && this.onGround) { this.pi++; this.bestD = 1e9; this.stuckT = 0; }
         else {
           if (dh < this.bestD - 0.25) { this.bestD = dh; this.stuckT = 0; } else this.stuckT += dt;
-          if (this.stuckT > 2.6) { this.stuckT = 0; this.path = null; this.think = 0; this.hopCD = 0; if (this.onGround) { this.V.set(rr(-3, 3), 4.5, rr(-3, 3)); } }
+          if (this.stuckT > 2.6) { this.stuckT = 0; this.path = null; this.think = 0; this.hopCD = 0; if (this.onGround) { this.V.set(rr(-3.6, 3.6), 5.4, rr(-3.6, 3.6)); } }
         }
       }
     }
@@ -2433,10 +2467,11 @@ class Bot {
         if (direct && dh < 3.2 && this.state === 'chase') {
           // fast, flat lunge at where the target is going (works in any gravity)
           const lead = _bl.copy(this.target.V).multiplyScalar(0.2).add(tgt); lead.y += 0.25;
-          const lx = lead.x - f.x, lz = lead.z - f.z, ldh = Math.max(0.3, Math.hypot(lx, lz)), vh = Math.min(BOT_VMAX * sk * 1.05, 7.5), T = ldh / vh;
-          this.V.set(lx / ldh * vh, clamp((lead.y - f.y + 0.5 * g * T * T) / T, 1.2, 6.5), lz / ldh * vh);
+          const lx = lead.x - f.x, lz = lead.z - f.z, ldh = Math.max(0.3, Math.hypot(lx, lz)), vh = Math.min(BOT_VMAX * sk * 1.05, 9.2), T = ldh / vh;
+          this.V.set(lx / ldh * vh, clamp((lead.y - f.y + 0.5 * g * T * T) / T, 1.2, 7.8), lz / ldh * vh);
         } else if (kind === 'walk' || (direct && dh < 4 && Math.abs(dy) < 0.8)) {
-          const s = Math.min(5.9 * sk, dh * 4 + 1), vy = (1.7 + Math.random() * 0.9) * Math.sqrt(g / 9.8) * (urgent ? 1 : 0.8);
+          let s = Math.min(7.2 * sk, dh * 4.6 + 1); const vy = (1.9 + Math.random() * 1.0) * Math.sqrt(g / 9.8) * (urgent ? 1 : 0.8);
+          if (g < 6) s = Math.min(s, (dh + 0.8) * g / (2 * vy)); // low gravity: floaty hops land within reach of the waypoint instead of overshooting it
           this.V.set((tgt.x - f.x) / Math.max(dh, 1e-3) * s, vy, (tgt.z - f.z) / Math.max(dh, 1e-3) * s);
         } else {
           _bl.copy(tgt); _bl.y += 0.12;
@@ -2447,7 +2482,7 @@ class Bot {
         if (this.contact.gsurf && this.gT > 0.12) SFX.tap(this.contact.gsurf, 0.5, this.H);
       } else if (!this.onGround && this.contact.wall && dy > 0.6 && dh < 3 && this.hopCD <= 0) {
         // wall-climb push: paws on the wall, shove upward
-        this.V.set(-this.contact.wn.x * 0.8, 4.4 * Math.sqrt(g / 9.8), -this.contact.wn.z * 0.8);
+        this.V.set(-this.contact.wn.x * 0.9, 5.3 * Math.sqrt(g / 9.8), -this.contact.wn.z * 0.9);
         this.hopCD = 0.28; this.climb = 0.3;
         this.plantWall(this.contact.wn);
         SFX.tap(this.contact.surf || 'wood', 0.4, this.H);
@@ -2456,7 +2491,7 @@ class Bot {
     // integrate
     this.V.y -= g * dt;
     const vIn = -this.V.y; // vertical impact speed for landing sounds
-    const sp = this.V.length(); const steps = Math.min(4, Math.ceil(sp * dt / 0.12) || 1);
+    const sp = this.V.length(); const steps = Math.min(8, Math.ceil(sp * dt / 0.12) || 1);
     const wasG = this.onGround;
     let gnd = false, wall = false, bnc = false, hardG = false;
     for (let s = 0; s < steps; s++) {
@@ -2492,7 +2527,7 @@ class Bot {
   plantWall(n) {
     for (const h of this.hands) {
       _bt.set(-n.x, 0, -n.z).multiplyScalar(0.25).add(this.H); _bt.y += (h.side > 0 ? 0.15 : -0.1);
-      _bt.x += n.z * h.side * 0.22; _bt.z -= n.x * h.side * 0.22;
+      _bt.x -= n.z * h.side * 0.22; _bt.z += n.x * h.side * 0.22; // side +1 = the pug's left: facing the wall (-n), its left is (-n.z, n.x)
       h.plant = (h.plant || new THREE.Vector3()).copy(_bt); h.plantT = 0.22;
     }
   }
@@ -2523,8 +2558,9 @@ class Bot {
 //  LOCAL PLAYER
 // =====================================================================
 const LOCO = {
-  handR: 0.075, stickEps: 0.014, unstick: 0.95, velLimit: 0.35, histN: 5,
-  jumpMult: 1.12, maxJump: 6.6, itJumpMult: 1.26, itMaxJump: 8.0, zoomMult: 0.24, zoomMax: 2.2
+  // faster, bouncier pace: pushes carry more speed (velocity averaged over the last ~83 ms, at any frame rate) and the caps are higher
+  handR: 0.075, stickEps: 0.014, unstick: 0.95, velLimit: 0.35, histT: 0.083,
+  jumpMult: 1.3, maxJump: 8.5, itJumpMult: 1.45, itMaxJump: 10.0, zoomMult: 0.24, zoomMax: 2.2
 };
 const P = {
   isPlayer: true, name: save.name, fur: save.fur, H: new THREE.Vector3(0, STAND_H, 0), V: new THREE.Vector3(),
@@ -2681,13 +2717,14 @@ function vrStep(dt) {
   // 2) free flight
   const g = playerGravity();
   let gnd = false, gs = null; P.vrBounced = false; P.vrHardG = false;
-  if (!n) { P.V.y -= g * dt; const steps = Math.min(4, Math.ceil(P.V.length() * dt / 0.12) || 1); for (let s = 0; s < steps; s++) { rig.position.addScaledVector(P.V, dt / steps); bodyCollideVR(headLocal, true); if (P.contact.ground) { gnd = true; gs = P.contact.gsurf; } } }
+  if (!n) { P.V.y -= g * dt; const steps = Math.min(8, Math.ceil(P.V.length() * dt / 0.12) || 1); for (let s = 0; s < steps; s++) { rig.position.addScaledVector(P.V, dt / steps); bodyCollideVR(headLocal, true); if (P.contact.ground) { gnd = true; gs = P.contact.gsurf; } } }
   else { bodyCollideVR(headLocal, false); gnd = P.contact.ground; gs = P.contact.gsurf; }
   P.onGround = gnd;
   if (P.onGround && !wasG && !n && (!P.vrBounced || P.vrHardG)) landSound(-vyBefore, gs); // a bounce plays its boing, not a crash landing
   if (!n && P.onGround) { const fr = P.contact.slip ? Math.exp(-0.5 * dt) : Math.exp(-6 * dt); P.V.x *= fr; P.V.z *= fr; }
   // 3) velocity from recent body motion → becomes momentum when paws leave the surface
-  P.hist.push({ p: rig.position.clone(), dt }); if (P.hist.length > LOCO.histN) P.hist.shift();
+  P.hist.push({ p: rig.position.clone(), dt });
+  { let T = 0; for (let i = 1; i < P.hist.length; i++) T += P.hist[i].dt; while (P.hist.length > 2 && (T - P.hist[1].dt >= LOCO.histT || P.hist.length > 48)) { T -= P.hist[1].dt; P.hist.shift(); } }
   if (n && P.hist.length > 1) {
     let T = 0; for (let i = 1; i < P.hist.length; i++) T += P.hist[i].dt;
     const avg = _sd.copy(rig.position).sub(P.hist[0].p).multiplyScalar(1 / Math.max(T, 1e-4));
@@ -2723,7 +2760,7 @@ function vrStep(dt) {
   _be.setFromQuaternion(_tq, 'YXZ'); P.yaw = _be.y; P.pitch = _be.x;
   const L = hands.find(h => h.side < 0 && h.connected) || hands[0], R = hands.find(h => h.side > 0 && h.connected) || hands[1];
   P.handPts[0].copy(L.connected ? L.last : P.H); P.handPts[1].copy(R.connected ? R.last : P.H);
-  if (P.H.y < world.killY) respawnPlayer();
+  if (offMap(P.H)) respawnPlayer();
 }
 function bodyCollideVR(headLocal, withVel) {
   _hp2.copy(headLocal).applyQuaternion(rig.quaternion).add(rig.position);
@@ -2766,7 +2803,7 @@ function turnAndStick(dt, headLocal) {
   if (save.settings.stick && Math.hypot(lx, ly) > 0.2 && P.onGround) {
     camera.getWorldDirection(_sd); _sd.y = 0; _sd.normalize();
     _sp.set(-_sd.z, 0, _sd.x);
-    const sp = 3.2 * (P.zoom > 0 ? 1.4 : 1);
+    const sp = 4.2 * (P.zoom > 0 ? 1.4 : 1);
     rig.position.addScaledVector(_sd, -ly * sp * dt).addScaledVector(_sp, lx * sp * dt);
   }
 }
@@ -2777,7 +2814,7 @@ const fp = { group: new THREE.Group(), arms: [], paws: [], ball: null };
 function buildFP() {
   camera.add(fp.group);
   for (let i = 0; i < 2; i++) {
-    const a = new THREE.Mesh(GEO.arm, P.avatar.mat), p = new THREE.Mesh(GEO.paw, P.avatar.mat);
+    const a = new THREE.Mesh(GEO.fore, P.avatar.mat), p = new THREE.Mesh(GEO.hand[i === 0 ? 1 : 0], P.avatar.mat); // fp 0 = left
     a.layers.set(LAYER_FP); p.layers.set(LAYER_FP); p.scale.setScalar(0.85); a.scale.x = a.scale.y = 0.85; fp.group.add(a, p); fp.arms.push(a); fp.paws.push(p);
     p.userData.pos = new THREE.Vector3(); p.userData.want = new THREE.Vector3();
   }
@@ -2811,9 +2848,9 @@ function desktopStep(dt) {
     if (P.anchor) {
       _w.set(0, 0, 0).addScaledVector(_look, mz).addScaledVector(_r, mx);
       if (_w.lengthSq() > 1) _w.normalize();
-      const sp = 3.7 * zoomK;
+      const sp = 4.4 * zoomK;
       P.V.copy(_w).multiplyScalar(sp);
-      if (jumpPressed) { P.V.copy(_look).multiplyScalar(7.2 * zoomK); P.V.y += 2.2; P.anchor = null; jumpPressed = false; P.onGround = false; P.groundT = 9; SFX.ev('launch', {}, () => SFX.whoosh(0.5)); }
+      if (jumpPressed) { P.V.copy(_look).multiplyScalar(8.6 * zoomK); P.V.y += 2.8; P.anchor = null; jumpPressed = false; P.onGround = false; P.groundT = 9; SFX.ev('launch', {}, () => SFX.whoosh(0.5)); }
       else {
         P.H.addScaledVector(P.V, dt);
         // keep a grip: re-anchor along the surface as we climb
@@ -2827,28 +2864,28 @@ function desktopStep(dt) {
   // ---- run / jump ----
   if (!P.anchor) {
     _w.set(0, 0, 0).addScaledVector(_f, mz).addScaledVector(_r, mx);
-    const speed = 5.4 * zoomK * itK;
+    const speed = 6.8 * zoomK * itK;
     P.groundT += dt; P.wallT += dt;
     if (P.onGround) {
       P.groundT = 0; P.wallJumped = false;
       const slip = P.contact.slip;
-      const acc = slip ? 6 : 34;
+      const acc = slip ? 7 : 42;
       const tvx = _w.x * speed, tvz = _w.z * speed;
       const ax = clamp(tvx - P.V.x, -acc * dt, acc * dt), az = clamp(tvz - P.V.z, -acc * dt, acc * dt);
       P.V.x += ax; P.V.z += az;
       if (ml < 0.1 && !slip) { const fr = Math.exp(-11 * dt); P.V.x *= fr; P.V.z *= fr; }
     } else {
       const hs0 = Math.hypot(P.V.x, P.V.z);
-      P.V.x += _w.x * 7 * dt; P.V.z += _w.z * 7 * dt;
+      P.V.x += _w.x * 8.5 * dt; P.V.z += _w.z * 8.5 * dt;
       const hs = Math.hypot(P.V.x, P.V.z), cap = Math.max(speed, hs0); if (hs > cap) { P.V.x *= cap / hs; P.V.z *= cap / hs; }
     }
     if (jumpPressed) {
-      if (P.groundT < 0.12) { P.V.y = 5.7 * (P.zoom > 0 ? 1.12 : 1); P.V.x += _w.x * 1.2; P.V.z += _w.z * 1.2; P.groundT = 9; SFX.tap(P.contact.gsurf || 'grass', 0.45); SFX.ev('jump', {}, () => SFX.whoosh(0.25)); }
-      else if (P.wallT < 0.22 && !P.wallJumped) { const n = P.wallN || P.contact.wn; P.V.set(n.x * 4.6 + _w.x * 1.6, 5.6, n.z * 4.6 + _w.z * 1.6); P.wallJumped = true; SFX.ev('wallkick', {}, () => { SFX.tap(P.contact.surf || 'wood', 0.7); SFX.whoosh(0.4); }); }
+      if (P.groundT < 0.12) { P.V.y = 7.2 * (P.zoom > 0 ? 1.12 : 1); P.V.x += _w.x * 1.6; P.V.z += _w.z * 1.6; P.groundT = 9; SFX.tap(P.contact.gsurf || 'grass', 0.45); SFX.ev('jump', {}, () => SFX.whoosh(0.25)); }
+      else if (P.wallT < 0.22 && !P.wallJumped) { const n = P.wallN || P.contact.wn; P.V.set(n.x * 5.4 + _w.x * 2.0, 6.8, n.z * 5.4 + _w.z * 2.0); P.wallJumped = true; SFX.ev('wallkick', {}, () => { SFX.tap(P.contact.surf || 'wood', 0.7); SFX.whoosh(0.4); }); }
     }
     P.V.y -= g * dt;
     const vyPre = P.V.y;
-    const steps = Math.min(4, Math.ceil(P.V.length() * dt / 0.12) || 1);
+    const steps = Math.min(8, Math.ceil(P.V.length() * dt / 0.12) || 1);
     let gnd = false, wall = false, bnc = false, hardG = false;
     for (let s = 0; s < steps; s++) {
       P.H.addScaledVector(P.V, dt / steps);
@@ -2865,7 +2902,7 @@ function desktopStep(dt) {
     if (gnd && !bnc && hs > 1) { P.stepT += dt * hs; if (P.stepT > 1.05) { P.stepT = 0; P.stepPhase ^= 1; SFX.tap(P.contact.gsurf || 'grass', 0.22 + hs * 0.04); } }
   }
   rig.position.copy(P.H);
-  if (P.H.y < world.killY) respawnPlayer();
+  if (offMap(P.H)) respawnPlayer();
   animateFP(dt);
 }
 const _fl = new THREE.Vector3(), _fs = new THREE.Vector3(), _inv = new THREE.Matrix4();
@@ -2880,7 +2917,7 @@ function animateFP(dt) {
     paw.material = arm.material = m;
     const w = paw.userData.want;
     const cyc = Math.sin(ph + (i ? Math.PI : 0));
-    w.set(s * 0.27, -0.42 + Math.max(0, cyc) * 0.08 * run, -0.58 - cyc * 0.12 * run);
+    w.set(s * 0.27, -0.38 + Math.max(0, cyc) * 0.08 * run, -0.58 - cyc * 0.12 * run);
     if (!P.onGround && !P.anchor) w.set(s * 0.32, -0.28 + clamp(P.V.y * 0.03, -0.15, 0.15), -0.6);
     if (P.anchor && i === 0) { _fl.copy(P.anchor).applyMatrix4(_inv); if (_fl.length() > 0.95) _fl.setLength(0.95); w.copy(_fl); }
     if (P.anchor && i === 1) w.set(0.3, -0.36, -0.58);
@@ -2890,7 +2927,7 @@ function animateFP(dt) {
     paw.position.copy(paw.userData.pos);
     _fs.set(s * 0.36, -0.8, 0.1);
     arm.position.copy(_fs); arm.lookAt(_fl.copy(paw.position).applyMatrix4(camera.matrixWorld));
-    arm.scale.z = Math.max(0.05, _fs.distanceTo(paw.position));
+    arm.scale.z = Math.max(0.05, _fs.distanceTo(paw.position) - WRIST * 0.85); // ends at the wrist, inside the cuff
     paw.quaternion.copy(arm.quaternion);
   }
   if (P.swipe > 0) P.swipe -= dt;
@@ -2905,6 +2942,8 @@ function landSound(speed, surf, pos) {
   else if (speed > 3.2) { SFX.ev('land_soft', { pos, gain: clamp(speed / 6, 0.6, 1.2) }, null); SFX.tap(surf || 'grass', 0.6, pos); }
   else if (speed > 1.2) SFX.tap(surf || 'grass', clamp(speed * 0.2, 0.25, 0.6), pos);
 }
+// past the map's invisible walls (a capped power-up launch over them, or a climb up them): back to the spawn, like a fall
+function offMap(p) { const B = world.bounds + 1.2; return p.y < world.killY || Math.abs(p.x) > B || Math.abs(p.z) > B; }
 function respawnPlayer() {
   const s = world.spawns[0];
   P.H.set(s.p.x, s.p.y + STAND_H + 0.05, s.p.z); P.V.set(0, 0, 0); P.yaw = s.yaw; P.pitch = 0; P.anchor = null; P.hist.length = 0;
@@ -2918,10 +2957,10 @@ function buildVRUI() {
   let c = document.createElement('canvas'); c.width = 128; c.height = 72; VRUI.wctx = c.getContext('2d'); VRUI.wtex = canvasTex(c, { repeat: false, mip: false });
   VRUI.watch = new THREE.Group();
   const face = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.073), new THREE.MeshBasicMaterial({ map: VRUI.wtex }));
-  face.rotation.x = -Math.PI / 2; face.position.y = 0.006;
+  face.rotation.set(-Math.PI / 2, 0, Math.PI); face.position.y = 0.0075; // text reads upright with the paw pointing forward or raised; sits just above the case (no z-fight)
   const back = new THREE.Mesh(new THREE.BoxGeometry(0.145, 0.012, 0.088), new THREE.MeshBasicMaterial({ color: 0x2a2f4a }));
-  VRUI.watch.add(back, face); VRUI.watch.position.set(0, 0.048, -0.06); VRUI.watch.visible = false;
-  P.avatar.paws[0].add(VRUI.watch);
+  VRUI.watch.add(back, face); VRUI.watch.position.set(0, 0.07, -WRIST); VRUI.watch.visible = false;
+  P.avatar.paws[1].add(VRUI.watch); // on the left wrist cuff
   c = document.createElement('canvas'); c.width = 512; c.height = 128; VRUI.bctx = c.getContext('2d'); VRUI.btex = canvasTex(c, { repeat: false, mip: false });
   VRUI.banner = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.275), new THREE.MeshBasicMaterial({ map: VRUI.btex, transparent: true, opacity: 0, depthTest: false, depthWrite: false }));
   VRUI.banner.position.set(0, 0.1, -1.4); VRUI.banner.renderOrder = 999; VRUI.banner.visible = false; camera.add(VRUI.banner);
@@ -3281,11 +3320,20 @@ function loadMap(id) {
   $('mapName').innerHTML = '<span>' + def.name + '</span><br>' + MODES[save.settings.mode].name;
   Menu.sync();
 }
+// screen fade, advanced by the game's own frame loop (updateFade): in a VR session the page's requestAnimationFrame
+// doesn't run, so a rAF-driven fade never finished there and map travel froze the player
+const FADE = { from: 0, to: 0, t: 0, ms: 1, res: null };
 function fadeTo(v, ms = 350) {
   $('fade').style.opacity = v;
   VRUI.fade.visible = true;
-  const start = VRUI.fade.material.opacity, t0 = performance.now();
-  return new Promise(res => { const step = () => { const k = Math.min(1, (performance.now() - t0) / ms); VRUI.fade.material.opacity = lerp(start, v, k); if (k < 1) requestAnimationFrame(step); else { if (!v) VRUI.fade.visible = false; res(); } }; step(); });
+  if (FADE.res) FADE.res();
+  return new Promise(res => Object.assign(FADE, { from: VRUI.fade.material.opacity, to: v, t: 0, ms: Math.max(1, ms), res }));
+}
+function updateFade(dt) {
+  if (!FADE.res) return;
+  FADE.t += dt * 1000; const k = Math.min(1, FADE.t / FADE.ms);
+  VRUI.fade.material.opacity = lerp(FADE.from, FADE.to, k);
+  if (k >= 1) { if (!FADE.to) VRUI.fade.visible = false; const r = FADE.res; FADE.res = null; r(); }
 }
 Game.travel = async function (id) {
   id = id || this.pendingMap;
@@ -3293,7 +3341,8 @@ Game.travel = async function (id) {
   this.traveling = true; SFX.warp();
   await fadeTo(1, 300);
   try { loadMap(id); } catch (e) { console.error(e); }
-  await new Promise(r => setTimeout(r, 60));
+  await fadeTo(1, 60); // hold black for a moment (frame-driven too)
+  this.traveling = 'arriving'; // in place on the new map: let the player step during the fade-in, so the view and paws are at the spawn, not the old spot
   await fadeTo(0, 400);
   this.traveling = false;
   this.banner(MAPS[id].name, MAPS[id].blurb);
@@ -3356,7 +3405,7 @@ function ballBucket(x, y, z, mat = 'white', tint = 0x3a8cff) {
   cyl(x, z, y, y + 0.32, 0.26, mat, { r2: 0.3, tint, seg: 10 });
   const P = xfPoint(x, y + 0.45, z); world.ballSpots.push(new THREE.Vector3(...P));
 }
-function walls(B, H = 40) {
+function walls(B, H = 60) {
   blk(-B - 1, -2, -B - 1, B + 1, H, -B, 'invisible', { noNav: true }); blk(-B - 1, -2, B, B + 1, H, B + 1, 'invisible');
   blk(-B - 1, -2, -B, -B, H, B, 'invisible'); blk(B, -2, -B, B + 1, H, B, 'invisible');
 }
@@ -3679,7 +3728,7 @@ const MAPS = {
     build() {
       SR = mulberry32(55);
       blk(-80, -20, -80, 80, 0, 80, { top: 'moon', side: 'moondark' });
-      walls(42, 70);
+      walls(42, 90);
       for (let i = -42; i <= 42; i += 6) for (const s of [-1, 1]) { rod(i, 0, s * 42, i, 1.2, s * 42, 0.08, 'metal', { col: false, tint: 0xff6040 }); rod(s * 42, 0, i, s * 42, 1.2, i, 0.08, 'metal', { col: false, tint: 0xff6040 }); }
       const crater = (x, z, R) => { decal(x, 0, z, R * 1.7, R * 1.7, 'moondark'); const n = Math.round(R * 3); for (let i = 0; i < n; i++) { const a = i / n * TAU; box(x + Math.cos(a) * R, 0.3, z + Math.sin(a) * R, TAU * R / n + 0.3, 0.6, 1.0, 'moondark', { ry: -a - Math.PI / 2 }); } };
       crater(-20, 8, 6); crater(14, 26, 5); crater(-4, -24, 7); crater(30, -6, 4); crater(-34, -32, 5);
@@ -3891,18 +3940,22 @@ renderer.xr.addEventListener('sessionend', () => {
 // =====================================================================
 //  MAIN LOOP
 // =====================================================================
-const _sq = new THREE.Quaternion(), _cw = new THREE.Vector3();
+const _rest = [new THREE.Vector3(), new THREE.Vector3()], _sq = new THREE.Quaternion(), _cw = new THREE.Vector3(), _turnY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 function updateSelfAvatar(dt) {
+  // the camera looks down -z but pug models face +z: turn the own model around (it showed its back in the mirror) and
+  // feed the hands so the right paw hangs off the model's right shoulder (avatar index 0 = right, P.handPts[0] = left)
   const vr = renderer.xr.isPresenting;
   if (vr) {
-    camera.getWorldQuaternion(_sq);
+    camera.getWorldQuaternion(_sq).multiply(_turnY);
     const L = hands.find(h => h.side < 0) || hands[0], R = hands.find(h => h.side > 0) || hands[1];
-    P.avatar.update(P.H, _sq, P.yaw, [P.handPts[0], P.handPts[1]], dt, 0);
-    if (L.connected) P.avatar.paws[0].quaternion.copy(L.q);
-    if (R.connected) P.avatar.paws[1].quaternion.copy(R.q);
+    // the paws take the controllers' orientations and the arms reach for their wrists. An untracked controller (asleep,
+    // put down, not connected yet) has its hand point at the head: hang that paw at the side instead of over the eyes
+    const hr = R.connected ? P.handPts[1] : _rest[0].set(-0.32, -0.6, 0.2).applyAxisAngle(UP, P.yaw + Math.PI).add(P.H);
+    const hl = L.connected ? P.handPts[0] : _rest[1].set(0.32, -0.6, 0.2).applyAxisAngle(UP, P.yaw + Math.PI).add(P.H);
+    P.avatar.update(P.H, _sq, P.yaw + Math.PI, [hr, hl], dt, 0, [R.connected ? R.q : null, L.connected ? L.q : null]);
   } else {
-    _sq.setFromEuler(_e2.set(P.pitch, P.yaw, 0, 'YXZ'));
-    P.avatar.update(P.H, _sq, P.yaw, [P.handPts[0], P.handPts[1]], dt, 0);
+    _sq.setFromEuler(_e2.set(P.pitch, P.yaw, 0, 'YXZ')).multiply(_turnY);
+    P.avatar.update(P.H, _sq, P.yaw + Math.PI, [P.handPts[1], P.handPts[0]], dt, 0);
   }
   P.avatar.setIT(P.it);
   P.avatar.tag.visible = true;
@@ -3919,11 +3972,12 @@ const clock = new THREE.Clock();
 function animTextures(dt) { for (const k in MAT_DEF) { const d = MAT_DEF[k]; if (d.anim && TEX[d.tex]) { TEX[d.tex].offset.x += d.anim[0] * dt; TEX[d.tex].offset.y += d.anim[1] * dt; } } }
 function loop() {
   const dt = Math.min(clock.getDelta(), 0.05);
+  updateFade(dt);
   if (saveTimer > 0) { saveTimer -= dt; if (saveTimer <= 0) writeSave(true); }
   animTextures(dt);
   const vr = renderer.xr.isPresenting;
   if (Game.started) {
-    if (!Game.traveling) {
+    if (Game.traveling !== true) { // paused while the screen fades out and the map loads ('arriving' = fading in at the spawn)
       if (vr) { vrStep(dt); vrButtons(); }
       else { if (!Menu.open) desktopStep(dt); else animateFP(dt); updateHover(); }
       Game.update(dt);
@@ -3993,7 +4047,8 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) write
 
 // debug / test hook: step the simulation without rendering
 function simStep(dt) {
-  if (Game.started && !Game.traveling) { if (renderer.xr.isPresenting) vrStep(dt); else desktopStep(dt); Game.update(dt); }
+  updateFade(dt);
+  if (Game.started && Game.traveling !== true) { if (renderer.xr.isPresenting) vrStep(dt); else desktopStep(dt); Game.update(dt); }
   for (const b of Game.bots) b.update(dt);
   Items.update(dt);
   if (Game.started) updateSelfAvatar(dt);
