@@ -1909,13 +1909,14 @@ class PugAvatar {
       // the forearm ends at the wrist, inside the cuff. A given paw orientation (VR controller): reach for its wrist.
       // Otherwise the paw follows the forearm, so the forearm bone runs on to the paw centre (WRIST longer).
       const T = Q ? _av5.set(0, 0, -WRIST).applyQuaternion(Q).add(H) : H, L2 = Q ? ARM_SEG : ARM_SEG + WRIST;
-      // two-bone IK: the elbow points out, down and back (knuckle-walker arms); past full reach the arm straightens and stretches.
-      // (pole chosen so its two dead directions, where the elbow would swing around, are out-down-back and in front of the chin:
-      // a pole straight back-out put one right where hands meet in front of the chest)
+      // two-bone IK: the elbow points back, out and down (knuckle-walker arms); past full reach the arm straightens and stretches
       const d = Math.max(1e-4, S.distanceTo(T)), dir = _av2.copy(T).sub(S).multiplyScalar(1 / d), E = _av4;
       if (d >= (ARM_SEG + L2) * 0.999) E.copy(S).addScaledVector(dir, d * ARM_SEG / (ARM_SEG + L2));
       else {
-        const pole = _av3.set(s * 0.72, -0.42, -0.55).applyQuaternion(_aq);
+        // blend on how far forward the hand points: out-down-back for hands in front (no swing where hands meet at the chest),
+        // back-and-out for hands at the side or behind (no swing along running strokes)
+        let t = clamp((_av3.set(0, 0, 1).applyQuaternion(_aq).dot(dir) + 0.5) / 0.6, 0, 1); t = t * t * (3 - 2 * t);
+        const pole = _av3.set(s * lerp(0.445, 0.721, t), lerp(-0.099, -0.421, t), lerp(-0.89, -0.551, t)).applyQuaternion(_aq);
         pole.addScaledVector(dir, -pole.dot(dir)); if (pole.lengthSq() < 1e-6) pole.set(0, -1, 0); pole.normalize();
         const a = (d * d + ARM_SEG * ARM_SEG - L2 * L2) / (2 * d), h = Math.sqrt(Math.max(0, ARM_SEG * ARM_SEG - a * a));
         E.copy(S).addScaledVector(dir, a).addScaledVector(pole, h);
@@ -2471,7 +2472,7 @@ class Bot {
           this.V.set(lx / ldh * vh, clamp((lead.y - f.y + 0.5 * g * T * T) / T, 1.2, 7.8), lz / ldh * vh);
         } else if (kind === 'walk' || (direct && dh < 4 && Math.abs(dy) < 0.8)) {
           let s = Math.min(7.2 * sk, dh * 4.6 + 1); const vy = (1.9 + Math.random() * 1.0) * Math.sqrt(g / 9.8) * (urgent ? 1 : 0.8);
-          if (g < 6) s = Math.min(s, (dh + 0.8) * g / (2 * vy)); // low gravity: floaty hops land within reach of the waypoint instead of overshooting it
+          if (g < 6 && !urgent) s = Math.min(s, (dh + 0.8) * g / (2 * vy)); // low gravity: wandering hops land near the waypoint instead of overshooting it (chases stay fast)
           this.V.set((tgt.x - f.x) / Math.max(dh, 1e-3) * s, vy, (tgt.z - f.z) / Math.max(dh, 1e-3) * s);
         } else {
           _bl.copy(tgt); _bl.y += 0.12;
@@ -2525,9 +2526,10 @@ class Bot {
     }
   }
   plantWall(n) {
+    const sg = (Math.sin(this.yaw) * n.x + Math.cos(this.yaw) * n.z) <= 0 ? 1 : -1; // +1 when facing the wall
     for (const h of this.hands) {
       _bt.set(-n.x, 0, -n.z).multiplyScalar(0.25).add(this.H); _bt.y += (h.side > 0 ? 0.15 : -0.1);
-      _bt.x -= n.z * h.side * 0.22; _bt.z += n.x * h.side * 0.22; // side +1 = the pug's left: facing the wall (-n), its left is (-n.z, n.x)
+      _bt.x -= n.z * h.side * sg * 0.22; _bt.z += n.x * h.side * sg * 0.22; // side +1 = the pug's left: facing the wall (-n), its left is (-n.z, n.x)
       h.plant = (h.plant || new THREE.Vector3()).copy(_bt); h.plantT = 0.22;
     }
   }
@@ -3947,12 +3949,13 @@ function updateSelfAvatar(dt) {
   const vr = renderer.xr.isPresenting;
   if (vr) {
     camera.getWorldQuaternion(_sq).multiply(_turnY);
-    const L = hands.find(h => h.side < 0) || hands[0], R = hands.find(h => h.side > 0) || hands[1];
+    // same connected-aware lookup as vrStep: a side with no connected controller has no paw of its own
+    const L = hands.find(h => h.side < 0 && h.connected), R = hands.find(h => h.side > 0 && h.connected);
     // the paws take the controllers' orientations and the arms reach for their wrists. An untracked controller (asleep,
     // put down, not connected yet) has its hand point at the head: hang that paw at the side instead of over the eyes
-    const hr = R.connected ? P.handPts[1] : _rest[0].set(-0.32, -0.6, 0.2).applyAxisAngle(UP, P.yaw + Math.PI).add(P.H);
-    const hl = L.connected ? P.handPts[0] : _rest[1].set(0.32, -0.6, 0.2).applyAxisAngle(UP, P.yaw + Math.PI).add(P.H);
-    P.avatar.update(P.H, _sq, P.yaw + Math.PI, [hr, hl], dt, 0, [R.connected ? R.q : null, L.connected ? L.q : null]);
+    const hr = R ? P.handPts[1] : _rest[0].set(-0.32, -0.6, 0.2).applyAxisAngle(UP, P.yaw + Math.PI).add(P.H);
+    const hl = L ? P.handPts[0] : _rest[1].set(0.32, -0.6, 0.2).applyAxisAngle(UP, P.yaw + Math.PI).add(P.H);
+    P.avatar.update(P.H, _sq, P.yaw + Math.PI, [hr, hl], dt, 0, [R ? R.q : null, L ? L.q : null]);
   } else {
     _sq.setFromEuler(_e2.set(P.pitch, P.yaw, 0, 'YXZ')).multiply(_turnY);
     P.avatar.update(P.H, _sq, P.yaw + Math.PI, [P.handPts[1], P.handPts[0]], dt, 0);
