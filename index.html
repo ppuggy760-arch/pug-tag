@@ -302,6 +302,8 @@ function loadSave() {
       if (!Array.isArray(d.owned)) d.owned = defaultSave().owned;
     }
   } catch (e) { }
+  // once, after the sound fix: un-mute volumes that were knocked to 0 (the SOUND/MUSIC keys on the kennel terminal are easy to brush in VR)
+  if ((d.audioV | 0) < 2) { if (!(d.settings.sfx > 0.001)) d.settings.sfx = 0.85; if (!(d.settings.music > 0.001)) d.settings.music = 0.45; d.audioV = 2; }
   return d;
 }
 const save = loadSave();
@@ -1078,27 +1080,61 @@ function buildSky(def) {
 // =====================================================================
 const SFX = {
   ctx: null, master: null, sfx: null, mus: null, noise: null, ok: false,
+  // mix levels: bus multipliers in front of the compressor, make-up gain after it (the soft clipper below catches what's left).
+  // Measured live on every map: about -19..-21 LUFS at default volume (was -28..-34, too quiet on headset/phone speakers),
+  // peaks under -2 dBFS, 0-4 dB typical gain reduction; music:sfx ratio unchanged (mus = 0.32 x sfx).
+  MIX: { sfx: 2.4, mus: 0.77, master: 0.95, thr: -18, knee: 12, ratio: 6, att: 0.002, rel: 0.2 },
+  _wt: -1e9, _run: -1e9, _gest: -1e9,
+  // call from any user gesture (click, key, touch, VR trigger/grip): creates the context the first time, wakes it every time after
   init() {
-    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    if (this.ctx) { this.wake(true); return; }
     try {
-      const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
-      const ctx = this.ctx = new C();
+      // iPhone/iPad: play through the ringer/silent switch like a video would
+      try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) { }
+      const C = window.AudioContext || window.webkitAudioContext; if (!C) { this.na = true; return; }
+      const ctx = this.ctx = new C(); this.na = false;
+      ctx.onstatechange = () => { if (ctx.state !== 'running') this.wake(true); };
       // last-stage soft clipper: unchanged below 0.8 (-1.9 dBFS), rounds off coincident loud one-shots above it so the output never passes full scale (no latency)
       const clip = ctx.createWaveShaper(), N = 8193, cv = new Float32Array(N);
       for (let i = 0; i < N; i++) { const x = (i / (N - 1)) * 4 - 2, a = Math.abs(x); cv[i] = Math.sign(x) * (a < 0.8 ? a : 0.8 + 0.2 * Math.tanh((a - 0.8) / 0.2)); }
       clip.curve = cv; clip.connect(ctx.destination);
-      this.master = ctx.createGain(); this.master.gain.value = 0.45; this.master.connect(clip); // the curve spans +-2.0, so the shaper input is the old 0.9 bus x 0.5
-      const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.connect(this.master);
+      const M = this.MIX;
+      this.master = ctx.createGain(); this.master.gain.value = M.master; this.master.connect(clip); // the curve spans +-2.0
+      const comp = this.comp = ctx.createDynamicsCompressor(); comp.threshold.value = M.thr; comp.knee.value = M.knee; comp.ratio.value = M.ratio; comp.attack.value = M.att; comp.release.value = M.rel; comp.connect(this.master);
       this.sfx = ctx.createGain(); this.sfx.connect(comp);
       this.mus = ctx.createGain(); this.mus.connect(comp);
       const len = ctx.sampleRate * 1.0, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
       this.noise = buf; this.ok = true; this.applyVolumes();
+      this.wake(true);
       Music.start();
-      SFXBANK.load(); if (SFXBANK.ambWant) SFXBANK.setAmbience(SFXBANK.ambWant);
-    } catch (e) { this.ok = false; }
+      try { SFXBANK.load(); if (SFXBANK.ambWant) SFXBANK.setAmbience(SFXBANK.ambWant); } catch (e) { } // the graph works; the bank retries on the next map load
+    } catch (e) { // couldn't build the audio graph: drop it so the next gesture tries again from scratch
+      this.ok = false; this.na = true;
+      if (this.ctx) { try { this.ctx.onstatechange = null; this.ctx.close(); } catch (e2) { } this.ctx = null; }
+    }
   },
-  applyVolumes() { if (!this.ok) return; this.sfx.gain.value = save.settings.sfx; this.mus.gain.value = save.settings.music * 0.32; },
+  applyVolumes() { if (!this.ok) return; this.sfx.gain.value = save.settings.sfx * this.MIX.sfx; this.mus.gain.value = save.settings.music * this.MIX.mus; },
+  // resume a suspended/interrupted context (browsers pause audio until a gesture, and some pause it again when you
+  // enter/leave VR, take the headset off or get a call). Cheap; called every frame (throttled) and on every gesture.
+  wake(force) {
+    const c = this.ctx; if (!c || c.state === 'closed') return;
+    const t = performance.now();
+    if (c.state === 'running') { this._run = t; return; }
+    if (force) this._gest = t;
+    if (!force && (t - this._wt < 700 || (navigator.userActivation && !navigator.userActivation.hasBeenActive))) return; this._wt = t;
+    try { const p = c.resume(); if (p && p.catch) p.catch(() => { }); } catch (e) { }
+    // a 1-sample silent buffer started inside the gesture is what finally unlocks output on iOS / WebKit
+    if (force) try { const b = c.createBuffer(1, 1, c.sampleRate), s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(0); } catch (e) { }
+  },
+  // true while nothing can be heard: never started, or paused by the browser for over a second since it last ran or was
+  // last poked by a gesture (resume is async, so no flash right after a click). The watch / HUD then ask for a press.
+  silent() {
+    if (this.na) return false; if (!this.ok) return true;
+    return this.ctx.state !== 'running' && performance.now() - Math.max(this._run, this._gest) > 1000;
+  },
+  // sound effects switched off in settings / on the terminal's SOUND key
+  muted() { return save.settings.sfx <= 0.001; },
   // spatial helpers --------------------------------------------------
   spatial(pos) {
     if (!pos) return { g: 1, pan: 0 };
@@ -1209,6 +1245,7 @@ const Music = {
   tick() {
     const ctx = SFX.ctx; if (!ctx || ctx.state !== 'running') return;
     if (save.settings.music <= 0.001) { this.next = ctx.currentTime + 0.05; return; }
+    if (this.next < ctx.currentTime) this.next = ctx.currentTime + 0.02; // timers were throttled (background tab / VR): skip the missed steps instead of firing them all at once
     const s = this.song, spb = 60 / s.bpm / 4;
     while (this.next < ctx.currentTime + 0.15) {
       const st = this.step % 64, bar = st >> 4, i = st & 15;
@@ -2591,7 +2628,7 @@ function makeHand(i) {
     hit: false, was: false, surf: null, col: null, grab: false, held: null, vh: [], vel: new THREE.Vector3(), prev: new THREE.Vector3(), q: new THREE.Quaternion() };
   grip.addEventListener('connected', e => { h.src = e.data; h.connected = true; h.side = e.data.handedness === 'left' ? -1 : 1; h.init = false; h.vok = false; });
   grip.addEventListener('disconnected', () => { h.connected = false; h.src = null; });
-  const on = () => grabBall(h, true), off = () => grabBall(h, false);
+  const on = () => { SFX.init(); grabBall(h, true); }, off = () => grabBall(h, false); // trigger/grip = a user gesture: (re)start audio
   ctrl.addEventListener('squeezestart', on); ctrl.addEventListener('squeezeend', off);
   ctrl.addEventListener('selectstart', on); ctrl.addEventListener('selectend', off);
   return h;
@@ -2989,6 +3026,8 @@ function updateVRUI(dt) {
   drawText(ctx, Game.timerText(), 64, 28, 2, '#ffffff', 'center');
   drawText(ctx, '$' + save.bones, 6, 54, 2, '#ffd23f');
   drawText(ctx, Game.countText(), 122, 54, 1, '#c8d0ff', 'right');
+  if (SFX.silent()) drawText(ctx, 'NO SOUND-PULL TRIGGER', 64, 44, 1, '#fff27a', 'center');
+  else if (SFX.muted()) drawText(ctx, 'SFX OFF: PRESS SOUND', 64, 44, 1, '#fff27a', 'center');
   VRUI.wtex.needsUpdate = true;
 }
 
@@ -3374,6 +3413,8 @@ function updateHUD(dt) {
   if (P.shield > 0) chips.push(['BUBBLE ' + Math.ceil(P.shield), '#1f6aa8']);
   if (P.moon > 0) chips.push(['MOON PAWS ' + Math.ceil(P.moon), '#5a6070']);
   if (P.heldBall) chips.push(['BALL - CLICK TO THROW', '#4f7a10']);
+  if (SFX.silent()) chips.push([isTouch ? 'NO SOUND - TAP THE SCREEN' : 'NO SOUND - CLICK OR PRESS A KEY', '#8f1b12']);
+  else if (SFX.muted()) chips.push([isTouch ? 'SFX OFF - MENU FOR SETTINGS' : 'SFX OFF - P FOR SETTINGS', '#5a6070']);
   const html = chips.map(c => `<div class="chip" style="background:${c[1]}">${c[0]}</div>`).join('');
   if ($('chips').innerHTML !== html) $('chips').innerHTML = html;
   // hint
@@ -3848,6 +3889,8 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyM') { save.settings.music = save.settings.music > 0 ? 0 : 0.45; SFX.applyVolumes(); writeSave(); Game.toast('MUSIC ' + (save.settings.music > 0 ? 'ON' : 'OFF')); }
   if (e.code === 'KeyP') Menu.show();
 });
+// any tap or click anywhere (iOS only unlocks audio on touchend / click, and most of the touch screen has no handler of its own)
+for (const ev of ['touchend', 'pointerup', 'click']) document.addEventListener(ev, () => SFX.init(), { capture: true, passive: true });
 document.addEventListener('keyup', e => { INPUT.keys[e.code] = false; if (e.code === 'Tab') $('board').style.display = 'none'; });
 window.addEventListener('blur', () => { INPUT.keys = {}; INPUT.grab = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -3930,6 +3973,7 @@ function setVRBodyLayers(vr) {
 renderer.xr.addEventListener('sessionstart', () => {
   P.vr = true; P.vrInit = false; rig.rotation.set(0, P.yaw, 0); camera.rotation.set(0, 0, 0); fp.group.visible = false;
   setVRBodyLayers(true); INPUT.grab = false; Hover.btn = null; for (const b of world.buttons) b.hover = false;
+  SFX.init();
   if (!Game.started) startGame();
   $('menu').style.display = 'none'; Menu.open = false;
 });
@@ -3976,6 +4020,7 @@ function animTextures(dt) { for (const k in MAT_DEF) { const d = MAT_DEF[k]; if 
 function loop() {
   const dt = Math.min(clock.getDelta(), 0.05);
   updateFade(dt);
+  if (SFX.ctx) SFX.wake(); if (SFX.ok && Music.timer) Music.tick(); // keep audio alive (timers can be throttled in VR / background)
   if (saveTimer > 0) { saveTimer -= dt; if (saveTimer <= 0) writeSave(true); }
   animTextures(dt);
   const vr = renderer.xr.isPresenting;

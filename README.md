@@ -29,6 +29,7 @@ A pixel-art tag game where you play as a legless pug with long arms. It runs in 
   - **Tennis balls:** grab and throw them.
 - **Layered sound design.** Every sound effect is a "recipe" that combines short CC0 sound samples (pitched, sliced, filtered) with synthesized layers (tones, filtered noise, sweeps). Examples are jumps, surface-specific paw taps, landings, tags, pickups, the shop, pug barks/yips/growls and a looping ambience per map. The game bakes each sound effect into a few varied buffers while the title screen shows, and bakes each map's ambience loop the first time that map loads. It plays them with distance fading, stereo panning and voice limits. If baking isn't possible, most sounds fall back to a simple live-synth version. There is also a chiptune track for each map.
 - **VR comforts:** a wrist watch HUD, floating banners, haptics, and snap or smooth turning.
+- **No sound?** Browsers keep audio off until you press something. In VR, pull a trigger; on desktop or a phone, click, press a key or tap. The game wakes the audio by itself if the headset or browser pauses it later. The watch (or the HUD on desktop) shows **NO SOUND** while the audio is paused and **SFX OFF** when sound effects are switched off on the terminal's SOUND key or in the settings. On an iPhone, the game plays even with the silent switch on (iOS 17 and newer).
 
 Bones, cosmetics and settings save in your browser (`localStorage`).
 
