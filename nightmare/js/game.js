@@ -7,6 +7,7 @@
   'use strict';
 
   const CFG = window.GAME_CONFIG;
+  if (!CFG || typeof CFG !== 'object') return; // config.js has a mistake: index.html already says where (see #oops)
   const W = 1600, H = 900;
   const NIGHTS = 5;
   const DEV = /[?&]dev(=|&|$)/.test(location.search);
@@ -79,7 +80,14 @@
     save.night = clamp(parseInt(save.night, 10) || 1, 1, NIGHTS);
     save.beaten = clamp(parseInt(save.beaten, 10) || 0, 0, NIGHTS);
     if (!['full', 'low', 'off'].includes(save.fx)) save.fx = 'full';
-    if (!save.custom || typeof save.custom !== 'object') save.custom = {};
+    // a hand-edited or broken save can't break the sound or the Endless sliders
+    const num = (v, d) => (isFinite(parseFloat(v)) ? parseFloat(v) : d);
+    save.vol = clamp(num(save.vol, 85), 0, 100); save.music = clamp(num(save.music, 70), 0, 100);
+    if (!save.custom || typeof save.custom !== 'object' || Array.isArray(save.custom)) save.custom = {};
+    for (const k of Object.keys(save.custom)) {
+      const v = parseInt(save.custom[k], 10);
+      if (isNaN(v)) delete save.custom[k]; else save.custom[k] = clamp(v, 0, 20);
+    }
     if (typeof save.captions !== 'boolean') save.captions = TOUCH;
     if (save.scare !== 'gentle') save.scare = 'normal';
     if (!save.hints || typeof save.hints !== 'object') save.hints = {};
@@ -372,15 +380,20 @@
   /*  (warnings go to the console and to the ?dev art-helper panel)      */
   /* ------------------------------------------------------------------ */
   const configWarnings = [];
-  function warnCfg(msg) { configWarnings.push(msg); console.warn('[config.js] ' + msg); }
+  function warnCfg(msg) {
+    configWarnings.push(msg); console.warn('[config.js] ' + msg);
+    if (window.__oopsWarn) window.__oopsWarn.push(msg); // (shown too if something then stops the game from starting)
+  }
   const TOP_KEYS = ['title', 'subtitle', 'hourSeconds', 'lucidityDrain', 'endlessDrain', 'nights', 'endlessRules', 'pinch',
     'doorStrain', 'lies', 'minWarning', 'office', 'cameras', 'monsters', 'sounds', 'captions', 'dreamVoice', 'credits', 'bedroom',
     'fallAsleep', 'morning', 'finale', 'director', 'youCam', 'tutorial'];
   /* the words a first-night lesson step can wait for (plus cam:<id> and time:N), and what its ring can go around */
   const LESSON_WAITS = ['lookLeft', 'lookRight', 'light', 'cams', 'door', 'doorOpen', 'pinch'];
   const LESSON_POINTS = ['left', 'right', 'leftLight', 'rightLight', 'leftDoor', 'rightDoor', 'cameras', 'pinch', 'lucidity', 'clock', 'none'];
-  const MONSTER_KEYS = ['id', 'name', 'description', 'frames', 'fps', 'jumpscareFrames', 'jumpscareFps', 'jumpscareFocus',
+  const MONSTER_KEYS = ['id', 'name', 'description', 'behavior', 'color', 'frames', 'sleepFrames', 'fps', 'jumpscareFrames', 'jumpscareFps', 'jumpscareFocus',
     'jumpscareSound', 'presenceSound', 'sounds', 'levels', 'hourBoost', 'moveEvery', 'waitAtDoor', 'start', 'path', 'retreat', 'poses', 'doorPose'];
+  const CAMERA_KEYS = ['id', 'label', 'name', 'dreamName', 'image', 'map', 'sound', 'soundVol'];
+  const CUE_KINDS = ['steps', 'breath', 'bang', 'far', 'whisper']; // what a monster's own sounds: { … } can change
   /* a sound name used somewhere in config.js must be one of the sounds: */
   function checkSoundName(name, where) {
     if (name && CFG.sounds && !CFG.sounds[name]) warnCfg(`${where}: there is no sound called "${name}" in sounds.`);
@@ -394,6 +407,15 @@
     }
   }
 
+  /* a number setting ("5" in quotes works too). Anything else is reported and gets the default. */
+  function numCfg(obj, key, dflt, where, min, max) {
+    if (obj[key] == null) return;
+    const v = Number(obj[key]);
+    if (isFinite(v)) { obj[key] = clamp(v, min, max); return; }
+    warnCfg(`${where}${key}: "${obj[key]}" isn't a number, so the game uses ${dflt}.`);
+    obj[key] = dflt;
+  }
+
   /* "a, , b" or a stray value in a list: keep only the real { … } blocks */
   function onlyBlocks(list, what) {
     if (!Array.isArray(list)) return list;
@@ -402,8 +424,9 @@
     return out;
   }
 
-  function checkConfig() {
+  function validateConfig() {
     checkKeys(CFG, TOP_KEYS, '');
+    numCfg(CFG, 'hourSeconds', 75, '', 5, 3600);
     CFG.cameras = onlyBlocks(CFG.cameras, 'cameras');
     CFG.monsters = onlyBlocks(CFG.monsters, 'monsters');
     if (!Array.isArray(CFG.cameras) || !CFG.cameras.length) {
@@ -417,9 +440,12 @@
       if (seen[c.id.toLowerCase()]) warnCfg(`cameras: two cameras are both called "${c.id}".`);
       seen[c.id.toLowerCase()] = true;
       if (!c.name) c.name = c.id;
+      c.name = String(c.name);
+      checkKeys(c, CAMERA_KEYS, `cameras: "${c.id}": `);
       if (!c.map || typeof c.map.x !== 'number' || typeof c.map.y !== 'number') {
-        warnCfg(`cameras: "${c.id}" needs map: { x: …, y: … } (where its button sits on the camera map).`);
-        c.map = { x: 0.5, y: 0.5 };
+        // (it still gets a button: spread out along the bottom of the map, so the buttons never sit on top of each other)
+        c.map = { x: 0.1 + 0.8 * (i % 5) / 4, y: 0.9 - 0.12 * Math.floor(i / 5) };
+        warnCfg(`cameras: "${c.id}" needs map: { x: …, y: … } (where its button sits on the camera map). For now it sits at the bottom.`);
       }
       checkSoundName(c.sound, `cameras: "${c.id}" sound`);
     });
@@ -427,8 +453,8 @@
     ids.forEach((id) => { byLower[id.toLowerCase()] = id; });
     /* a room name: capital letters are fixed quietly; a small typo uses the closest room (and says so) */
     const fixRoom = (name, where, allowDoor) => {
-      const s = String(name);
-      if (allowDoor && /^door:(left|right)$/i.test(s)) return s.toLowerCase();
+      const s = String(name).trim();
+      if (allowDoor && /^door\s*:\s*(left|right)$/i.test(s)) return s.replace(/\s+/g, '').toLowerCase(); // ("door: Right" works too)
       if (byLower[s.toLowerCase()]) return byLower[s.toLowerCase()];
       const g = didYouMean(s, allowDoor ? ids.concat(['door:left', 'door:right']) : ids);
       warnCfg(`${where}: room "${s}" doesn't exist` + (g ? `. Did you mean "${g}"? (Using "${g}" for now.)` : `. The rooms are: ${ids.join(', ')}.`));
@@ -439,12 +465,19 @@
     const monIds = {};
     CFG.monsters.forEach((m, i) => {
       if (!m.id) { m.id = 'monster' + (i + 1); warnCfg(`monsters: monster number ${i + 1} has no id, so it is called "${m.id}".`); }
-      if (monIds[m.id]) warnCfg(`monsters: two monsters are both called "${m.id}". Give each one its own id.`);
+      m.id = String(m.id);
+      if (monIds[m.id]) { // (a copied block: each monster needs its own pictures, so it gets its own id for now)
+        const was = m.id; m.id = was + '_' + (i + 1);
+        warnCfg(`monsters: two monsters are both called "${was}". Give each one its own id (for now the second one is "${m.id}").`);
+      }
       monIds[m.id] = true;
       if (!m.name) m.name = m.id;
       const who = m.name;
       checkKeys(m, MONSTER_KEYS, who + ': ');
-      if (!Array.isArray(m.frames)) m.frames = [];
+      for (const k of ['frames', 'jumpscareFrames', 'sleepFrames']) {
+        if (m[k] != null && !Array.isArray(m[k])) { warnCfg(`${who} ${k}: write it as a list of pictures, like ["assets/monsters/${m.id}/frame1.png"].`); m[k] = null; }
+      }
+      if (!m.frames) m.frames = [];
       m.start = fixRoom(m.start != null ? m.start : ids[0], who + ' start', false) || ids[0];
       const path = {};
       for (const from in (m.path || {})) {
@@ -459,17 +492,36 @@
       for (const k in (m.poses || {})) { const r = fixRoom(k, who + ' poses', false); if (r) poses[r] = m.poses[k]; }
       m.poses = poses;
       for (const k in (m.doorPose || {})) if (k !== 'left' && k !== 'right') warnCfg(`${who} doorPose: "${k}" should be "left" or "right".`);
-      if (!Array.isArray(m.waitAtDoor) || m.waitAtDoor.length !== 2) {
-        if (m.waitAtDoor != null) warnCfg(`${who} waitAtDoor: write it as two numbers, like [3.5, 7].`);
-        m.waitAtDoor = [4, 7];
+      for (const [k, P] of Object.entries(m.poses).concat(Object.entries(m.doorPose || {}))) {
+        if (!P || typeof P !== 'object' || ['x', 'y', 'h'].some((q) => P[q] != null && !isFinite(+P[q]))) {
+          warnCfg(`${who} pose for "${k}": write it like { x: 0.5, y: 1.0, h: 0.7 }.`);
+          if (m.poses[k] === P) delete m.poses[k]; else delete m.doorPose[k];
+        }
       }
-      if (m.levels != null && !Array.isArray(m.levels)) { warnCfg(`${who} levels: write one number per night, like [3, 6, 9, 12, 16].`); m.levels = null; }
+      numCfg(m, 'fps', 4, who + ' ', 0.5, 60);
+      numCfg(m, 'jumpscareFps', 14, who + ' ', 1, 60);
+      numCfg(m, 'moveEvery', 5, who + ' ', 0.5, 120);
+      // waitAtDoor: two numbers [shortest, longest] (one number works too)
+      const wa = [].concat(m.waitAtDoor == null ? [4, 7] : m.waitAtDoor).map(Number);
+      if (!wa.length || wa.length > 2 || wa.some((v) => !isFinite(v))) { warnCfg(`${who} waitAtDoor: write it as two numbers, like [3.5, 7].`); m.waitAtDoor = [4, 7]; }
+      else m.waitAtDoor = [Math.max(0, wa[0]), Math.max(0, wa[wa.length - 1])].sort((a, b) => a - b);
+      if (m.levels != null && (!Array.isArray(m.levels) || !m.levels.length)) { warnCfg(`${who} levels: write one number per night, like [3, 6, 9, 12, 16].`); m.levels = null; }
+      if (m.levels) m.levels = m.levels.map((v, n) => { const x = Number(v); if (isFinite(x)) return clamp(x, 0, 20); warnCfg(`${who} levels: the number for night ${n + 1} ("${v}") isn't a number, so it is 5.`); return 5; });
+      for (const h in (m.hourBoost || {})) { const x = Number(m.hourBoost[h]); if (!isFinite(x)) { warnCfg(`${who} hourBoost: "${m.hourBoost[h]}" at ${h} AM isn't a number.`); delete m.hourBoost[h]; } else m.hourBoost[h] = x; }
+      const f = m.jumpscareFocus;
+      if (f != null && (typeof f !== 'object' || !isFinite(+f.x) || !isFinite(+f.y))) { warnCfg(`${who} jumpscareFocus: write it like { x: 0.5, y: 0.2 }.`); m.jumpscareFocus = null; }
       checkSoundName(m.jumpscareSound, who + ' jumpscareSound');
       checkSoundName(m.presenceSound, who + ' presenceSound');
+      if (m.sounds && typeof m.sounds === 'object') {
+        checkKeys(m.sounds, CUE_KINDS, who + ' sounds: ');
+        for (const k of CUE_KINDS) checkSoundName(m.sounds[k], `${who} sounds.${k}`);
+      }
+      if (m.behavior != null) m.behavior = String(m.behavior).trim().toLowerCase(); // (checked once the brains exist, see validateBrains)
     });
 
-    CFG.office = CFG.office || {};
-    const doors = CFG.office.doors = CFG.office.doors || {};
+    if (!CFG.office || typeof CFG.office !== 'object') { if (CFG.office != null) warnCfg('office: this should be a { … } block.'); CFG.office = {}; }
+    if (!CFG.office.doors || typeof CFG.office.doors !== 'object') CFG.office.doors = {};
+    const doors = CFG.office.doors;
     for (const side of ['left', 'right']) {
       const d = doors[side];
       if (!d || ['x', 'y', 'w', 'h'].some((k) => typeof d[k] !== 'number')) {
@@ -500,7 +552,7 @@
       }
     });
   }
-  checkConfig();
+  validateConfig();
 
   const camById = {};
   CFG.cameras.forEach((c, i) => { c.index = i; camById[c.id] = c; });
@@ -553,42 +605,51 @@
   /* ------------------------------------------------------------------ */
   /*  ART: load pictures, or paint dreamy stand-ins when they're missing */
   /* ------------------------------------------------------------------ */
+  const CAM_ZOOM = 1.14; // camera pictures are shown 14% bigger than the screen (see camFeedBox)
   const Art = { office: null, officeMissing: true, doors: { left: {}, right: {} }, cams: {}, camMissing: {}, monsters: {}, noise: [], vignette: null, scan: null, dot: null,
     bedroomNight: null, bedroomBlur: [], bedroomMorning: null, bedroomMissing: true, evidence: {}, drawing: null, youCam: null };
 
-  function loadImage(url) {
+  /* bust: a number added to the address so the browser fetches the file again (the art helper's U key) */
+  function loadImage(url, bust) {
     return new Promise((res) => {
       if (!url) return res(null);
       const im = new Image();
       im.onload = () => res(im.naturalWidth ? im : null);
       im.onerror = () => res(null);
-      im.src = url;
+      im.src = bust ? url + (url.indexOf('?') < 0 ? '?' : '&') + 'v=' + bust : url;
     });
   }
 
-  async function loadArt(tick) {
+  /* every picture config.js asks for: Art.files = [{ slot, path, img, w, h }] (img only in ?dev, for the art checklist) */
+  async function loadArt(tick, bust) {
     const jobs = [];
-    const job = (p) => { jobs.push(p.then((v) => { tick(); return v; })); return p; };
+    Art.files = [];
+    const job = (slot, url, opt) => {
+      url = url ? String(url) : '';
+      const p = loadImage(url, bust).then((img) => {
+        if (url || !opt) Art.files.push({ slot, path: url || '', opt: !!opt, img: DEV ? img : null, w: img ? img.naturalWidth : 0, h: img ? img.naturalHeight : 0 });
+        tick(); return img;
+      });
+      jobs.push(p); return p;
+    };
 
-    const officeP = job(loadImage(CFG.office.image));
+    const officeP = job('office.image', CFG.office.image);
     const doorP = {};
     for (const side of ['left', 'right']) {
-      const d = CFG.office.doors[side];
-      doorP[side] = { dark: job(loadImage(d.darkImage)), lit: job(loadImage(d.litImage)), closed: job(loadImage(d.closedImage)) };
+      const d = CFG.office.doors[side], at = `office.doors.${side}.`;
+      doorP[side] = { dark: job(at + 'darkImage', d.darkImage, true), lit: job(at + 'litImage', d.litImage, true), closed: job(at + 'closedImage', d.closedImage, true) };
     }
     const camP = {};
-    for (const c of CFG.cameras) camP[c.id] = job(loadImage(c.image));
+    for (const c of CFG.cameras) camP[c.id] = job(`camera "${c.id}"`, c.image);
     const bed = CFG.bedroom || {};
-    const bedP = { image: job(loadImage(bed.image)), morning: job(loadImage(bed.morningImage)) };
+    const bedP = { image: job('bedroom.image', bed.image), morning: job('bedroom.morningImage', bed.morningImage, true) };
     const evP = {};
-    for (const n of [2, 3, 4]) evP[n] = job(loadImage(evidenceCfg(n).image));
-    const youP = job(loadImage((CFG.youCam || {}).image)); // CAM 7 (optional)
+    for (const n of [2, 3, 4]) evP[n] = job(`morning.evidence ${n}`, evidenceCfg(n).image, true);
+    const youP = job('youCam.image', (CFG.youCam || {}).image, true); // CAM 7 (optional)
     const monP = {};
     for (const m of CFG.monsters) {
-      monP[m.id] = {
-        frames: Promise.all((m.frames || []).map((u) => job(loadImage(u)))),
-        jump: Promise.all((m.jumpscareFrames || []).map((u) => job(loadImage(u)))),
-      };
+      const list = (key, what, opt) => Promise.all((m[key] || []).map((u, i) => job(`${m.name} ${what} ${i + 1}`, u, opt)));
+      monP[m.id] = { frames: list('frames', 'frame'), jump: list('jumpscareFrames', 'jumpscare frame', true), sleep: list('sleepFrames', 'sleep frame', true) };
     }
     Art.total = jobs.length;
     await Promise.all(jobs);
@@ -597,30 +658,28 @@
     for (const m of CFG.monsters) {
       let frames = (await monP[m.id].frames).filter(Boolean);
       const missing = frames.length === 0;
-      if (missing) frames = placeholderMonster(m);
+      if (missing) frames = shadowFigure(m);
       let jump = (await monP[m.id].jump).filter(Boolean);
       if (!jump.length) jump = frames;
       const soft = frames.map((f) => softFrame(f, 820));
-      Art.monsters[m.id] = { frames, jump, soft, sil: soft.map((f) => silhouette(f, '#05030a')), missing };
+      const sleep = (await monP[m.id].sleep).filter(Boolean).map((f) => softFrame(f, 820)); // (the sleeper brain's own frames)
+      Art.monsters[m.id] = { frames, jump, soft, sleep, sil: soft.map((f) => silhouette(f, '#05030a')), missing };
     }
 
     Art.drawing = paintPinnedDrawing(); // the "he walks at night" drawing (desk-room wall, Night 3's morning)
     const office = await officeP;
     Art.officeMissing = !office;
-    Art.office = office || paintOffice();
+    if (office) Object.assign(Art, fitOffice(office));
+    else { Art.office = paintOffice(); Art.officeBand = { y0: 0, k: 1 }; }
     for (const side of ['left', 'right']) {
-      const d = CFG.office.doors[side];
-      const rw = d.w * officeWidthFor(Art.office), rh = d.h * H;
-      Art.doors[side] = {
-        dark: (await doorP[side].dark) || paintDoorway(rw, rh, false, side),
-        lit: (await doorP[side].lit) || paintDoorway(rw, rh, true, side),
-        closed: (await doorP[side].closed) || paintShutter(rw, rh, side),
-      };
+      const own = { dark: await doorP[side].dark, lit: await doorP[side].lit, closed: await doorP[side].closed };
+      // your own desk room without a darkImage: what you painted in the doorway shows (under a soft darkness, see drawDoorway)
+      Art.doors[side] = { own, dark: own.dark || (office ? null : paintDoorway(side, false)), lit: own.lit || paintDoorway(side, true), closed: own.closed || paintShutter(side) };
     }
     for (const c of CFG.cameras) {
       const im = await camP[c.id];
       Art.camMissing[c.id] = !im;
-      Art.cams[c.id] = im || paintRoom(c);
+      Art.cams[c.id] = im ? fitPicture(im, W * CAM_ZOOM, H * CAM_ZOOM) : paintRoom(c);
     }
     // your real bedroom: one picture, tinted dark blue for the night and warm for the morning
     const bedImg = await bedP.image, bedMorning = await bedP.morning;
@@ -629,11 +688,50 @@
     Art.bedroomBlur = TOUCH ? [] : bakeBlurs(Art.bedroomNight, [2, 4, 7, 10]); // (phones darken instead of blurring: no need to keep them)
     Art.bedroomMorning = bedMorning ? shadeCopy(bedMorning) : shadeCopy(bedImg || paintBedroom('morning'), 'overlay', '#ffb070', 0.25);
     for (const n of [2, 3, 4]) Art.evidence[n] = await evP[n];
-    Art.youCam = await youP;
+    const you = await youP;
+    Art.youCam = you && fitPicture(you, W * CAM_ZOOM, H * CAM_ZOOM);
     paintFx();
   }
 
   function officeWidthFor(img) { return img.width * (H / img.height); }
+
+  /* ----- the desk room picture, made once at the size it is shown (big pictures are shrunk here, not every frame).
+     A picture too narrow to look around in (a 4:3 or square canvas, like 2732 x 2048) is zoomed in until at most
+     70% of its width fits on the screen; its top and bottom are cut off, keeping the doorways in view.
+     officeBand says which part of the picture's height is shown: y0 = its top, k = its height (fractions). ----- */
+  const OFFICE_MIN_W = Math.round(W / 0.7);
+  function fitOffice(img) {
+    const w0 = officeWidthFor(img), D = CFG.office.doors;
+    let y0 = 0, k = 1;
+    if (w0 < OFFICE_MIN_W) {
+      k = w0 / OFFICE_MIN_W;
+      const top = Math.min(D.left.y, D.right.y), bottom = Math.max(D.left.y + D.left.h, D.right.y + D.right.h);
+      y0 = clamp((top + bottom) / 2 - k / 2, 0, 1 - k);
+    }
+    if (k === 1 && img.height === H) return { office: img, officeBand: { y0, k } };
+    const c = makeCanvas(w0 / k, H);
+    c.getContext('2d').drawImage(img, 0, y0 * img.height, img.width, k * img.height, 0, 0, c.width, H);
+    return { office: c, officeBand: { y0, k } };
+  }
+  /* a box or spot from config.js (fractions of your desk room picture) -> fractions of the part that is shown */
+  function inBand(r) {
+    const B = Art.officeBand;
+    if (!B || (B.k === 1 && B.y0 === 0)) return r;
+    const o = Object.assign({}, r, { y: (r.y - B.y0) / B.k });
+    if (r.h != null) o.h = r.h / B.k;
+    if (r.r != null) o.r = r.r / B.k;
+    return o;
+  }
+  /* where a doorway is in the desk room (fractions of what is shown) */
+  const officeDoor = (side) => inBand(CFG.office.doors[side]);
+  /* a camera picture bigger than it is ever shown (w x h, cover-fit) is shrunk once */
+  function fitPicture(img, w, h) {
+    const s = Math.max(w / img.width, h / img.height);
+    if (s >= 1) return img;
+    const c = makeCanvas(img.width * s, img.height * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c;
+  }
 
   /* ----- baked picture effects (made once, so nothing needs ctx.filter per frame) ----- */
   function silhouette(img, color) {
@@ -710,21 +808,39 @@
     return c;
   }
 
-  function placeholderMonster(m) {
-    const out = [];
+  /* a monster without frames yet: a hunched shadow with glowing eyes, breathing in 4 frames.
+     config color (optional, like "#ff2040") tints its eyes and the faint edge that keeps it readable in the dark. */
+  function shadowFigure(def) {
+    const col = /^#[0-9a-f]{3,8}$|^rgb/i.test(String(def.color || '')) ? def.color : '#ff2040', out = [];
     for (let i = 0; i < 4; i++) {
       const c = makeCanvas(600, 900), x = c.getContext('2d');
-      const sway = Math.sin(i / 4 * Math.PI * 2) * 18;
-      x.fillStyle = '#120a10';
-      x.beginPath();
-      x.ellipse(300 + sway, 190, 95, 120, sway / 200, 0, Math.PI * 2);
-      x.moveTo(180 + sway, 300); x.quadraticCurveTo(300, 260, 420 + sway, 300);
-      x.lineTo(470, 900); x.lineTo(130, 900); x.closePath(); x.fill();
-      x.fillStyle = '#ffe9e0'; x.shadowColor = '#ff2040'; x.shadowBlur = 25;
-      x.beginPath(); x.arc(262 + sway, 180, 11, 0, 7); x.arc(338 + sway, 180, 11, 0, 7); x.fill();
+      const ph = i / 4 * Math.PI * 2, br = Math.sin(ph) * 9, sw = Math.cos(ph) * 7; // breathing, and the arms swaying
+      const parts = [], part = () => { const P = new Path2D(); parts.push(P); return P; }; // (each part is filled on its own)
+      let P = part(); // legs, from the hips to the floor
+      P.moveTo(232, 560); P.quadraticCurveTo(222, 740, 196, 900); P.lineTo(258, 900); P.quadraticCurveTo(272, 720, 296, 600);
+      P.quadraticCurveTo(322, 720, 344, 900); P.lineTo(404, 900); P.quadraticCurveTo(384, 740, 374, 560); P.closePath();
+      P = part(); // the hunched back: a hump on the left, the shoulders thrown forward
+      P.moveTo(226, 600); P.bezierCurveTo(150, 470, 168 + br * 0.4, 300 + br, 262, 262 + br);
+      P.bezierCurveTo(330, 236 + br, 392, 262 + br, 404, 318 + br); P.bezierCurveTo(414, 420, 396, 520, 376, 604); P.closePath();
+      P = part(); P.ellipse(402, 286 + br * 0.7, 64, 78, 0.5, 0, Math.PI * 2); // the head, low and pushed forward
+      // long arms that hang past the knees, bony at the elbow, with three claws
+      for (const [sx, sy, hx, hy] of [[376, 326, 432 + sw, 700], [258, 314, 212 - sw, 690]]) {
+        const ex = (sx + hx) / 2 + (hx > sx ? 26 : -26), ey = (sy + hy) / 2;
+        P = part(); P.moveTo(sx - 30, sy + br); P.quadraticCurveTo(ex - 30, ey, hx - 16, hy);
+        for (let f = 0; f < 3; f++) { P.lineTo(hx - 14 + f * 14, hy + 50 - Math.abs(f - 1) * 10); P.lineTo(hx - 7 + f * 14, hy + 8); }
+        P.lineTo(hx + 24, hy); P.quadraticCurveTo(ex + 30, ey, sx + 30, sy + br); P.closePath();
+      }
+      // a faint coloured edge all the way round (only round the outside: the body is drawn over it), and a hint of colour
+      x.fillStyle = col; x.globalAlpha = 0.45;
+      for (const [dx, dy] of [[-3, 0], [3, 0], [0, -3], [0, 3]]) { x.save(); x.translate(dx, dy); for (const Q of parts) x.fill(Q); x.restore(); }
+      x.globalAlpha = 1; x.fillStyle = '#0c0710'; for (const Q of parts) x.fill(Q);
+      x.globalCompositeOperation = 'source-atop'; x.globalAlpha = 0.14; x.fillStyle = col; x.fillRect(0, 0, 600, 900);
+      x.globalCompositeOperation = 'source-over';
+      x.globalAlpha = 1; x.fillStyle = '#ffe9e0'; x.shadowColor = col; x.shadowBlur = 26;
+      x.beginPath(); x.arc(412, 270 + br * 0.7, 9, 0, 7); x.arc(446, 286 + br * 0.7, 8, 0, 7); x.fill(); // eyes
       if (DEV) { // tell the artist (never the player) why this monster looks like a shadow
         x.shadowBlur = 0; x.fillStyle = '#e9dfcf'; x.font = '28px VT323, monospace'; x.textAlign = 'center';
-        x.fillText('(no frames for ' + m.name + ')', 300, 620);
+        x.fillText('(no frames for ' + def.name + ')', 300, 840);
       }
       out.push(c);
     }
@@ -879,8 +995,10 @@
     return c;
   }
 
-  function paintDoorway(w, h, lit, side) {
-    const c = makeCanvas(w, h), x = c.getContext('2d');
+  /* how big a doorway is drawn in the desk room (the stand-ins are painted at exactly that size) */
+  function doorPx(side) { const d = officeDoor(side); return { w: d.w * officeWidthFor(Art.office), h: d.h * H }; }
+  function paintDoorway(side, lit) {
+    const { w, h } = doorPx(side), c = makeCanvas(w, h), x = c.getContext('2d');
     const vx = w * (side === 'left' ? 0.42 : 0.58), vy = h * 0.42;
     if (!lit) {
       const g = x.createLinearGradient(0, 0, 0, h);
@@ -926,8 +1044,8 @@
     return c;
   }
 
-  function paintShutter(w, h, side) {
-    const c = makeCanvas(w, h), x = c.getContext('2d');
+  function paintShutter(side) {
+    const { w, h } = doorPx(side), c = makeCanvas(w, h), x = c.getContext('2d');
     let g = x.createLinearGradient(0, 0, w, 0);
     g.addColorStop(0, '#16121c'); g.addColorStop(0.5, '#2a2433'); g.addColorStop(1, '#141019');
     x.fillStyle = g; x.fillRect(0, 0, w, h);
@@ -1191,6 +1309,7 @@
   }
 
   function paintFx() {
+    Art.noise = [];
     for (let i = 0; i < 5; i++) {
       const c = makeCanvas(320, 180), x = c.getContext('2d');
       const id = x.createImageData(320, 180), d = id.data;
@@ -1235,6 +1354,7 @@
     monsters: [], inside: null, insideT: 0,
     pinchCd: 0, danger: 0, flash: 0, flashColor: '255,255,255',
     clarity: 0,                         // a pinch snaps the picture sharp for a moment
+    hudLock: 0,                         // … and the HUD's words don't slip until then (see dreamy)
     lies: [], lieT: 0, taught: false,   // fakes the dream is showing right now (a pinch clears them), see spawnLie
     punch: null,                        // a small flinch toward a doorway when the light finds something
     trauma: 0, kick: { x: 0, y: 0 },   // camera shake (see hit)
@@ -1266,7 +1386,8 @@
     // the death recap (see die): spend = where your Lucidity went; litAt = when each doorway was last lit;
     // lighter = "Dream lighter" (after three deaths on one night); recap = the lines typing on the death screen
     spend: {}, litAt: {}, powerAt: 0, lighter: false, recap: null,
-    motes: [], devGhost: false, devPose: null, devPoseLabel: '', devMon: 0,
+    motes: [],
+    devGhost: false, devMon: 0, devDrag: false, // the art helper (?dev): see-through placer on, which monster, dragging a door box
   };
 
   /* a spot in the desk room picture from config office.clock / office.window / office.lamp. The stand-in office has its own;
@@ -1274,7 +1395,7 @@
   const OFFICE_SPOTS = { clock: { x: 0.604, y: 0.651, r: 0.029 }, window: { x: 0.233, y: 0.178, w: 0.104, h: 0.3 }, lamp: { x: 0.396, y: 0.567 } };
   function officeSpot(key) {
     const v = CFG.office[key];
-    if (v && typeof v.x === 'number' && typeof v.y === 'number') return v;
+    if (v && typeof v.x === 'number' && typeof v.y === 'number') return inBand(v);
     return Art.officeMissing ? OFFICE_SPOTS[key] : null;
   }
 
@@ -1293,9 +1414,12 @@
       this.breathed = false; // has it breathed at that door yet? (it must before it can come in)
       this.watched = 0;   // seconds you have been staring at it on a camera
       this.anim = 0; this.animSpeed = 1; this.animOffset = Math.random() * 10; // its own animation clock (it can slow down)
+      this.extra = 0;     // levels its brain adds (a shy one you ignore gets braver)
+      this.ignored = 0;   // shy: seconds since you last looked at it
+      this.awake = 0;     // sleeper: seconds it stays awake after a noise
     }
     frame() { return Math.floor(this.anim + this.animOffset) % this.art.frames.length; }
-    get lvl() { return clamp(this.level + this.boost, 0, 20); }
+    get lvl() { return clamp(this.level + this.boost + this.extra, 0, 20); }
   }
 
   function initMotes() {
@@ -1448,7 +1572,7 @@
       h = Sound.play(name, slow);
       after(0.14, () => Sound.play(name, Object.assign({}, slow, { vol: slow.vol * 0.45 })));
     } else h = Sound.play(name, opts);
-    logStory({ kind, side: side || null, fake: !!o.fake, who: o.monster ? o.monster.id : null, cap: o.cap || kind });
+    logStory({ kind, side: side || null, fake: !!o.fake, trick: !!o.trick, who: o.monster ? o.monster.id : null, cap: o.cap || kind });
     Captions.show(o.cap || kind, opts.pan, opts.vol, { fake: o.fake ? (back ? 'backwards' : 'echoing') : null,
       edge: THREAT.indexOf(kind) >= 0, breath: kind === 'breath' });
     return h;
@@ -1481,6 +1605,12 @@
   /* steps from a room to the nearest door: 1 = right next to a door, 0 = at a door, Infinity = can't get there */
   function doorDist(def, room) { if (isDoor(room)) return 0; const i = pathInfo(def)[room]; return i ? i.dist : Infinity; }
   function doorSide(def, room) { if (isDoor(room)) return room.slice(5); const i = pathInfo(def)[room]; return i ? i.side : null; }
+  /* which of your doors a monster's path ever reaches: { left: true, right: false } */
+  function doorsOf(def) {
+    const out = { left: false, right: false };
+    for (const from in def.path || {}) for (const to of def.path[from]) if (isDoor(to)) out[to.slice(5)] = true;
+    return out;
+  }
   /* nobody is at a door or inside, and every walker is at least minDist steps away */
   function calm(minDist) { return G.monsters.every((m) => m.state === 'roam' && doorDist(m.def, m.room) >= minDist); }
 
@@ -1489,18 +1619,19 @@
   /* a monster walks into a room (or up to a door) */
   function arrive(m, next, viewing) {
     const from = m.room;
+    const trick = brainOf(m).stepSide; // (a trickster's footsteps come from the wrong side)
     if (isDoor(next)) {
       const side = next.slice(5);
       m.state = 'door'; m.door = side; m.room = null; m.seen = false; m.doorT = 0; m.breathed = false;
       m.linger = rand(m.def.waitAtDoor[0], m.def.waitAtDoor[1]);
-      m.breathT = rand(0.6, 1.6); // (its first breath: it can't come in before that, see monsterMove)
+      m.breathT = rand(0.6, 1.6); // (its first breath: it can't come in before that, see walkerMove)
       logStory({ kind: 'reach', side, who: m.id });
-      if (quietSteps()) cue('steps', side, { monster: m, vol: 0.75, cap: 'stepsNear' });
+      if (quietSteps()) cue('steps', trick ? trick(side) : side, { monster: m, vol: 0.75, cap: 'stepsNear', trick: !!trick });
     } else {
       m.room = camById[next] ? next : m.def.start;
       if (doorDist(m.def, m.room) === 1) {
         startWindowPass(m); // its shadow crosses the window: it has reached a side hall
-        if (quietSteps()) cue('steps', null, { monster: m, vol: 0.5, pan: (camById[m.room].map.x - 0.5) * 1.6, lowpass: 2400 });
+        if (quietSteps()) cue('steps', null, { monster: m, vol: 0.5, pan: (camById[m.room].map.x - 0.5) * 1.6 * (trick ? -1 : 1), lowpass: 2400 });
       }
       else if (Math.random() < 0.3) cue('far', null, { monster: m, vol: 0.32, lowpass: 900, rate: rand(0.85, 1.05), pan: rand(-0.5, 0.5) });
     }
@@ -1517,18 +1648,119 @@
     arrive(m, pick(choices), G.cams.up ? G.cams.cur : null);
   }
 
-  /* a loud noise in your room. A pinch: walkers up to `radius` rooms from a door step closer right away,
-     one waiting at a door stops waiting (at an OPEN door that means it comes in), and the rest move at their
-     next chance. A bang (kind 'bang') is heard too, but walkers ignore it: it is there for new monster kinds. */
+  /* a loud noise in your room: kind 'pinch' (you) or 'bang' (something hit a shut door). Each monster's brain
+     decides what it does about it (see walkerHear). Asleep-all-night monsters (level 0) never hear anything. */
   function noise(kind, radius) {
-    if (kind !== 'pinch' || G.inside) return;
+    if (G.inside) return;
     for (const m of G.monsters) {
-      if (m.level <= 0) continue; // asleep for the whole night
-      if (G.freeze) m.alerted = true; // (the False Dawn holds everything still: it comes for you once it is over)
-      else if (m.state === 'roam' && doorDist(m.def, m.room) <= radius) stepToward(m); // stepToward shakes a camera that is watching
-      else if (m.state === 'door') { m.linger = Math.min(m.linger, 0.8); m.alerted = true; }
-      else m.alerted = true;
+      if (m.level <= 0) continue;
+      if (G.freeze) { if (kind === 'pinch') m.alerted = true; continue; } // (the False Dawn holds everything still: it comes once it is over)
+      (brainOf(m).hear || walkerHear)(m, kind, radius);
     }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  MONSTER BRAINS: config.js behavior: "walker" (the default),        */
+  /*  "shy", "sleeper" or "trickster". A brain can change how its        */
+  /*  monster moves (move), what it does every moment (tick), how it     */
+  /*  hears a noise (hear), how it looks on a camera (drawCam) and where  */
+  /*  its footsteps seem to come from (stepSide). Whatever it leaves out  */
+  /*  works like the walker. Every brain keeps the promise: at your door  */
+  /*  it always breathes first (see walkerMove).                          */
+  /* ------------------------------------------------------------------ */
+  /* the walker (Redhorn): along its path, room by room; at your door it waits, then comes in, or bangs and leaves.
+     Returns false when it didn't really move (still waiting at the door). */
+  function walkerMove(m) {
+    const viewing = G.cams.up ? G.cams.cur : null;
+    if (m.state === 'roam') { arrive(m, pick(optionsFrom(m.def, m.room)), viewing); return true; }
+    if (m.state !== 'door') return false;
+    if (m.linger > 0) return false; // still waiting: a pinch alert stays saved for its next chance
+    if (!m.breathed || m.doorT < minWarning()) return false; // the promise: it always breathes at your door first, and gives you time
+    if (G.doors[m.door].closed) {
+      bangDoor(m.door, m);
+      m.state = 'roam'; m.door = null;
+      m.room = pick(m.def.retreat.length ? m.def.retreat : [m.def.start]);
+      if (viewing === m.room) camDisrupt();
+    } else enterOffice(m);
+    return true;
+  }
+  /* how a walker hears a pinch: near a door it steps closer at once (up to `radius` rooms away), waiting at a door
+     it stops waiting (at an OPEN door that means it comes in), and the rest move at their next chance.
+     It doesn't mind banging. */
+  function walkerHear(m, kind, radius) {
+    if (kind !== 'pinch') return;
+    if (m.state === 'roam' && doorDist(m.def, m.room) <= radius) stepToward(m); // (stepToward shakes a camera that is watching)
+    else if (m.state === 'door') { m.linger = Math.min(m.linger, 0.8); m.alerted = true; }
+    else m.alerted = true;
+  }
+  /* you are watching it on a camera right now */
+  const watchedNow = (m) => G.cams.up && G.cams.lost <= 0 && m.state === 'roam' && m.room === G.cams.cur;
+
+  const SHY = { every: 15, add: 2 };   // every 15 s you don't look at a shy one, it gets 2 levels braver
+  const SLEEPER = { awake: 6 };       // seconds a noise keeps a sleeper awake
+  const BRAINS = {
+    walker: {},
+    /* shy: it can't move while you watch it (it freezes, even its animation). Each 15 s you don't, it gets braver.
+       Counter: keep glancing at it. (Staring doesn't make it step closer: it's shy.) */
+    shy: {
+      noStare: true,
+      tick(m, dt) {
+        const seen = watchedNow(m);
+        if (seen) m.ignored = 0; else if (G.grace <= 0) m.ignored += dt;
+        m.animSpeed = seen ? 0 : 1;
+        m.extra = SHY.add * Math.floor(m.ignored / SHY.every);
+      },
+      move: (m, forced) => (forced || !watchedNow(m) ? walkerMove(m) : false),
+      hear(m, kind, radius) { if (!watchedNow(m)) walkerHear(m, kind, radius); else if (kind === 'pinch') m.alerted = true; },
+    },
+    /* sleeper: it sleeps where it stands until a noise (a pinch, a bang) wakes it. Then it takes one step at once
+       and stays awake 6 s. Once at your door it acts like a walker. Counter: play quietly. */
+    sleeper: {
+      tick(m, dt) { m.awake = Math.max(0, m.awake - dt); },
+      move: (m, forced) => (forced || m.awake > 0 || m.state === 'door' ? walkerMove(m) : false),
+      hear(m) {
+        m.awake = SLEEPER.awake;
+        if (m.state === 'roam') stepToward(m);
+        else if (m.state === 'door') { m.linger = Math.min(m.linger, 0.8); m.alerted = true; }
+      },
+      drawCam: (c, m, box, pose) => drawSleeper(c, m, box, pose),
+    },
+    /* trickster: a walker whose footsteps near your doors come from the WRONG side. Its breathing never lies.
+       Counter: trust the breathing, the light and the cameras. */
+    trickster: { stepSide: (side) => (side === 'left' ? 'right' : side === 'right' ? 'left' : side) },
+  };
+  const brainOf = (m) => BRAINS[m.def.behavior] || BRAINS.walker;
+
+  /* at boot: a behavior word the game doesn't know becomes "walker" (and says so); a monster that can never reach
+     one of your doors is reported too */
+  function validateBrains() {
+    const words = Object.keys(BRAINS);
+    for (const def of CFG.monsters) {
+      if (def.behavior != null && !BRAINS[def.behavior]) {
+        const g = didYouMean(def.behavior, words);
+        warnCfg(`${def.name} behavior: "${def.behavior}" isn't a brain the game knows` + (g ? `. Did you mean "${g}"? (Using "${g}" for now.)` : `, so it is a walker. The brains are: ${words.join(', ')}.`));
+        def.behavior = g || 'walker';
+      }
+      const awake = (def.levels || [5]).some((v) => v > 0);
+      if (awake && doorDist(def, def.start) === Infinity) warnCfg(`${def.name} can never reach your doors from "${def.start}": give its path a "door:left" or "door:right" somewhere it can walk to.`);
+    }
+  }
+
+  /* a sleeper on a camera: its sleepFrames (config), or its normal frame darker, with z's drifting up from its head */
+  function drawSleeper(c, m, box, pose) {
+    if (m.awake > 0) { drawMonster(c, m, box, pose); return; }
+    const A = m.art, own = A.sleep.length > 0, img = own ? A.sleep[m.frame() % A.sleep.length] : A.soft[m.frame()];
+    const p = Object.assign({ x: 0.5, y: 1.02, h: 0.7 }, pose);
+    drawSprite(c, img, box, p);
+    if (!own) drawSprite(c, tinted(img, 'rgba(0,0,0,.4)'), box, p); // (60% brightness: a dark copy over it, made once)
+    const r = spriteRect(img, box, p), k = fxMul();
+    c.save(); c.font = `${Math.round(r.h * 0.09)}px "Fell SC", serif`; c.textAlign = 'center'; c.fillStyle = '#d8ccff';
+    for (let i = 0; i < 3; i++) {
+      const u = ((G.t * 0.25 + i / 3) % 1), rise = k ? u : i / 3; // (Dream effects Off: three still z's)
+      c.globalAlpha = 0.75 * Math.sin(Math.PI * rise);
+      c.fillText('z', r.x + r.w * (0.62 + 0.12 * rise) + Math.sin(G.t + i) * 6 * k, r.y + r.h * (0.12 - 0.2 * rise));
+    }
+    c.restore();
   }
 
   /* ------------------------------------------------------------------ */
@@ -1553,7 +1785,7 @@
     G.luc = 100; G.usage = 1; G.powerOut = false; G.powerT = 0; G.killAt = 0;
     G.doors.left = freshDoor(); G.doors.right = freshDoor();
     G.cams = freshCams();
-    G.inside = null; G.insideT = 0; G.pinchCd = 0; G.danger = 0; G.flash = 0; G.clarity = 0; G.punch = null;
+    G.inside = null; G.insideT = 0; G.pinchCd = 0; G.danger = 0; G.flash = 0; G.clarity = 0; G.punch = null; G.hudLock = 0;
     G.lies = []; G.taught = false;
     G.trauma = 0; G.kick = { x: 0, y: 0 }; G.later = []; G.parts = []; G.cueLog = []; G.glide = null;
     G.settle = 0; G.hush = false; G.frozen = []; G.finale = null;
@@ -2001,6 +2233,8 @@
       G.flashColor = '190,170,255';
     }
     G.clarity = 0.6; // the picture snaps sharp, then the dream seeps back in
+    G.hudLock = G.t + pinchCfg().cooldown; // … and the HUD's words stop slipping for a while
+    pulseCls(hudEls.eye, 'blink');
     pulseCls(hudEls.you, 'ripple'); // on the camera map the noise spreads out from YOU
     hit(0.25);
     G.stats.pinches++;
@@ -2014,27 +2248,12 @@
     // after its wait at a SHUT door it always gives up (no endless camping that tempts you to reopen)
     const atShutDoor = m.state === 'door' && m.linger <= 0 && G.doors[m.door].closed;
     if (!(forced || atShutDoor || m.alerted || randi(1, 20) <= m.lvl)) return;
-    const viewing = G.cams.up ? G.cams.cur : null;
-    if (m.state === 'roam') {
-      arrive(m, pick(optionsFrom(m.def, m.room)), viewing);
-    } else if (m.state === 'door') {
-      if (m.linger > 0) return; // still waiting: a pinch alert stays saved for its next chance
-      if (!m.breathed || m.doorT < minWarning()) return; // the promise: it always breathes at your door first, and gives you time
-      if (G.doors[m.door].closed) {
-        bangDoor(m.door, m);
-        m.state = 'roam'; m.door = null;
-        m.room = pick(m.def.retreat.length ? m.def.retreat : [m.def.start]);
-        if (viewing === m.room) camDisrupt();
-      } else {
-        enterOffice(m);
-      }
-    }
-    m.alerted = false; // only once a move has really happened
+    if ((brainOf(m).move || walkerMove)(m, forced)) m.alerted = false; // (only once a move has really happened)
   }
 
   /* it slams into a shut door: the door held */
   function bangDoor(side, m) {
-    const D = G.doors[side], d = CFG.office.doors[side], dir = side === 'left' ? 1 : -1;
+    const D = G.doors[side], d = officeDoor(side), dir = side === 'left' ? 1 : -1;
     cue('bang', side, { monster: m, vol: 0.95 });
     D.bangT = 0.6;
     hit(0.35, dir);
@@ -2073,7 +2292,8 @@
     }
     if (G.cams.up) { G.cams.up = false; Sound.play('cam_close', { vol: 0.6 }); }
     G.killAt = rand(13, 26);
-    G.killer = G.monsters.length ? pick(G.monsters) : null;
+    const awake = G.monsters.filter((m) => m.level > 0);
+    G.killer = awake.length ? pick(awake) : G.monsters.length ? pick(G.monsters) : null; // (one that is awake tonight)
     if (G.inside) { // it is already in the room: the dark doesn't save you
       G.killer = G.inside; G.cams.forceDown = 0;
       G.insideT = clamp(G.insideT, 0.3, 1.7);
@@ -2155,6 +2375,7 @@
     light: 'It always breathes before it comes in. Check that light.',
     saw: 'Your light found it. Shut that door right away!',
     other: 'It always breathes before it comes in. Listen for it, then check the light.',
+    trick: 'Its footsteps came from the wrong side. Footsteps can lie; breathing never does. Check with the light.',
     // a Lucidity death: the tip for whatever cost you the most
     doors: 'Doors are like holding your breath. Open them again once it bangs, or once the breathing stops.',
     camsSpend: 'The cameras cost Lucidity too. Take a look, then put them down.',
@@ -2171,7 +2392,7 @@
     const S = e.side ? String(e.side).toUpperCase() : '';
     switch (e.kind) {
       case 'reach': return `it reached the ${S} door without a sound`;
-      case 'steps': return e.side === 'left' || e.side === 'right' ? `footsteps, close, on the ${S}` : 'footsteps in the halls';
+      case 'steps': return e.side === 'left' || e.side === 'right' ? `footsteps, close, on the ${S}` + (e.trick ? ' (it throws its footsteps)' : '') : 'footsteps in the halls';
       case 'breath': return e.cap === 'breathMuffled' ? `breathing behind the shut ${S} door` : `breathing at the ${S} door`;
       case 'bang': return `BANG on the ${S} door. It held`;
       case 'door': return e.closed ? `you shut the ${S} door` : `you opened the ${S} door` + (e.there ? ' while it was still there' : '');
@@ -2211,7 +2432,7 @@
       || found || gasp || (IN.camsUp ? { t: askT, s: 'you were watching the cameras' } : null);
     const lines = [warn, key, IN].filter((e, i, a) => e && a.indexOf(e) === i).map((e) => ({ t: e.t, s: e.s || storyLine(e) }));
     const tip = IN.camsUp ? TIPS.cams : pinched ? TIPS.pinch : opened ? TIPS.opened : lunge ? TIPS.stare
-      : gasp ? TIPS.gasp : neverLit ? TIPS.light : found ? TIPS.saw : TIPS.other;
+      : gasp ? TIPS.gasp : warn.trick ? TIPS.trick : neverLit ? TIPS.light : found ? TIPS.saw : TIPS.other;
     return { lines, tip };
   }
   /* your Lucidity ran out: when, where it went (doors / cameras / light / just being asleep), and a tip for the biggest */
@@ -2773,7 +2994,7 @@
 
   /* the scroll that brings that doorway fully into view (or the current one if it already is) */
   function glideTarget(side, maxScroll) {
-    const d = CFG.office.doors[side], margin = 60;
+    const d = officeDoor(side), margin = 60;
     if (side === 'left') return clamp(Math.min(G.scroll, d.x * G.officeW - margin), 0, maxScroll);
     return clamp(Math.max(G.scroll, (d.x + d.w) * G.officeW - W + margin), 0, maxScroll);
   }
@@ -2819,7 +3040,7 @@
     D.v = -D.v * 0.22 * k; // one small bounce (none with Dream effects Off)
     D.landT = 0.5;
     hit(0.12, side === 'left' ? 1 : -1);
-    const d = CFG.office.doors[side], cx = (d.x + d.w / 2) * G.officeW, half = d.w * G.officeW / 2;
+    const d = officeDoor(side), cx = (d.x + d.w / 2) * G.officeW, half = d.w * G.officeW / 2;
     spawnParts(Math.round(10 * k), { office: true, x: cx, y: (d.y + d.h) * H - 4, spreadX: half, spreadY: 2,
       vx: (p) => Math.sign(p.x - cx || 1) * rand(25, 70), vy: -14, jitter: 10, life: 1.1, r: 3.2, col: 'rgb(180,170,160)' }); // dust puffs out
   }
@@ -2830,6 +3051,7 @@
     const C = G.cams, lim = rule('stare', 0);
     let lean = 0;
     for (const m of G.monsters) {
+      if (brainOf(m).noStare) { m.watched = 0; continue; } // (a shy one only freezes when you look)
       const on = C.up && C.t >= 1 && C.lost <= 0 && m.state === 'roam' && m.room === C.cur;
       m.watched = on ? m.watched + dt : Math.max(0, m.watched - dt * 2);
       if (on && lim && m.watched >= lim && m.level > 0 && !G.inside && !G.powerOut && !G.freeze && G.grace <= 0) {
@@ -2907,7 +3129,7 @@
     if (G.state !== 'night' || G.paused || G.cams.up) return null;
     const m = G.monsters.find((x) => x.state === 'door');
     if (!m) return null;
-    const d = CFG.office.doors[m.door];
+    const d = officeDoor(m.door);
     return officeOriginX() + (d.x + d.w / 2) * G.officeW;
   }
   /* a shadow walks past the window toward the side it is heading for (needs office.window, or the stand-in room) */
@@ -2929,6 +3151,7 @@
     if (hour >= 6) { startWaking(); return; }
     if (hour !== G.hour) {
       G.hour = hour;
+      hourLands(hour);
       Sound.play('hour_chime', { vol: 0.55, rate: 0.9 });
       Captions.show('chime', 0, 0.55, { arg: fmtHour(hour) });
       for (const m of G.monsters) { const b = (m.def.hourBoost || {})[hour]; if (b && m.level > 0) m.boost += b; }
@@ -2940,7 +3163,7 @@
       let v = 0;
       if (keys.ArrowLeft) v -= 950;
       if (keys.ArrowRight) v += 950;
-      if (pointer.inside && pointer.type === 'mouse' && !v) {
+      if (pointer.inside && pointer.type === 'mouse' && !v && !G.devDrag) { // (not while the art helper drags a door box)
         const edge = W * 0.22;
         if (pointer.x < edge) v = -1150 * Math.pow((edge - pointer.x) / edge, 1.3);
         else if (pointer.x > W - edge) v = 1150 * Math.pow((pointer.x - (W - edge)) / edge, 1.3);
@@ -3005,6 +3228,8 @@
           G.punch = { t: 0.3, side: m.door }; // you flinch toward it
         }
       }
+      const B = brainOf(m);
+      if (B.tick) B.tick(m, dt);
       if (G.powerOut || G.inside || G.grace > 0) continue;
       // a shut door wins: it doesn't camp there for ages, tempting you to hold your breath
       if (m.state === 'door' && G.doors[m.door].closed && m.linger <= 0 && m.doorT > giveUp) { monsterMove(m, true); continue; }
@@ -3117,7 +3342,7 @@
   function officeOriginX() { return G.officeW <= W ? (W - G.officeW) / 2 : -G.scroll; }
   /* a doorway's box on screen right now */
   function doorBox(side) {
-    const d = CFG.office.doors[side], ox = officeOriginX(), ow = G.officeW;
+    const d = officeDoor(side), ox = officeOriginX(), ow = G.officeW;
     return { x: ox + d.x * ow, y: d.y * H, w: d.w * ow, h: d.h * H };
   }
 
@@ -3189,11 +3414,14 @@
     else { c.save(); c.translate(k.x, k.y); clockHands(c, k.r, o); c.restore(); }
   }
 
-  /* Lucidity zero: on each tick it stands somewhere new, bigger every time: the left door, the window, the right door … */
+  /* Lucidity zero: on each tick it stands somewhere new, bigger every time: the left door, the window, the right door …
+     (only the doors it can really reach: a monster whose path only ends at the right door never shows up on the left) */
   function approachAnchors() {
-    const list = [Object.assign(doorBox('left'), { side: 'left' })], w = officeSpot('window');
+    const sides = doorsOf(G.killer.def), w = officeSpot('window'), list = [];
+    if (sides.left) list.push(Object.assign(doorBox('left'), { side: 'left' }));
     if (w) list.push({ x: officeOriginX() + w.x * G.officeW, y: w.y * H, w: w.w * G.officeW, h: w.h * H, side: 'window' });
-    list.push(Object.assign(doorBox('right'), { side: 'right' }));
+    if (sides.right) list.push(Object.assign(doorBox('right'), { side: 'right' }));
+    if (!list.length) list.push(Object.assign(doorBox('left'), { side: 'left' }));
     return list;
   }
   function drawApproach(c) {
@@ -3203,7 +3431,8 @@
     if (!off && ((G.tickPh % 1) + 1) % 1 >= 0.5) return; // seen only on the "tick" half of each tick (1 Hz or slower)
     const anchors = approachAnchors(), a = anchors[Math.floor(G.powerT / 3.4) % anchors.length];
     const h = 0.55 + 0.6 * k, f = m.frame();
-    const pose = { x: 0.5, y: a.side === 'window' ? 1 + h * 0.45 : 1, h, flip: a.side === 'right' }; // in the window: from the chest up
+    const pose = a.side === 'window' ? { x: 0.5, y: 1 + h * 0.45, h } // in the window: from the chest up
+      : Object.assign({}, doorPoseOf(m, a.side), { h, y: 1 });
     c.save(); c.beginPath(); c.rect(a.x, a.y, a.w, a.h); c.clip();
     drawSprite(c, rimmedSil(m.art.sil[f]), a, pose, off ? lerp(0.15, 0.5, k) : 0.9);
     c.restore();
@@ -3249,7 +3478,7 @@
   }
 
   function drawDoorway(c, side) {
-    const d = CFG.office.doors[side], D = G.doors[side], A = Art.doors[side];
+    const D = G.doors[side], A = Art.doors[side];
     const box = doorBox(side);
     if (box.x > W + 40 || box.x + box.w < -40) return;
     const lit = D.light && !G.powerOut;
@@ -3261,10 +3490,16 @@
       drawCover(c, Art.cams[G.wrongDoor.cam], box.x, box.y, box.w, box.h);
       c.save(); c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(130,215,200)'; c.fillRect(box.x, box.y, box.w, box.h);
       c.globalCompositeOperation = 'lighter'; glow(c, box.x + box.w / 2, box.y + box.h * 0.2, box.h * 0.7, 'rgba(150,255,225,A)', 0.22); c.restore();
-    } else c.drawImage(lit ? A.lit : A.dark, box.x, box.y, box.w, box.h);
+    } else if (lit || A.dark) c.drawImage(lit ? A.lit : A.dark, box.x, box.y, box.w, box.h);
+    else { // your own desk room, no darkImage: the doorway you painted, in a soft darkness that deepens toward the back
+      const g = c.createLinearGradient(0, box.y, 0, box.y + box.h);
+      g.addColorStop(0, 'rgba(0,0,0,.5)'); g.addColorStop(0.6, 'rgba(0,0,0,.32)'); g.addColorStop(1, 'rgba(0,0,0,.2)');
+      c.fillStyle = g; c.fillRect(box.x, box.y, box.w, box.h);
+    }
     if (lit) {
       for (const m of here) drawMonster(c, m, box, doorPoseOf(m, side));
       if (!here.length) for (const L of G.lies) if (L.kind === 'door' && L.side === side) drawLie(c, L, box, doorPoseOf(L.who, side), lieFade(L));
+      if (DEV) Dev.inDoorway(c, side, box); // (the art helper's see-through monster, for placing doorPose)
       // the light stutters while something real stands there (slow timer; a steady dim with effects Off)
       const dim = here.length ? (save.fx === 'off' ? 0.3 : flick(G.stutter[side])) : 0;
       if (dim) { c.fillStyle = `rgba(0,0,0,${dim})`; c.fillRect(box.x, box.y, box.w, box.h); }
@@ -3274,11 +3509,7 @@
     }
     if (D.p > 0) drawShutter(c, side, D, A.closed, box);
     c.restore();
-    if (DEV) {
-      c.save(); c.strokeStyle = '#3f3'; c.lineWidth = 2; c.setLineDash([8, 6]); c.strokeRect(box.x, box.y, box.w, box.h);
-      c.fillStyle = '#3f3'; c.font = '22px VT323, monospace';
-      c.fillText(side + ' door  x:' + d.x + ' y:' + d.y + ' w:' + d.w + ' h:' + d.h, box.x + 4, box.y - 8); c.restore();
-    }
+    if (DEV) Dev.doorFrame(c, side, box); // (the art helper's green door box)
   }
 
   /* the shut door: it judders and cracks when held too long, wobbles when something bangs on it */
@@ -3328,8 +3559,9 @@
     c.restore();
   }
 
+  /* the camera picture is zoomed in a little and pans slowly (so its very edges come and go) */
   function camFeedBox() {
-    const zoom = 1.14, fw = W * zoom, fh = H * zoom;
+    const fw = W * CAM_ZOOM, fh = H * CAM_ZOOM;
     const cam = camById[G.cams.cur];
     const pan = (G.devGhost ? 0.5 : Math.sin(G.t * 0.23 + cam.index * 1.7) * 0.5 + 0.5);
     return { x: -(fw - W) * pan, y: -(fh - H) / 2, w: fw, h: fh };
@@ -3345,18 +3577,14 @@
     if (!lost && cam.id !== YOU_CAM.id) {
       const lim = rule('stare', 0);
       for (const m of G.monsters) {
-        if (m.state === 'roam' && m.room === cam.id) drawMonster(c, m, box, leanPose(m.def.poses && m.def.poses[cam.id], stareK(m, lim)));
+        if (m.state !== 'roam' || m.room !== cam.id) continue;
+        const pose = leanPose(m.def.poses && m.def.poses[cam.id], stareK(m, lim)), B = brainOf(m);
+        if (B.drawCam) B.drawCam(c, m, box, pose); else drawMonster(c, m, box, pose); // (a sleeper is drawn asleep)
       }
       const real = G.monsters.some((m) => m.state === 'roam' && m.room === cam.id);
       if (!real) for (const L of G.lies) if (L.kind === 'cam' && L.room === cam.id) drawLie(c, L, box, L.who.def.poses && L.who.def.poses[cam.id], 0);
     }
-    if (DEV && G.devGhost) {
-      const def = devMonDef();
-      if (def) {
-        const pose = (def.poses && def.poses[cam.id]) || { x: 0.5, y: 1.02, h: 0.7 };
-        drawSprite(c, Art.monsters[def.id].soft[Math.floor(G.t * (def.fps || 4)) % Art.monsters[def.id].soft.length], box, pose, 0.85);
-      }
-    }
+    if (DEV) Dev.camGhost(c, cam, box); // (the art helper's see-through monster, for placing poses)
     // night-vision grade
     c.save();
     c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(205, 232, 216)'; c.fillRect(0, 0, W, H);
@@ -3705,17 +3933,6 @@
     if (settling && save.fx === 'off' && G.settle > 0.8) { c.fillStyle = `rgba(0,0,0,${(G.settle - 0.8) / 0.4})`; c.fillRect(0, 0, W, H); } // Off: a plain fade-in
   }
 
-  /* art-helper only: which file would replace the stand-in picture on screen right now */
-  function drawStandInHint(c, path) {
-    const text = 'stand-in art — your picture goes at ' + path;
-    c.save();
-    c.font = '24px VT323, monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    const w = c.measureText(text).width + 28;
-    c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(W / 2 - w / 2, 44, w, 34);
-    c.fillStyle = 'rgba(233,223,207,.85)'; c.fillText(text, W / 2, 62);
-    c.restore();
-  }
-
   function render() {
     const st = G.state;
     const fx = save.fx, amt = fx === 'full' ? 1 : fx === 'low' ? 0.35 : 0;
@@ -3791,11 +4008,7 @@
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
     ctx.restore();
-    if (DEV && st === 'night') {
-      if (G.cams.t >= 1) { if (Art.camMissing[G.cams.cur]) drawStandInHint(ctx, camById[G.cams.cur].image); }
-      else if (Art.officeMissing) drawStandInHint(ctx, CFG.office.image);
-    }
-    if (DEV && (st === 'asleep' || st === 'morning' || st === 'win') && Art.bedroomMissing) drawStandInHint(ctx, (CFG.bedroom || {}).image || 'assets/rooms/bedroom.png');
+    if (DEV) Dev.overlay(ctx); // (the art helper: which file a stand-in picture is waiting for, the jumpscare focus)
     const fl = fx === 'off' ? Math.min(G.flash, 0.25) : G.flash;
     flashEl.style.opacity = fl > 0.01 ? fl : 0;
     if (fl > 0.01) flashEl.style.background = `rgb(${G.flashColor})`;
@@ -3810,7 +4023,8 @@
     glyph: {}, // the drain glyphs, by data-k: you, ldoor, rdoor, light, cam
     lDoor: $('#btnLDoor'), lLight: $('#btnLLight'), rDoor: $('#btnRDoor'), rLight: $('#btnRLight'), lPanel: $('#leftPanel'), rPanel: $('#rightPanel'),
     camBar: $('#camBar'), pinch: $('#pinchBtn'), pinchCd: $('#pinchCd'), pinchAmt: $('#pinchAmt'), overlay: $('#camOverlay'),
-    stamp: $('#camStamp'), signal: $('#camSignal'), dev: $('#devInfo'), camLabel: $('#camBar span'), voice: $('#voiceBox'), you: $('#youMark'),
+    stamp: $('#camStamp'), signal: $('#camSignal'), camLabel: $('#camBar span'), voice: $('#voiceBox'), you: $('#youMark'),
+    eye: $('#lucEye'), lid: $('#lucEye .lid'), lash: $('#lucEye .lash'), label: $('#lucLabel'), camName: $('#camName'), ghost: $('#hourGhost'),
   };
   document.querySelectorAll('#usage i').forEach((i) => { hudEls.glyph[i.dataset.k] = i; });
   let lastHud = {};
@@ -3823,15 +4037,19 @@
   /* one-shot CSS effects (style.css has a @keyframes with the same name as each class): adding the class plays it
      from the start, and the class takes itself off when its animation ends. Hidden elements are skipped, so an
      effect never plays late when they show up again. */
-  const PULSES = ['pressed', 'deny', 'hit', 'ripple', 'bangL', 'bangR', 'breathL', 'breathR', 'rollBack', 'ghostIn'];
+  const PULSES = ['pressed', 'deny', 'hit', 'ripple', 'bangL', 'bangR', 'breathL', 'breathR', 'rollBack', 'ghostIn', 'blink', 'hourLand', 'ghostOut'];
   function pulseCls(el, cls) {
     if (!el.getClientRects().length) return;
     el.classList.remove(cls); if (cls !== 'pressed') el.classList.remove('pressed'); // a bigger effect replaces the press flash
     void el.offsetWidth; el.classList.add(cls);
   }
   const endPulse = (e) => {
-    if (PULSES.indexOf(e.animationName) >= 0) e.target.classList.remove(e.animationName);
-    else if (e.animationName === 'gainUp' || e.animationName === 'capLife') e.target.remove();
+    const name = e.animationName;
+    if (PULSES.indexOf(name) >= 0) {
+      // (restarting an effect cancels the old one a moment later: that must not switch off the new one)
+      if (e.type === 'animationcancel' && e.target.getAnimations && e.target.getAnimations().some((a) => a.animationName === name)) return;
+      (e.target.closest('.' + name) || e.target).classList.remove(name); // (the eye blinks its inner part)
+    } else if (name === 'gainUp' || name === 'capLife') e.target.remove();
   };
   document.addEventListener('animationend', endPulse);
   document.addEventListener('animationcancel', endPulse);
@@ -3849,15 +4067,60 @@
     hudEls.lucBox.appendChild(el);
   }
 
+  /* ----- the HUD dreams too: below 30% Lucidity its words slip for a blink ("13 AM", "LUCKILY", "NIGHT 33").
+     Never with Dream effects Off, never at Lucidity zero, never for a while after a pinch (G.hudLock),
+     and never the percentage. ----- */
+  const SLIP = { below: 30, perSec: 0.72, show: 0.12, gap: 0.4 }; // perSec: how often at 0% (each word, at most every .52 s)
+  const slips = {};
+  /* the real text, or now and then (more often the lower you are) one of the alts, for 120 ms */
+  function dreamy(key, real, alts) {
+    const now = performance.now() / 1000, S = slips[key] || (slips[key] = { until: 0, alt: '', next: 0, last: now });
+    const dt = Math.min(0.1, now - S.last);
+    S.last = now;
+    if (now < S.until) return S.alt;
+    const on = alts.length && G.state === 'night' && !G.paused && save.fx !== 'off' && !G.powerOut && G.hudLock <= G.t && G.luc < SLIP.below;
+    if (on && now >= S.next && Math.random() < (SLIP.below - G.luc) / SLIP.below * SLIP.perSec * dt) {
+      S.alt = pick(alts); S.until = now + SLIP.show; S.next = S.until + SLIP.gap;
+      return S.alt;
+    }
+    return real;
+  }
+  /* write a HUD word that can slip (num: its digits in the VT323 font) */
+  function slipText(el, key, real, alts, num) {
+    const t = dreamy(key, real, alts);
+    if (num) setHtml(el, key, numify(t)); else setText(el, key, t);
+    setCls(el, 'slip', t !== real);
+  }
+  /* your eye's lid droops as Lucidity sinks: its edge goes from above the eye (2) to halfway down (12) */
+  function eyeLid(pct) {
+    const e = 2 + 10 * (1 - clamp(pct, 0, 100) / 100), c = (2 * e - 12).toFixed(1); // (c: the curve's control point)
+    if (lastHud.lid !== c) {
+      lastHud.lid = c;
+      hudEls.lid.setAttribute('d', `M0 0 L48 0 L48 12 L46 12 Q24 ${c} 2 12 L0 12 Z`);
+      hudEls.lash.setAttribute('d', `M2 12 Q24 ${c} 46 12`);
+    }
+    setCls(hudEls.eye, 'low', pct <= 15); setCls(hudEls.eye, 'twitch', pct <= 15 && !G.powerOut);
+  }
+  /* a new hour lands: the clock drops into place, and the hour drifts past, huge and faint */
+  function hourLands(hour) {
+    pulseCls(hudEls.time, 'hourLand');
+    setHtml(hudEls.ghost, null, numify(fmtHour(hour)));
+    pulseCls(hudEls.ghost, 'ghostOut');
+  }
+
   function updateHud(force) {
     if (force) lastHud = {};
-    setHtml(hudEls.night, 'night', G.endless ? 'ENDLESS' : numify('NIGHT ' + G.night));
+    const n = G.night, nightTxt = G.endless ? 'ENDLESS' : 'NIGHT ' + n;
+    slipText(hudEls.night, 'night', nightTxt, G.endless ? ['ENDLESS?', 'NIGHT ∞', 'NIGHT 0'] : ['NIGHT ' + n + n, 'NIGHT ∞', 'NIGHT ' + (n + 1)], true);
     // the clock: hours, then minutes in the final half hour (warm, like the dawn); "6 AM" while the False Dawn rings
     const min = nightMin(), ringing = !!G.fd && G.fd.phase !== 'after', late = G.state === 'night' && (min >= FINAL_MIN || G.fdRolled);
-    setText(hudEls.time, 'time', ringing ? fmtHour(6) : late ? Math.floor(min / 60) + ':' + String(Math.floor(min % 60)).padStart(2, '0') : fmtHour(G.hour));
+    const timeTxt = ringing ? fmtHour(6) : late ? Math.floor(min / 60) + ':' + String(Math.floor(min % 60)).padStart(2, '0') : fmtHour(G.hour);
+    slipText(hudEls.time, 'time', timeTxt, ringing ? [] : [fmtHour(G.hour) + '?', '13 AM', (G.hour ? G.hour + 12 : 24) + ' AM']);
     setCls(hudEls.time, 'dawn', ringing || late);
+    slipText(hudEls.label, 'label', 'LUCIDITY', ['LUCIDLY', 'LUCKILY', 'L U C I D', 'LUCIDITY?']);
     const pct = Math.max(0, Math.ceil(G.luc));
-    setText(hudEls.pct, 'pct', pct + '%');
+    setText(hudEls.pct, 'pct', pct + '%'); // (the percentage itself never lies)
+    eyeLid(pct);
     hudEls.fill.style.width = clamp(G.luc, 0, 100) + '%';
     setCls(hudEls.pct, 'low', pct <= 15); setCls(hudEls.fill, 'low', pct <= 15);
     // the line where the dream starts to lie (Nights 2+)
@@ -3894,11 +4157,12 @@
     setText(hudEls.pinchAmt, 'pinchAmt', '+' + gain);
     setCls(hudEls.pinch, 'big', G.luc < 30); // it pays most when you have sunk deep
     if (camsShown) {
+      const cam = camById[G.cams.cur];
+      if (cam !== YOU_CAM) slipText(hudEls.camName, 'camName', camTitle(cam), [camTitle(cam, true)]);
       const mins = Math.floor((G.nightT % hourSec()) / hourSec() * 60);
       setText(hudEls.stamp, 'stamp', (G.hour === 0 ? 12 : G.hour) + ':' + String(mins).padStart(2, '0') + ' AM');
       setCls(hudEls.signal, 'hidden', !(G.cams.lost > 0));
     }
-    if (DEV) updateDev();
   }
 
   function buildCamMap() {
@@ -3941,9 +4205,14 @@
     CFG.cameras.forEach((c, i) => addBtn(c, c.label || ('CAM ' + (i + 1)), c.name + (i < 9 ? '  [' + (i + 1) + ']' : '')));
     addBtn(YOU_CAM, YOU_CAM.label, YOU_CAM.name, 'ghostCam hidden'); // CAM 7: always built, shown once a night
   }
+  /* "CAM 1 — THE NURSERY" (dream: the name it slips into, config dreamName, or the words of its name backwards) */
+  function camTitle(cam, dream) {
+    const name = dream ? cam.dreamName || cam.name.split(/\s+/).reverse().join(' ') : cam.name;
+    return (cam.label || '') + ' — ' + String(name).toUpperCase();
+  }
   function updateCamUi() {
     const cam = camById[G.cams.cur];
-    $('#camName').textContent = (cam.label || '') + ' — ' + cam.name.toUpperCase();
+    setText(hudEls.camName, 'camName', camTitle(cam)); setCls(hudEls.camName, 'slip', false);
     document.querySelectorAll('.camBtn').forEach((b) => b.classList.toggle('sel', b.dataset.cam === cam.id));
   }
 
@@ -4038,6 +4307,7 @@
     for (const { cv, def } of galleryCanvases) {
       const x = cv.getContext('2d'), A = Art.monsters[def.id];
       x.clearRect(0, 0, cv.width, cv.height);
+      if (DEV) Dev.gallery(x, A, cv); // (the art helper's onion skin: every frame at once, with its outline)
       const f = A.frames[Math.floor(G.t * (def.fps || 4)) % A.frames.length];
       const s = Math.min(cv.width / f.width, cv.height / f.height);
       x.drawImage(f, (cv.width - f.width * s) / 2, (cv.height - f.height * s) / 2, f.width * s, f.height * s);
@@ -4095,6 +4365,7 @@
       G.scroll = clamp(G.scroll - (p.x - pointer.lastX) * 1.4, 0, Math.max(0, G.officeW - W));
     }
     pointer.lastX = p.x; pointer.x = p.x; pointer.y = p.y;
+    if (DEV) Dev.move(p);
   });
   document.addEventListener('pointerleave', () => { pointer.inside = false; });
   window.addEventListener('blur', () => { // another window got the focus: let go of everything and pause
@@ -4108,20 +4379,17 @@
     const p = toStage(e);
     pointer.type = e.pointerType || 'mouse';
     pointer.x = p.x; pointer.y = p.y; pointer.lastX = p.x;
-    if (e.target.closest('button, input, label, textarea, a')) return;
+    if (e.target.closest('button, input, label, textarea, a, #devPanel')) return;
     if (skipInput()) return; // falling asleep, waking up, the credits
     if (G.state === 'night' && !G.paused) {
-      if (DEV && G.cams.up && G.devGhost) { devPlace(p); return; }
-      if (DEV && !G.cams.up) devOfficeClick(p);
+      if (DEV && Dev.down(p, e)) return; // (the art helper: placing a monster, dragging a door box …)
       if (pointer.type !== 'mouse') pointer.dragId = e.pointerId;
     }
   });
-  const endDrag = (e) => { if (e.pointerId === pointer.dragId) pointer.dragId = null; };
+  const endDrag = (e) => { if (e.pointerId === pointer.dragId) pointer.dragId = null; if (DEV) Dev.up(toStage(e)); };
   window.addEventListener('pointerup', endDrag);
   window.addEventListener('pointercancel', endDrag);
-  stage.addEventListener('wheel', (e) => {
-    if (DEV && G.devGhost && G.cams.up) { e.preventDefault(); devScale(e.deltaY < 0 ? 1.04 : 1 / 1.04); }
-  }, { passive: false });
+  stage.addEventListener('wheel', (e) => { if (DEV && Dev.wheel(e)) e.preventDefault(); }, { passive: false });
 
   const KEY_BTN = { q: hudEls.lDoor, e: hudEls.rDoor, a: hudEls.lLight, d: hudEls.rLight, f: hudEls.pinch, s: hudEls.camBar };
   window.addEventListener('keydown', (e) => {
@@ -4135,6 +4403,7 @@
     if (e.repeat && (k === 'Enter' || k === ' ') && (G.state === 'win' || G.state === 'dead')) e.preventDefault(); // a key held through the slap or the scare presses nothing
     if (e.repeat) return;
     if (G.state === 'boot' && (k === 'Enter' || k === ' ')) { bootGo(); return; }
+    if (DEV && Dev.key(k)) { e.preventDefault(); return; } // (the art helper's keys: see js/devtools.js)
     if (k === 'Escape' || k === 'p' || k === 'P') {
       // a sub-screen (even one opened from Pause) goes back first; only then does Esc pause/resume
       if (['#settings', '#extras', '#custom'].some((s) => !$(s).classList.contains('hidden'))) backFromSub();
@@ -4142,7 +4411,6 @@
       else skipInput();
       return;
     }
-    if (DEV && playing && k === 'Tab') { e.preventDefault(); devKey('tab'); return; }
     if (scene && k !== 'Tab' && k.length && !/^(Shift|Control|Alt|Meta|CapsLock|Fn)$/.test(k)) { skipInput(); return; } // any key skips ahead
     if (!playing) return;
     if (k === 'Enter') { e.preventDefault(); voiceAdvance(); return; } // the voice: finish typing, or go on
@@ -4155,7 +4423,6 @@
     else if (k === ' ' || lk === 's' || k === 'ArrowUp' || k === 'ArrowDown') toggleCams(k === 'ArrowUp' ? true : k === 'ArrowDown' ? false : null);
     else if (lk === 'f') pinch();
     else if (/^[1-9]$/.test(k)) { const c = CFG.cameras[parseInt(k, 10) - 1]; if (c) { if (!G.cams.up) toggleCams(true); switchCam(c.id); } }
-    else if (DEV) devKey(lk);
   });
   window.addEventListener('keyup', (e) => { keys[e.key] = false; });
 
@@ -4237,66 +4504,18 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /*  ART HELPER (dev mode: open index.html?dev)                        */
+  /*  ART HELPER (open index.html?dev): js/devtools.js is loaded only    */
+  /*  then, and fills in these hooks. Players never load it.             */
   /* ------------------------------------------------------------------ */
-  /* which monster the art helper works on (Tab switches) */
-  const devMonDef = () => CFG.monsters[G.devMon % Math.max(1, CFG.monsters.length)];
-  const devMon = () => G.monsters.find((m) => m.def === devMonDef());
-
-  function updateDev() {
-    const el = hudEls.dev;
-    if (el.classList.contains('hidden')) show(el);
-    if (el.querySelector('textarea') && document.activeElement === el.querySelector('textarea')) return;
-    const def = devMonDef();
-    const ms = G.monsters.map((m) => `${m.def === def ? '▸ ' : '  '}${m.def.name}: ${m.state}${m.room ? ' @' + m.room : ''}${m.door ? ' @door:' + m.door : ''} lvl ${m.lvl} next ${m.timer.toFixed(1)}s${m.state === 'door' ? ' wait ' + Math.max(0, m.linger).toFixed(1) : ''}`).join('\n');
-    const pose = G.devPose ? `\n\n${G.devPoseLabel}:\n<textarea readonly>${escapeHtml(G.devPose)}</textarea>` : '';
-    const warn = configWarnings.length ? '\n\nCONFIG.JS WARNINGS:\n' + configWarnings.map((w) => '• ' + w).join('\n') : '';
-    const html = escapeHtml(`ART HELPER (dev mode)   monster: ${def ? def.name : '-'}  (Tab: next monster)\n` +
-      `T: time x${G.timeScale}  N: skip to 5:59  K: test jumpscare  M: move now\n` +
-      `Z/X: put monster at left/right door  L: lucidity 5%  V: show a dream lie  Y: CAM 7 now  G: ghost placer (${G.devGhost ? 'ON' : 'off'})\n` +
-      (G.devGhost ? 'Ghost placer: open cameras, CLICK where its feet go, scroll wheel / +/- to resize, R to flip\n' : '') +
-      `night ${G.night}  t ${G.nightT.toFixed(1)}s  luc ${G.luc.toFixed(1)}  usage ${G.usage.toFixed(2)}  doors held ${G.doors.left.held.toFixed(0)}/${G.doors.right.held.toFixed(0)}s  danger ${G.danger.toFixed(2)}${G.lies.length ? '  lie: ' + G.lies.map((l) => l.kind + ' ' + (l.side || l.room)).join(', ') : ''}\n${ms}`) + pose + escapeHtml(warn);
-    if (el._last !== html) { el._last = html; el.innerHTML = html; }
-  }
-  function devKey(k) {
-    const m = devMon();
-    if (k === 'tab' && CFG.monsters.length) { G.devMon = (G.devMon + 1) % CFG.monsters.length; G.devPose = null; hudEls.dev._last = ''; }
-    if (k === 't') G.timeScale = G.timeScale === 1 ? 10 : G.timeScale === 10 ? 40 : 1;
-    if (k === 'n') { endLesson(false); G.nightT = 6 * hourSec() - 2; }
-    if (k === 'k' && m) jumpscare(m);
-    if (k === 'm') for (const mm of G.monsters) monsterMove(mm, true);
-    if (k === 'l') G.luc = 5;
-    if (k === 'v' && G.monsters.length) { G.lies = []; spawnLie(); } // (it goes again at once if a monster is near a door)
-    if (k === 'y') { toggleCams(true); endEvent(); startEvent(DREAM_EVENTS.find((e) => e.id === 'youCam')); } // CAM 7 right now, any night
-    if ((k === 'z' || k === 'x') && m) { m.state = 'door'; m.door = k === 'z' ? 'left' : 'right'; m.room = null; m.linger = 999; m.seen = false; }
-    if (k === 'g') { G.devGhost = !G.devGhost; G.grace = G.devGhost ? 1e9 : 0; }
-    if (G.devGhost && (k === '+' || k === '=')) devScale(1.05);
-    if (G.devGhost && (k === '-' || k === '_')) devScale(1 / 1.05);
-    if (G.devGhost && k === 'r') { const p = devPoseObj(); p.flip = !p.flip; devWrite(); }
-  }
-  function devPoseObj() {
-    const def = devMonDef(); def.poses = def.poses || {};
-    return (def.poses[G.cams.cur] = def.poses[G.cams.cur] || { x: 0.5, y: 1.02, h: 0.7 });
-  }
-  function devWrite() {
-    const p = devPoseObj();
-    G.devPoseLabel = `Paste into config.js (monster "${devMonDef().id}", under poses)`;
-    G.devPose = `${G.cams.cur}: { x: ${p.x.toFixed(2)}, y: ${p.y.toFixed(2)}, h: ${p.h.toFixed(2)}${p.flip ? ', flip: true' : ''} },`;
-    hudEls.dev._last = '';
-  }
-  function devPlace(p) {
-    const box = camFeedBox();
-    const pose = devPoseObj();
-    pose.x = clamp((p.x - box.x) / box.w, -0.5, 1.5); pose.y = clamp((p.y - box.y) / box.h, -0.5, 2);
-    devWrite();
-  }
-  function devScale(f) { const p = devPoseObj(); p.h = clamp(p.h * f, 0.05, 3); devWrite(); }
-  function devOfficeClick(p) {
-    const ox = officeOriginX();
-    const nx = (p.x - ox) / G.officeW, ny = p.y / H;
-    G.devPoseLabel = 'That spot in your desk room picture';
-    G.devPose = `x: ${nx.toFixed(3)}, y: ${ny.toFixed(3)}`;
-    hudEls.dev._last = '';
+  const Dev = {
+    inDoorway() {}, doorFrame() {}, camGhost() {}, overlay() {}, gallery() {}, booted() {}, error() {},
+    key: () => false, down: () => false, move() {}, up() {}, wheel: () => false,
+  };
+  function loadDevtools() {
+    const s = document.createElement('script');
+    s.src = 'js/devtools.js';
+    s.onerror = () => console.warn('[dev] js/devtools.js is missing, so the art helper is off.');
+    document.head.appendChild(s);
   }
 
   /* ------------------------------------------------------------------ */
@@ -4314,6 +4533,7 @@
       if (!$('#extras').classList.contains('hidden')) drawGallery();
     } catch (err) {
       if (!loggedError) { loggedError = true; console.error(err); }
+      if (DEV) Dev.error(err); // (the art helper counts them and shows the latest)
     }
   }
 
@@ -4324,38 +4544,45 @@
   }
 
   async function boot() {
+    if (DEV) loadDevtools();
     loadSave();
     layout();
     $('#bootTitle').textContent = CFG.title || 'UNTIL THE ALARM';
     Sound.init();
     initMotes();
+    validateBrains();
     let done = 0, total = 1;
     const tick = () => { done++; $('#loadFill').style.width = Math.min(100, (done / total) * 100) + '%'; };
     // fonts first so the stand-in art can use them
     const fontLoads = ['48px "Fell SC"', '20px "Fell"', '20px VT323', '20px "Special Elite"', '20px Eater'].map((f) => document.fonts ? document.fonts.load(f).catch(() => {}) : Promise.resolve());
     await Promise.race([Promise.all(fontLoads), new Promise((r) => setTimeout(r, 3000))]);
-    total = CFG.cameras.length + 1 + 6 + CFG.monsters.reduce((a, m) => a + (m.frames || []).length + (m.jumpscareFrames || []).length, 0) + Object.keys(CFG.sounds || {}).length;
-    const soundP = Sound.load(tick);
-    await loadArt(tick);
+    const soundP = Sound.load(tick), artP = loadArt(tick);
+    total = Sound.total + Art.total; // (both count their files straight away)
+    await artP;
     $('#bootMsg').textContent = 'listening for the dream…';
     await Promise.race([soundP, new Promise((r) => setTimeout(r, 9000))]);
     $('#loadFill').style.width = '100%';
     buildCamMap(); updateCamUi();
     G.ready = true;
-    $('#bootMsg').textContent = DEV ? devBootNote() : '';
+    window.__oopsReady = true; // (from now on a problem is the game's to report, not the "Oops" screen's)
+    $('#bootMsg').textContent = bootNote();
     $('#bootGo').textContent = TAP + ' to fall asleep';
     show($('#bootGo'));
     $('#boot').addEventListener('click', bootGo);
-    if (DEV) console.log('[dev] art helper on. Missing art:', { office: Art.officeMissing, cams: Art.camMissing }, 'missing sounds:', Array.from(Sound.missing));
+    if (DEV) Dev.booted();
   }
   /* sound slots the game copes without (each one has a stand-in sound) */
   const OPTIONAL_SOUNDS = ['clock_tick', 'type_key', 'reality_snap', 'redhorn_click', 'door_strain', 'hypnic_jolt', 'water_drip'];
-  function devBootNote() {
+  /* the boot screen's small print: what is missing or misspelt (with ?dev in full; otherwise one hint, for the artist) */
+  function bootNote() {
     const miss = Array.from(Sound.missing), must = miss.filter((n) => OPTIONAL_SOUNDS.indexOf(n) < 0);
+    const frames = Art.files.filter((f) => /frame/.test(f.slot) && !f.opt && f.path && !f.w).length;
+    if (!DEV) return must.length || configWarnings.length || frames ? 'something needs a look: add ?dev to the address to see what' : '';
     const parts = [];
-    if (must.length) parts.push(must.length + ' sound file(s) missing: ' + must.join(', '));
+    if (must.length) parts.push('missing sounds: ' + must.join(', '));
     if (miss.length > must.length) parts.push((miss.length - must.length) + ' optional sound(s) not added yet');
-    if (configWarnings.length) parts.push(configWarnings.length + ' config.js warning(s), see the art-helper box');
+    if (frames) parts.push(frames + ' monster frame(s) missing');
+    if (configWarnings.length) parts.push(configWarnings.length + ' config.js warning(s): see the art helper box (H)');
     return parts.length ? '(' + parts.join(' · ') + ')' : '';
   }
 
@@ -4374,7 +4601,12 @@
     startVoice, endVoice, voiceAdvance, compileBeat, voiceLog, fillVoiceLog, VOICE,
     startLesson, endLesson, lessonStep, lessonSteps, lessonMet, coachTarget, coach, LESSON, LESSON_T,
     die, caughtRecap, lucidityRecap, finishRecap, fmtClock, storyLine, logStory, TIPS, LIGHTER,
+    // the dreaming HUD, monster brains, the art helper (js/devtools.js) and the office fitting
+    dreamy, SLIP, eyeLid, hourLands, BRAINS, brainOf, walkerMove, walkerHear, validateBrains, doorsOf, approachAnchors, SHY, SLEEPER,
+    Dev, loadArt, fitOffice, inBand, officeDoor, officeWidthFor, OFFICE_MIN_W, paintOffice, paintDoorway, paintShutter, shadowFigure,
+    officeOriginX, doorBox, camFeedBox, spriteRect, drawSprite, doorPoseOf, camById, YOU_CAM, OPTIONAL_SOUNDS, escapeHtml, hourSec, setText,
+    loadSave, bootNote, updateHud, updateCamUi, camTitle,
   };
   requestAnimationFrame((t) => { last = t; requestAnimationFrame(frame); });
-  boot();
+  boot().catch((e) => { console.error(e); if (window.__oops) window.__oops({ msg: 'Something in <b>js/config.js</b> isn\'t the way the game expects, so it couldn\'t start.', hint: 'shape', tech: String(e && e.message || e) }); });
 })();

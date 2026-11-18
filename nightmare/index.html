@@ -22,7 +22,22 @@
     </div>
 
     <div id="lucBox">
-      <div class="lucLabel">LUCIDITY</div>
+      <div class="lucTop">
+        <!-- your eye: the lid droops as your Lucidity sinks (it blinks when you pinch yourself) -->
+        <svg id="lucEye" viewBox="0 0 48 24" aria-hidden="true">
+          <defs><clipPath id="eyeClip"><path d="M2 12 Q24 -4 46 12 Q24 28 2 12 Z"/></clipPath></defs>
+          <g class="ball">
+            <path class="white" d="M2 12 Q24 -4 46 12 Q24 28 2 12 Z"/>
+            <g clip-path="url(#eyeClip)">
+              <circle class="iris" cx="24" cy="12" r="6.5"/><circle class="pupil" cx="24" cy="12" r="2.8"/>
+              <path class="lid" d="M0 0 L48 0 L48 12 L46 12 Q24 -8 2 12 L0 12 Z"/>
+            </g>
+            <path class="lash" d="M2 12 Q24 -8 46 12"/>
+            <path class="rim" d="M2 12 Q24 -4 46 12 Q24 28 2 12 Z"/>
+          </g>
+        </svg>
+        <span id="lucLabel" class="lucLabel">LUCIDITY</span>
+      </div>
       <div id="lucPct">100%</div>
       <div id="lucBar"><div id="lucFill"></div></div>
       <div id="usage" aria-label="what is draining your Lucidity">
@@ -67,7 +82,8 @@
     <div id="coachEdge" class="hidden" aria-hidden="true"><b>‹ ‹ ‹</b><span></span></div>
     <div id="coachDrag" class="hidden" aria-hidden="true"><i></i><span>drag</span></div>
 
-    <div id="devInfo" class="hidden"></div>
+    <!-- each new hour drifts past, huge and faint -->
+    <div id="hourGhost" aria-hidden="true"></div>
   </div>
 
   <!-- sound captions (Settings): what you hear, on the side it came from; over the cameras too -->
@@ -218,8 +234,77 @@
 </div>
 <div id="rotate"><div>↻</div>Turn your phone sideways<br><small>the dream needs a wide screen</small></div>
 
+<!-- when something stops the game from starting (most often a typo in js/config.js), this says what and where,
+     instead of leaving the screen stuck on "falling asleep…" -->
+<div id="oops" role="alert" style="display:none"><div class="oopsInner">
+  <div class="oopsTitle">Oops! The dream got stuck.</div>
+  <div id="oopsMsg"></div>
+  <pre id="oopsCode" style="display:none"></pre>
+  <ul id="oopsHint"></ul>
+  <div id="oopsTech"></div>
+</div></div>
+
 <noscript>This game needs JavaScript.</noscript>
-<script src="js/config.js"></script>
-<script src="js/game.js"></script>
+<script>
+/* Catches mistakes while the game starts. It is here, BEFORE config.js, so it also sees a typo inside config.js. */
+(function () {
+  var shown = false, configOk = false, muted = false;
+  var $ = function (id) { return document.getElementById(id); };
+  var HINTS = {
+    syntax: ['Look at the end of the line <b>before</b> it: is a comma <b>,</b> missing?',
+      'Every <b>{</b> needs a <b>}</b>, every <b>[</b> needs a <b>]</b>, and every <b>"</b> needs another <b>"</b>.',
+      'Fix it, save the file, and reload this page. Stuck? Undo your last change.'],
+    noLine: ['Most often it is a missing comma <b>,</b> between two <b>{ … }</b> blocks, or a missing <b>}</b> <b>]</b> or <b>"</b>.',
+      'Undo your last change, save, and reload this page.',
+      'To see the exact line: play from a little web server (HOW-TO-ADD-ART.md, part 1), or press F12 and look in the Console.'],
+    shape: ['Check the last thing you changed in js/config.js.',
+      'Compare it with a part that works, like the Redhorn block.'],
+    missing: ['It must be in the <b>js</b> folder, next to the other game files.'],
+  };
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  /* o: { msg (html), hint (a HINTS key), tech (the browser's own words), file, line } */
+  function oops(o) {
+    if (shown || window.__oopsReady) return;
+    shown = true;
+    var box = $('oops'); if (!box) return;
+    $('oopsMsg').innerHTML = o.msg;
+    var warn = (window.__oopsWarn || []).slice(0, 6).map(function (w) { return 'config.js check: ' + esc(w); });
+    $('oopsHint').innerHTML = warn.concat(HINTS[o.hint] || []).map(function (h) { return '<li>' + h + '</li>'; }).join('');
+    $('oopsTech').textContent = o.tech ? '(the browser says: ' + o.tech + ')' : '';
+    box.style.display = '';
+    // served from a website: show the lines around the mistake
+    if (o.file && o.line && location.protocol !== 'file:' && window.fetch) {
+      fetch(o.file).then(function (r) { return r.text(); }).then(function (text) {
+        var lines = text.split('\n'), out = [];
+        for (var i = Math.max(1, o.line - 4); i <= Math.min(lines.length, o.line); i++) out.push((i === o.line ? '→ ' : '  ') + i + ' | ' + lines[i - 1]);
+        $('oopsCode').textContent = out.join('\n'); $('oopsCode').style.display = '';
+      }).catch(function () {});
+    }
+  }
+  function unknown() { oops({ msg: 'Something stopped the game from starting.', hint: 'shape' }); }
+  window.addEventListener('error', function (e) {
+    if (window.__oopsReady) return; // the game is running: from now on it reports its own problems
+    var file = (e.filename || '').split('?')[0], name = file.split('/').pop();
+    if (!name || /^Script error\.?$/.test(e.message || '')) { muted = true; if (configOk) unknown(); return; } // (file:// hides the details)
+    if (name === 'config.js') oops({ msg: 'There is a mistake in <b>js/config.js</b> on line <b>' + e.lineno + '</b>:', hint: 'syntax', tech: e.message, file: file, line: e.lineno });
+    else oops({ msg: 'Something in <b>js/config.js</b> isn\'t the way the game expects, so it couldn\'t start.', hint: 'shape', tech: e.message + ' (' + name + ' line ' + e.lineno + ')' });
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason || {};
+    if (!window.__oopsReady) oops({ msg: 'Something stopped the game from starting.', hint: 'shape', tech: String(r.message || r) });
+  });
+  window.__oops = oops;
+  window.__oopsWarn = []; // game.js adds its config.js warnings here
+  window.__oopsMissing = function (f) { oops({ msg: 'The file <b>' + esc(f) + '</b> is missing.', hint: 'missing' }); };
+  /* right after config.js: could the browser read it? */
+  window.__oopsCheckConfig = function () {
+    configOk = !!window.GAME_CONFIG;
+    if (!configOk) oops({ msg: '<b>js/config.js</b> has a mistake, so the game can\'t read it.', hint: muted ? 'noLine' : 'syntax' });
+  };
+})();
+</script>
+<script src="js/config.js" onerror="__oopsMissing('js/config.js')"></script>
+<script>__oopsCheckConfig();</script>
+<script src="js/game.js" onerror="__oopsMissing('js/game.js')"></script>
 </body>
 </html>

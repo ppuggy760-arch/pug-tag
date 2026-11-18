@@ -40,7 +40,7 @@ Every sound is a real recording downloaded from [OpenGameArt.org](https://openga
 | `redhorn_click.mp3` | Redhorn's clicking | [Spider Chattering](https://opengameart.org/content/spider-chattering) | spookymodem | CC-BY 3.0 |
 | `door_strain.mp3` | Door groaning | [25 spooky sound effects (creak1.wav)](https://opengameart.org/content/25-spooky-sound-effects) | bart (Bart Kelsey) | CC-BY 3.0 |
 | `hypnic_jolt.mp3` | Falling into the dream | [Wierd Whooshes](https://opengameart.org/content/wierd-whooshes) layered with [Muffled Distant Explosion](https://opengameart.org/content/muffled-distant-explosion) | bosslevelaudio, NenadSimic | CC0 |
-| `water_drip.mp3` | Drowned Parlor drips | [Dripping water loop](https://opengameart.org/content/dripping-water-loop) | qubodup | CC0 |
+| `water_drip.mp3` | Drowned Parlor drips | [Dripping water loop](https://opengameart.org/content/dripping-water-loop) | Independent.nu (submitted by qubodup) | CC0 |
 
 CC-BY 3.0 sounds are used under https://creativecommons.org/licenses/by/3.0/ and are credited above. CC0 sounds are public domain; they are credited anyway as thanks.
 

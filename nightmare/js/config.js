@@ -90,9 +90,15 @@ window.GAME_CONFIG = {
      THE DESK ROOM (the office you sit in).
      image: a WIDE picture works best (about 2400 x 900, or 8:3).
             The player looks left/right across it.
-     doors: where the two doorways are in that picture.
-       darkImage  (optional) doorway with the light OFF
-       litImage   (optional) doorway with the light ON (empty hallway)
+     image: if your picture isn't wide enough (a square or 4:3 canvas), the
+            game zooms in so you can still look around, and cuts off a bit
+            of the top and bottom. ?dev mode tells you.
+     doors: where the two doorways are in that picture (in ?dev mode you
+            can drag the green boxes into place and copy the numbers).
+       darkImage  (optional) doorway with the light OFF. Leave it "" and
+                  the doorway YOU painted in office.png shows, a bit darker.
+       litImage   (optional) doorway with the light ON (empty hallway).
+                  Leave it "" for the built-in lit hallway.
        closedImage(optional) the door when it is shut
      Leave an image "" to use the built-in look.
      ------------------------------------------------------------------ */
@@ -161,6 +167,9 @@ window.GAME_CONFIG = {
      sound:    (optional) what you hear while you watch this room: the name
                of one of the sounds at the bottom of this file.
      soundVol: how loud that is (0 = silent, 1 = loudest).
+     dreamName:(optional) when your Lucidity is very low, the camera's name
+               sometimes slips into this for a blink. Leave it out and the
+               words of its name get mixed up instead ("HALL ENDLESS THE").
      ------------------------------------------------------------------ */
   /* CAM 7, "YOUR ROOM": once a night (from Night 3, see youCam in nights) a
      camera that isn't on the map appears. It films YOU from behind...
@@ -171,7 +180,7 @@ window.GAME_CONFIG = {
   youCam: { image: "assets/rooms/cam7_you.png", seat: { x: 0.5, y: 0.5, size: 1 } },
 
   cameras: [
-    { id: "nursery", label: "CAM 1", name: "The Nursery",       image: "assets/rooms/cam1_nursery.png", map: { x: 0.50, y: 0.10 }, sound: "music_box",  soundVol: 0.25 },
+    { id: "nursery", label: "CAM 1", name: "The Nursery",       image: "assets/rooms/cam1_nursery.png", map: { x: 0.50, y: 0.10 }, sound: "music_box",  soundVol: 0.25, dreamName: "Nobody's Nursery" },
     { id: "hall",    label: "CAM 2", name: "The Endless Hall",  image: "assets/rooms/cam2_hall.png",    map: { x: 0.50, y: 0.33 }, sound: "clock_tick", soundVol: 0.3 },
     { id: "parlor",  label: "CAM 3", name: "Drowned Parlor",    image: "assets/rooms/cam3_parlor.png",  map: { x: 0.19, y: 0.53 }, sound: "water_drip", soundVol: 0.35 },
     { id: "stairs",  label: "CAM 4", name: "Stairs to Nowhere", image: "assets/rooms/cam4_stairs.png",  map: { x: 0.81, y: 0.53 } },
@@ -180,10 +189,30 @@ window.GAME_CONFIG = {
   ],
 
   /* ------------------------------------------------------------------
-     MONSTERS. Copy a whole { ... } block to add a new one.
+     MONSTERS. Copy a whole { ... } block to add a new one
+     (HOW-TO-ADD-ART.md, part 6, shows you step by step).
+     behavior: its BRAIN, one word (leave it out for "walker"):
+              "walker"    walks its path to your door (like Redhorn)
+              "shy"       can't move while you watch it on a camera, but
+                          gets braver the longer you don't look
+              "sleeper"   sleeps until a noise wakes it (a pinch, a bang)
+              "trickster" its footsteps come from the WRONG side
+                          (its breathing never lies)
+     color:   (optional) the colour of its glowing eyes while it has no
+              pictures yet, like "#5ad1ff" (it is a shadow until then).
      frames:  your animation pictures in order (transparent PNGs).
+     sleepFrames: (optional, sleepers only) pictures of it asleep.
      fps:     animation speed (frames per second).
      levels:  how aggressive it is on nights 1-5 (0 = it sleeps all night, 20 = max).
+     hourBoost: extra aggression from that hour on ({ 2: 1 } = +1 at 2 AM).
+              A monster at level 0 that night never moves, boost or not.
+     moveEvery: seconds between its chances to move.
+     waitAtDoor: [shortest, longest] seconds it waits at your door before
+              it comes in (it always breathes first, see minWarning).
+     jumpscareSound: the sound its jumpscare makes (a name from sounds:).
+     sounds:  (optional) its own sounds instead of the usual ones, e.g.
+              sounds: { steps: "moan", breath: "whisper", bang: "door_bang" }
+              (names from sounds: at the bottom of this file).
      path:    where it can walk next from each room. "door:left" /
               "door:right" means it reaches your door.
      retreat: rooms it runs back to when it finds the door shut.
@@ -199,6 +228,7 @@ window.GAME_CONFIG = {
     {
       id: "redhorn",
       name: "Redhorn",
+      behavior: "walker",        // its brain (see the list above)
       description: "It wears its skin like a borrowed coat. It never blinks, because the dream never asks it to.",
       frames: [
         "assets/monsters/redhorn/frame1.png",
@@ -437,7 +467,7 @@ window.GAME_CONFIG = {
     { what: "Sound: Door groaning", who: "bart (Bart Kelsey)", license: "CC-BY 3.0", url: "https://opengameart.org/content/25-spooky-sound-effects" },
     { what: "Sound: Falling into the dream (whoosh)", who: "bosslevelaudio", license: "CC0", url: "https://opengameart.org/content/wierd-whooshes" },
     { what: "Sound: Falling into the dream (thud)", who: "NenadSimic", license: "CC0", url: "https://opengameart.org/content/muffled-distant-explosion" },
-    { what: "Sound: Water drips", who: "qubodup", license: "CC0", url: "https://opengameart.org/content/dripping-water-loop" },
+    { what: "Sound: Water drips", who: "Independent.nu (submitted by qubodup)", license: "CC0", url: "https://opengameart.org/content/dripping-water-loop" },
     { what: "Fonts: IM Fell English & SC", who: "Igino Marini", license: "OFL 1.1" },
     { what: "Font: Special Elite", who: "Astigmatic", license: "Apache 2.0" },
     { what: "Font: VT323", who: "Peter Hull", license: "OFL 1.1" },
