@@ -48,12 +48,13 @@ window.GAME_CONFIG = {
 
   /* PINCH YOURSELF: gives back Lucidity, but it is LOUD. A monster close to
      your doors (see pinchRadius above) steps one room closer straight away,
-     one waiting at a door stops waiting, and the rest move at their next chance.
+     one waiting at a door stops waiting (if it was breathing at an OPEN door,
+     it comes straight in!), and the rest move at their next chance.
        amount:      how much Lucidity a pinch gives back.
        cooldown:    seconds before you can pinch again.
        lowBonus:    below 30% Lucidity it gives this many times more (2 = double).
        highPenalty: above 60% it gives only this much of it (0.25 = a quarter). */
-  pinch: { amount: 4, cooldown: 45, lowBonus: 2, highPenalty: 0.25 },
+  pinch: { amount: 3, cooldown: 60, lowBonus: 2, highPenalty: 0.25 },
 
   /* HELD-BREATH DOORS: a shut door is like holding your breath. It is cheap
      for a while (doorFree seconds, see nights above), then it costs more and
@@ -190,7 +191,8 @@ window.GAME_CONFIG = {
 
   /* ------------------------------------------------------------------
      MONSTERS. Copy a whole { ... } block to add a new one
-     (HOW-TO-ADD-ART.md, part 6, shows you step by step).
+     (HOW-TO-ADD-ART.md, "Monsters → Adding a monster, step by step",
+     shows you how).
      behavior: its BRAIN, one word (leave it out for "walker"):
               "walker"    walks its path to your door (like Redhorn)
               "shy"       can't move while you watch it on a camera, but

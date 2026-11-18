@@ -333,8 +333,9 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 
 .menuBtn { display: block; margin: calc(var(--u)*.55) auto; padding: calc(var(--u)*.45) calc(var(--u)*1.6);
   font-family: "Fell SC", serif; font-size: calc(var(--u)*2.1); letter-spacing: .14em; color: var(--bone);
-  transition: color .2s, text-shadow .2s, letter-spacing .3s; position: relative; }
-.menuBtn:hover, .menuBtn:focus-visible { color: #fff; outline: none; letter-spacing: .2em; text-shadow: 0 0 .5em var(--blood-glow), 0 0 1.2em var(--blood-glow); }
+  transition: color .2s, text-shadow .2s, transform .3s; position: relative; }
+/* (it leans out a little: a transform, not letter-spacing, so the page never has to lay itself out again) */
+.menuBtn:hover, .menuBtn:focus-visible { color: #fff; outline: none; transform: translateX(.25em); text-shadow: 0 0 .5em var(--blood-glow), 0 0 1.2em var(--blood-glow); }
 .menuBtn:hover::before, .menuBtn:focus-visible::before, .menuBtn:active::before { content: "❧"; position: absolute; left: -.2em; transform: translateX(-100%) scaleX(-1); color: var(--blood); }
 .menuBtn:active { color: #fff; text-shadow: 0 0 .5em var(--blood-glow), 0 0 1.2em var(--blood-glow); }
 .menuBtn em { font-family: "Fell", serif; font-style: italic; letter-spacing: .04em; color: var(--bone-dim); font-size: .8em; }
@@ -362,11 +363,13 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 .menuInner .menuBtn:hover::before { left: -.4em; }
 .menuList { margin-top: calc(var(--u)*3); }
 #menuTitle { font-size: calc(var(--u)*6.2); }
-.glitch { animation: titleDrift 7s ease-in-out infinite; }
-@keyframes titleDrift { 0%,100% { transform: translate(0,0); filter: blur(0); letter-spacing: .12em; }
-  45% { transform: translate(.15em, -.05em); filter: blur(calc(.6px * var(--blurK))); letter-spacing: .15em; }
-  50% { transform: translate(-.1em, .05em) skewX(-2deg); filter: blur(calc(1.4px * var(--blurK))); }
-  55% { transform: translate(0,0); filter: blur(0); } }
+/* the title drifts and slips: only transform and opacity move, so it costs the browser nothing per frame
+   (an animated blur or letter-spacing made the menu the slowest screen in the game) */
+.glitch { animation: titleDrift 7s ease-in-out infinite; will-change: transform, opacity; }
+@keyframes titleDrift { 0%,100% { transform: translate(0,0); opacity: 1; }
+  45% { transform: translate(.15em, -.05em) scaleX(1.02); opacity: .92; }
+  50% { transform: translate(-.1em, .05em) skewX(-2deg) scaleX(1.03); opacity: .78; }
+  55% { transform: translate(0,0); opacity: 1; } }
 
 /* night card (behind your closed eyes as you fall asleep; it snaps away with the jolt) */
 #nightCard { background: #000; transition: opacity .25s; }
@@ -374,7 +377,7 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 #nightCard .title { font-size: calc(var(--u)*7.5); }
 #nightCard.fade { opacity: 0; pointer-events: none; }
 .cardInner { animation: cardIn 2.4s ease-out both; }
-@keyframes cardIn { from { opacity: 0; filter: blur(calc(14px * var(--blurK))); letter-spacing: .5em; } to { opacity: 1; filter: blur(0); } }
+@keyframes cardIn { from { opacity: 0; filter: blur(calc(14px * var(--blurK))); transform: scale(1.12, 1); } to { opacity: 1; filter: blur(0); transform: none; } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* panels */
@@ -456,7 +459,7 @@ input[type=range] { width: 50%; accent-color: #b7a6ff; }
 #win .subtitle { color: #f0e2cc; text-shadow: 0 0 .3em #000; }
 #winStats { margin: .8em 0 .6em; font-size: calc(var(--u)*1.35); color: #e8d8c0; text-shadow: 0 0 .3em #000; }
 #win .menuBtn { text-shadow: 0 0 .3em #000, 0 0 .6em rgba(0,0,0,.8); }
-#win.wait .winBtns { visibility: hidden; } /* a moment after the slap, so a second fast tap can't press a button */
+#win.wait .winBtns, #dead.wait .deadBtns { visibility: hidden; } /* a moment after the slap or the scare, so a stray key or tap can't press a button */
 /* the credits after Night 5, rolling up over the morning */
 #credits { pointer-events: none; overflow: hidden; display: block;
   background: linear-gradient(90deg, rgba(14,8,6,0) 18%, rgba(14,8,6,.55) 35%, rgba(14,8,6,.55) 65%, rgba(14,8,6,0) 82%); }
@@ -548,7 +551,11 @@ input[type=range] { width: 50%; accent-color: #b7a6ff; }
   #captions { --capU: max(var(--u), calc(12px / var(--scale))); left: 16%; right: 16%; }
   #lucBox.lies #lucBar::after { width: max(2px, calc(2px / var(--scale))); margin-left: min(-1px, calc(-1px / var(--scale))); }
   #captions.cams { left: calc(var(--u)*3); right: calc(var(--u)*34); bottom: calc(var(--u)*3.4 + max(var(--u)*4.4, 48px / var(--scale))); }
-  #captions.cams.voice { left: calc(var(--u)*43); }
+  /* with the voice docked there is only a narrow gap left between it and the map: the three lanes stack into one
+     column there (each caption still shows its ‹ › side), so words never squeeze into slivers or onto the map */
+  #captions.cams.voice { left: calc(var(--u)*43); grid-template-columns: minmax(0, 1fr); gap: calc(var(--u)*.4); --capU: max(var(--u), calc(11px / var(--scale))); }
+  #captions.cams.voice > div { align-items: center; text-align: center; }
+  #captions.cams.voice .cap span { font-size: calc(var(--capU) * (1.1 + .3 * var(--v, 1))); }
   #hudNight, .lucLabel { font-size: max(calc(var(--u)*1.5), var(--t14)); }
   #lucEye { width: max(calc(var(--u)*2.9), calc(30px / var(--scale))); height: max(calc(var(--u)*1.45), calc(15px / var(--scale))); }
 

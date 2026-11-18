@@ -180,9 +180,17 @@
 
     /* first click: let the browser play sound at all */
     unlock() {
+      // (iPhone/iPad, Safari 16.4+: play even with the silent switch on, like a game should)
+      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* not allowed */ }
       this.resume();
-      if (!this.web) { // poke every element once so mobile browsers allow later playback
-        for (const k in this.pools) for (const a of this.pools[k]) { a.muted = true; const p = a.play(); if (p && p.then) p.then(() => { a.pause(); a.muted = false; a.currentTime = 0; }).catch(() => { a.muted = false; }); else a.muted = false; }
+      if (!this.web) { // poke every element once (muted) so mobile browsers allow later playback
+        for (const k in this.pools) for (const a of this.pools[k]) {
+          a.muted = true; a.poke = true;
+          // (no seeking here: rewinding an element that was just paused made its first real play stall after 0.2 s)
+          const done = () => { a.muted = false; if (a.poke) { a.poke = false; a.pause(); } };
+          const p = a.play();
+          if (p && p.then) p.then(done, done); else done();
+        }
       }
     },
     /* make sure a paused (suspended) audio context is running again */
@@ -268,6 +276,7 @@
         if (pool.length < 4) { a = this._el(name); pool.push(a); } else { a = pool.shift(); pool.push(a); }
       }
       try { a.currentTime = 0; } catch (e) { /* not ready */ }
+      a.poke = false; a.muted = false; // (a real play: unlock's poke must not pause it)
       a.loop = false; a.playbackRate = o.rate; a.volume = this._htmlVol(o.vol, o.music);
       this._playEl(a);
       return { el: a, stop() { a.pause(); } };
@@ -289,7 +298,9 @@
     stopLoop(key, fade) { const L = this.loops[key]; if (L) { L.target = 0; L.fade = fade == null ? 0.5 : fade; } },
     /* stop every loop whose key starts with prefix (e.g. 'presence:') */
     stopLoops(prefix, fade) { for (const k in this.loops) if (k.indexOf(prefix) === 0) this.stopLoop(k, fade); },
-    killLoops() { for (const k in this.loops) { const L = this.loops[k]; L.target = 0; L.vol = 0; this._stopH(L); } },
+    /* stop a loop right now, with no fade (stopLoop's fade needs the frame loop, which a hidden tab doesn't run) */
+    cutLoop(key) { const L = this.loops[key]; if (L) { L.target = 0; L.vol = 0; this._stopH(L); } },
+    killLoops() { for (const k in this.loops) this.cutLoop(k); },
     stopAll() {
       this.killLoops();
       this.paused = false; this.held = [];
@@ -582,8 +593,8 @@
 
   /* the pinch and held-door settings with every number filled in (config.js can leave any out) */
   function pinchCfg() {
-    const p = Object.assign({ amount: 4, cooldown: 45, lowBonus: 2, highPenalty: 0.25 }, CFG.pinch || {});
-    p.cooldown = Math.max(1, +p.cooldown || 45);
+    const p = Object.assign({ amount: 3, cooldown: 60, lowBonus: 2, highPenalty: 0.25 }, CFG.pinch || {});
+    p.cooldown = Math.max(1, +p.cooldown || 60);
     return p;
   }
   function strainCfg() {
@@ -1328,6 +1339,25 @@
     c = makeCanvas(4, 4); x = c.getContext('2d');
     x.fillStyle = 'rgba(0,0,0,.35)'; x.fillRect(0, 0, 4, 2);
     Art.scan = c;
+    // the cameras' scanlines and vignette, baked into one picture (one draw a frame instead of a pattern fill + a draw)
+    c = makeCanvas(W, H); x = c.getContext('2d');
+    x.fillStyle = x.createPattern(Art.scan, 'repeat'); x.fillRect(0, 0, W, H);
+    x.drawImage(Art.vignette, 0, 0);
+    Art.camOver = c;
+    // the red edge of danger: made once, then drawn as strong as the danger is (a small one, stretched: it's soft anyway)
+    c = makeCanvas(320, 180); x = c.getContext('2d');
+    let rg = x.createRadialGradient(160, 90, 180 * 0.35, 160, 90, 180);
+    rg.addColorStop(0, 'rgba(150,0,20,0)'); rg.addColorStop(1, 'rgba(150,0,20,1)');
+    x.fillStyle = rg; x.fillRect(0, 0, 320, 180);
+    Art.danger = c;
+    // the menu's drifting fog: one soft blob per colour, drawn big
+    Art.fog = ['rgba(80, 60, 160, .14)', 'rgba(120, 30, 60, .16)'].map((col) => {
+      const b = makeCanvas(128, 128), bx2 = b.getContext('2d');
+      rg = bx2.createRadialGradient(64, 64, 0, 64, 64, 64);
+      rg.addColorStop(0, col); rg.addColorStop(1, 'rgba(0,0,0,0)');
+      bx2.fillStyle = rg; bx2.fillRect(0, 0, 128, 128);
+      return b;
+    });
     c = makeCanvas(32, 32); x = c.getContext('2d');
     const gg = x.createRadialGradient(16, 16, 0, 16, 16, 16);
     gg.addColorStop(0, 'rgba(255,255,255,1)'); gg.addColorStop(1, 'rgba(255,255,255,0)');
@@ -1379,7 +1409,7 @@
     tickPh: 0,                          // the ticking clock's phase: a new tick at every whole number (see clockTick)
     hush: false,                        // Lucidity zero: the clock has stopped and every sound is gone
     // waking up (states 'waking' -> 'morning' -> 'win'): wakeT counts from 6 AM
-    wakeT: 0, wakeView: 'office', wakeClear: false, wakePan: 0, frozen: [], winWait: 0, slapT: 0, finale: null,
+    wakeT: 0, wakeView: 'office', wakeClear: false, wakePan: 0, frozen: [], winWait: 0, deadWait: 0, slapT: 0, finale: null,
     voice: { active: false, beats: [], typing: false, stay: false }, // the dream voice (see startVoice)
     // the first-night lesson (see LESSON): the step it is on; did: what you have done since that step began
     lesson: null, did: {}, practice: false,
@@ -1410,6 +1440,7 @@
       this.level = 0; this.boost = 0;
       this.timer = (def.moveEvery || 5) * rand(0.8, 1.2);
       this.linger = 0; this.alerted = false; this.seen = false; this.breathT = 0;
+      this.hurry = false; // a pinch with it breathing at an open door: it doesn't wait for its next move (see walkerHear)
       this.doorT = 0;     // seconds at the door it is standing at
       this.breathed = false; // has it breathed at that door yet? (it must before it can come in)
       this.watched = 0;   // seconds you have been staring at it on a camera
@@ -1622,7 +1653,7 @@
     const trick = brainOf(m).stepSide; // (a trickster's footsteps come from the wrong side)
     if (isDoor(next)) {
       const side = next.slice(5);
-      m.state = 'door'; m.door = side; m.room = null; m.seen = false; m.doorT = 0; m.breathed = false;
+      m.state = 'door'; m.door = side; m.room = null; m.seen = false; m.doorT = 0; m.breathed = false; m.hurry = false;
       m.linger = rand(m.def.waitAtDoor[0], m.def.waitAtDoor[1]);
       m.breathT = rand(0.6, 1.6); // (its first breath: it can't come in before that, see walkerMove)
       logStory({ kind: 'reach', side, who: m.id });
@@ -1690,8 +1721,11 @@
   function walkerHear(m, kind, radius) {
     if (kind !== 'pinch') return;
     if (m.state === 'roam' && doorDist(m.def, m.room) <= radius) stepToward(m); // (stepToward shakes a camera that is watching)
-    else if (m.state === 'door') { m.linger = Math.min(m.linger, 0.8); m.alerted = true; }
-    else m.alerted = true;
+    else if (m.state === 'door') {
+      m.linger = Math.min(m.linger, 0.8); m.alerted = true;
+      // you pinched while it BREATHED at an OPEN door: it comes in the moment it may (still never before minWarning)
+      if (m.breathed && !G.doors[m.door].closed) m.hurry = true;
+    } else m.alerted = true;
   }
   /* you are watching it on a camera right now */
   const watchedNow = (m) => G.cams.up && G.cams.lost <= 0 && m.state === 'roam' && m.room === G.cams.cur;
@@ -1817,7 +1851,7 @@
     setHtml($('#cardNight'), null, numify(endless ? 'Endless Dream' : 'Night ' + n));
     setHtml($('#cardTime'), null, numify('12:00 AM' + (G.practice ? ' · a practice dream' : G.lighter ? ' · a lighter dream' : '')));
     $('#nightCard').classList.remove('fade');
-    if (!retry) Sound.play('breathing', { vol: 0.25, lowpass: 600, rate: 0.8 }); // your own sleepy breath
+    G.sleepBreath = retry ? null : Sound.play('breathing', { vol: 0.25, lowpass: 600, rate: 0.8 }); // your own sleepy breath
   }
   /* the HUD back to normal and hidden (between nights) */
   function resetHud() {
@@ -1860,6 +1894,7 @@
     card.classList.add('fade');
     G.state = 'night'; G.settle = 1.2;
     Sound.stopLoop('clock_tick', 0.3);
+    if (G.sleepBreath) { G.sleepBreath.stop(0.4); G.sleepBreath = null; } // (a skipped intro: no uncaptioned breath in the night)
     if (!G.joltPlayed) { // (the real jolt sound already started a moment ago; its stand-in is a deep, muffled bang)
       G.joltPlayed = true;
       Sound.playAny(['hypnic_jolt'], { vol: 0.9 }) || Sound.play('door_bang', { rate: 0.55, lowpass: 260, vol: 0.8 });
@@ -2357,7 +2392,11 @@
     $('#deadTitle').textContent = G.killer ? (G.killer.def.name.toUpperCase() + ' FOUND YOU') : 'IT FOUND YOU';
     showRecap(r);
     setCls($('#dLighter'), 'hidden', !story || G.lighter || save.deaths[G.night] < LIGHTER.deaths);
+    // the buttons wait a moment (like the morning's), so a key or tap still on its way from the scare presses nothing
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    G.deadWait = RECAP.buttons;
     showScreen('#dead');
+    $('#dead').classList.add('wait');
   }
 
   /* ------------------------------------------------------------------ */
@@ -2365,12 +2404,12 @@
   /*  (from the night's story, see logStory) and gives the tip for      */
   /*  exactly that. A Lucidity death shows where your Lucidity went.    */
   /* ------------------------------------------------------------------ */
-  const RECAP = { cps: 25, wait: 0.9 }; // wait: the title lands first, then the words come
+  const RECAP = { cps: 25, wait: 0.9, buttons: 1.1 }; // wait: the title lands first, then the words come; buttons: when they appear
   const TIPS = {
     cams: 'When you hear breathing, drop the cameras and check your doors.',
     pinch: 'Never pinch with breathing at an open door.',
     opened: 'It was still out there when you opened the door. Wait for the BANG, then open it.',
-    stare: 'You stared at it. It likes that.',
+    stare: 'You stared at it on the cameras, and it stepped closer. It likes that. Look away, and drop the cameras when you hear breathing.',
     gasp: 'Your door ran out of breath and opened by itself. Let your doors rest when nothing is there.',
     light: 'It always breathes before it comes in. Check that light.',
     saw: 'Your light found it. Shut that door right away!',
@@ -2410,7 +2449,8 @@
     let inAt = -1;
     for (let i = log.length - 1; i >= 0; i--) if (log[i].kind === 'in' && (!K || log[i].who === K)) { inAt = i; break; }
     if (inAt < 0) { // (no visit on record: only the last things it did)
-      const last = log.filter((e) => e.who === K && e.kind !== 'far' && e.kind !== 'whisper').slice(-3);
+      const last = log.filter((e) => e.who === K && e.kind !== 'far' && e.kind !== 'whisper')
+        .filter((e, i, a) => !i || storyLine(e) !== storyLine(a[i - 1])).slice(-3); // (the same thing twice in a row is told once)
       return { lines: last.map((e) => ({ t: e.t, s: storyLine(e) })), tip: TIPS.other };
     }
     const IN = log[inAt], side = IN.side;
@@ -2428,11 +2468,14 @@
     const neverLit = !(IN.lastLit >= reachT); // its whole visit, that doorway stayed dark
     const breaths = visit.filter((e) => e.kind === 'breath' && e.who === IN.who);
     const askT = (breaths[breaths.length - 1] || warn).t; // when you should have looked
-    const key = opened || pinched || (neverLit ? { t: askT, s: `you never checked the ${String(side).toUpperCase()} light` } : null)
-      || found || gasp || (IN.camsUp ? { t: askT, s: 'you were watching the cameras' } : null);
-    const lines = [warn, key, IN].filter((e, i, a) => e && a.indexOf(e) === i).map((e) => ({ t: e.t, s: e.s || storyLine(e) }));
-    const tip = IN.camsUp ? TIPS.cams : pinched ? TIPS.pinch : opened ? TIPS.opened : lunge ? TIPS.stare
-      : gasp ? TIPS.gasp : warn.trick ? TIPS.trick : neverLit ? TIPS.light : found ? TIPS.saw : TIPS.other;
+    // the moment that mattered most: what you did, then what the dream did, then what you didn't do
+    const key = opened || pinched || lunge || gasp || (neverLit ? { t: askT, s: `you never checked the ${String(side).toUpperCase()} light` } : null)
+      || found || (IN.camsUp ? { t: askT, s: 'you were watching the cameras' } : null);
+    // in the order they happened (at the same moment, a lunge comes before what it led to, and coming in is last)
+    const order = (a, b) => (a.t - b.t) || ((b.kind === 'lunge') - (a.kind === 'lunge')) || ((a === IN) - (b === IN));
+    const lines = [warn, key, IN].filter((e, i, a) => e && a.indexOf(e) === i).sort(order).map((e) => ({ t: e.t, s: e.s || storyLine(e) }));
+    const tip = pinched ? TIPS.pinch : opened ? TIPS.opened : lunge ? TIPS.stare : gasp ? TIPS.gasp : IN.camsUp ? TIPS.cams
+      : warn.trick ? TIPS.trick : neverLit ? TIPS.light : found ? TIPS.saw : TIPS.other;
     return { lines, tip };
   }
   /* your Lucidity ran out: when, where it went (doors / cameras / light / just being asleep), and a tip for the biggest */
@@ -2469,6 +2512,10 @@
     });
   }
   function updateDead(dt) {
+    if (G.deadWait > 0 && (G.deadWait -= dt) <= 0) { // the buttons are ready: Enter now means "Dream again"
+      $('#dead').classList.remove('wait');
+      const b = $('#dead').querySelector('button:not(.hidden)'); if (b) b.focus({ preventScroll: true });
+    }
     const R = G.recap;
     if (!R || R.done || (R.wait -= dt) > 0) return;
     const before = Math.floor(R.shown);
@@ -2511,8 +2558,11 @@
       delete save.deaths[G.night]; // ("Dream lighter" waits for three new deaths)
       writeSave();
     }
+    G.state = 'waking'; G.wakeT = 0; G.later = []; G.lies = []; // (first, so whatever stops now knows the night is over)
+    // the monitor: one on its way up or down snaps to where it was going; on CAM 7 (your own room) it drops at once
+    const C = G.cams;
+    if (C.up && C.cur !== YOU_CAM.id) C.t = 1; else { C.up = false; C.t = 0; }
     resetDirector(false);
-    G.state = 'waking'; G.wakeT = 0; G.later = []; G.lies = [];
     Captions.clear();
     G.wakeClear = G.powerOut; // saved at Lucidity zero: no pillow in the way, it rings loud and clear
     G.wakePan = clockPan();
@@ -2521,7 +2571,7 @@
     if (G.voice.active) endVoice();
     Sound.killLoops();
     // whatever you could see freezes, then melts away
-    G.wakeView = G.cams.t >= 1 ? 'cams' : 'office';
+    G.wakeView = C.t >= 1 ? 'cams' : 'office';
     G.frozen = G.monsters.filter((m) => G.wakeView === 'cams'
       ? m.state === 'roam' && m.room === G.cams.cur && G.cams.lost <= 0
       : m.state === 'door' && G.doors[m.door].light && !G.powerOut);
@@ -2657,6 +2707,7 @@
     if (G.state === 'waking') { enterMorning(); return true; }
     if (G.state === 'morning') { if (G.wakeT >= WAKE.open + WAKE.listen) slapAlarm(); return true; }
     if (G.state === 'win' && G.finale) { endFinale(); return true; }
+    if (G.state === 'dead' && G.deadWait > 0) return true; // (a tap left over from the scare)
     if (G.state === 'dead' && G.recap && !G.recap.done) { finishRecap(); return true; } // a click shows the whole recap
     return false;
   }
@@ -2932,10 +2983,11 @@
     hide(ghostCam());
     document.querySelectorAll('#camLinks .ghostLink').forEach((l) => l.classList.remove('on'));
     delete camById._you;
+    const night = G.state === 'night'; // (at 6 AM it just goes: no static over the waking)
     if (G.cams.cur === YOU_CAM.id) { // the picture cuts back to the first camera
       G.cams.cur = CFG.cameras[0].id; updateCamUi();
-      if (G.cams.up) camDisrupt();
-    } else if (Y && Y.stage === 2 && G.cams.up) camDisrupt();
+      if (G.cams.up && night) camDisrupt();
+    } else if (Y && Y.stage === 2 && G.cams.up && night) camDisrupt();
   }
   /* switching cameras moves CAM 7 along (see switchCam) */
   function youCamSwitch(from, to) {
@@ -3233,6 +3285,10 @@
       if (G.powerOut || G.inside || G.grace > 0) continue;
       // a shut door wins: it doesn't camp there for ages, tempting you to hold your breath
       if (m.state === 'door' && G.doors[m.door].closed && m.linger <= 0 && m.doorT > giveUp) { monsterMove(m, true); continue; }
+      if (m.hurry) { // it heard your pinch at its open door
+        if (m.state !== 'door' || G.doors[m.door].closed) m.hurry = false; // (shut in time: it just bangs at its next chance)
+        else if (m.linger <= 0) { monsterMove(m); continue; } // (walkerMove still keeps the promise: breath first, minWarning)
+      }
       m.timer -= dt;
       if (m.timer <= 0) {
         m.timer += (m.def.moveEvery || 5) * rand(0.85, 1.15);
@@ -3310,6 +3366,7 @@
   const canvas = $('#screen'), ctx = canvas.getContext('2d');
   const buf = makeCanvas(W, H), bx = buf.getContext('2d');
   const bloom = makeCanvas(160, 90), blx = bloom.getContext('2d');
+  let bloomN = 0; // frames since the bloom started (it is refreshed every third one)
 
   function drawCover(c, img, x, y, w, h) {
     const s = Math.max(w / img.width, h / img.height);
@@ -3600,8 +3657,7 @@
     const g = c.createLinearGradient(0, ry - 60, 0, ry + 60);
     g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,.06)'); g.addColorStop(1, 'rgba(255,255,255,0)');
     c.fillStyle = g; c.fillRect(0, ry - 60, W, 120);
-    c.fillStyle = c.createPattern(Art.scan, 'repeat'); c.fillRect(0, 0, W, H);
-    c.drawImage(Art.vignette, 0, 0);
+    c.drawImage(Art.camOver, 0, 0); // scanlines + vignette
     c.restore();
     // monitor frame
     c.strokeStyle = 'rgba(0,0,0,.9)'; c.lineWidth = 40; c.strokeRect(0, 0, W, H);
@@ -3642,18 +3698,18 @@
       c.fillStyle = 'rgba(255,255,255,.03)'; c.fillRect(cx + 30 * k, cy + 40 * k, cw - 60 * k, 8 * k); // a seam in the leather
     }
     c.restore();
-    // look back a second time: it is standing right behind you (a lie: frozen, violet, breathing backwards)
-    if (Y.stage === 2 && Y.lie) drawLie(c, Y.lie, box, { x: 0.36, y: 1.22, h: 1.3 }, 0);
+    // look back a second time: it is standing right behind you, looming over your shoulder (a lie: frozen, violet,
+    // breathing backwards). It stays to one side, so your head and chair still say "that's you"
+    if (Y.stage === 2 && Y.lie) drawLie(c, Y.lie, box, { x: 0.3, y: 1.1, h: 0.95 }, 0);
   }
 
+  let menuShade = null; // (the dark edge between the menu and the monster: one gradient, made once)
   function drawMenuScene(c) {
     c.fillStyle = '#05030a'; c.fillRect(0, 0, W, H);
     // drifting fog
     for (let i = 0; i < 5; i++) {
       const fx = W * (0.5 + 0.45 * Math.sin(G.t * 0.05 + i * 1.7)), fy = H * (0.5 + 0.35 * Math.cos(G.t * 0.07 + i * 2.3));
-      const g = c.createRadialGradient(fx, fy, 0, fx, fy, 520);
-      g.addColorStop(0, i % 2 ? 'rgba(120, 30, 60, .16)' : 'rgba(80, 60, 160, .14)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-      c.fillStyle = g; c.fillRect(0, 0, W, H);
+      c.drawImage(Art.fog[i % 2], fx - 520, fy - 520, 1040, 1040);
     }
     const def = CFG.monsters[0];
     if (def && Art.monsters[def.id]) {
@@ -3670,9 +3726,8 @@
         c.restore();
       }
       drawSprite(c, A.soft[fi], box, { x: 0.5, y: 1.08, h: 1.02 }, alpha);
-      const g = c.createLinearGradient(W * 0.4, 0, W, 0);
-      g.addColorStop(0, 'rgba(5,3,10,1)'); g.addColorStop(0.25, 'rgba(5,3,10,0)');
-      c.fillStyle = g; c.fillRect(W * 0.4, 0, W * 0.6, H);
+      if (!menuShade) { menuShade = c.createLinearGradient(W * 0.4, 0, W, 0); menuShade.addColorStop(0, 'rgba(5,3,10,1)'); menuShade.addColorStop(0.25, 'rgba(5,3,10,0)'); }
+      c.fillStyle = menuShade; c.fillRect(W * 0.4, 0, W * 0.6, H);
     }
   }
 
@@ -3984,9 +4039,10 @@
     ctx.globalAlpha = ghost;
     // the first moment of a jumpscare tears the picture sideways in a few bands (Dream effects Full only)
     const tear = st === 'jumpscare' && G.scare && G.scare.tear.length && G.jumpT < 0.18 ? G.scare.tear : null, tk = tear ? 1 - G.jumpT / 0.18 : 0;
-    if (warp < 0.3 && !tear) ctx.drawImage(buf, 0, 0);
+    // "Low" is also the lighter mode for slower devices: no wavy strips and no bloom (the shake and ghosting stay calm)
+    if ((warp < 1 || fx !== 'full') && !tear) ctx.drawImage(buf, 0, 0);
     else {
-      const SH = 6;
+      const SH = tear ? 6 : clamp(Math.floor(40 / warp), 6, 24); // (taller strips while it barely wobbles: neighbours stay within ~1 px)
       for (let y = 0; y < H; y += SH) {
         let dx = Math.sin(y * 0.011 + G.t * 1.6) * warp + Math.sin(y * 0.037 - G.t * 0.8) * warp * 0.35;
         if (tear) for (const b of tear) if (y >= b.y0 && y < b.y1) dx += b.dx * tk;
@@ -3994,8 +4050,8 @@
       }
     }
     ctx.globalAlpha = 1;
-    if (fx !== 'off') {
-      blx.clearRect(0, 0, 160, 90); blx.drawImage(buf, 0, 0, 160, 90);
+    if (fx === 'full') {
+      if (++bloomN % 3 === 1) { blx.clearRect(0, 0, 160, 90); blx.drawImage(buf, 0, 0, 160, 90); } // (a soft glow: every third frame is plenty)
       ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.16;
       ctx.drawImage(bloom, 0, 0, W, H);
       ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
@@ -4003,9 +4059,8 @@
     ctx.globalAlpha = vignette; ctx.drawImage(Art.vignette, 0, 0); ctx.globalAlpha = 1;
     if (G.danger > 0.05 && (st === 'night')) {
       const pulse = 0.5 + 0.5 * Math.sin(G.t * (4 + G.danger * 5)) * fxMul(); // a slow pulse; steady with effects Off
-      const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H);
-      g.addColorStop(0, 'rgba(150,0,20,0)'); g.addColorStop(1, `rgba(150,0,20,${G.danger * 0.45 * (0.5 + pulse * 0.5)})`);
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = clamp(G.danger * 0.45 * (0.5 + pulse * 0.5), 0, 1);
+      ctx.drawImage(Art.danger, 0, 0, W, H); ctx.globalAlpha = 1;
     }
     ctx.restore();
     if (DEV) Dev.overlay(ctx); // (the art helper: which file a stand-in picture is waiting for, the jumpscare focus)
@@ -4221,7 +4276,7 @@
   function showScreen(sel) {
     hideScreens(); show($(sel));
     // screens you reach mid-game get keyboard focus, so Enter picks the obvious button
-    if (sel === '#dead' || sel === '#pause') { // (#win focuses its first button once the buttons appear, see updateWin)
+    if (sel === '#pause') { // (#win and #dead focus their first button once their buttons appear: updateWin, updateDead)
       const b = $(sel).querySelector('button:not(.hidden):not([disabled])');
       if (b) b.focus({ preventScroll: true });
     }
@@ -4401,6 +4456,7 @@
     if ((k === ' ' || k === 'Spacebar') && (playing || scene || G.state === 'boot')) e.preventDefault(); // elsewhere Space presses buttons
     if (scene && k === 'Enter') e.preventDefault();
     if (e.repeat && (k === 'Enter' || k === ' ') && (G.state === 'win' || G.state === 'dead')) e.preventDefault(); // a key held through the slap or the scare presses nothing
+    if ((k === 'Enter' || k === ' ') && ((G.state === 'dead' && G.deadWait > 0) || (G.state === 'win' && G.winWait > 0))) { e.preventDefault(); return; } // (no buttons yet)
     if (e.repeat) return;
     if (G.state === 'boot' && (k === 'Enter' || k === ' ')) { bootGo(); return; }
     if (DEV && Dev.key(k)) { e.preventDefault(); return; } // (the art helper's keys: see js/devtools.js)
@@ -4426,10 +4482,15 @@
   });
   window.addEventListener('keyup', (e) => { keys[e.key] = false; });
 
+  /* another tab: the night pauses; anywhere else the sound holds its breath until you come back
+     (a hidden tab runs no frames, so nothing could fade out or stop by itself) */
+  let tabHush = false;
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) return;
-    if (G.state === 'night' || G.state === 'asleep') pauseGame(true);
-    else if (G.state === 'waking' || G.state === 'morning') slapAlarm(); // don't leave an alarm ringing in a hidden tab
+    if (!document.hidden) { if (tabHush) { tabHush = false; if (!G.paused) Sound.pauseAll(false); } return; }
+    if (G.state === 'night' || G.state === 'asleep') { pauseGame(true); return; }
+    if (G.state === 'boot' || G.paused) return;
+    if (G.state === 'waking' || G.state === 'morning') { slapAlarm(); Sound.cutLoop('wake'); } // no alarm ringing in a hidden tab
+    tabHush = true; Sound.pauseAll(true);
   });
 
   function bind(sel, fn) {
@@ -4498,7 +4559,7 @@
   }));
 
   function backFromSub() {
-    if (returnTo === '#pause' && G.state === 'night') { showScreen('#pause'); returnTo = '#menu'; return; }
+    if (returnTo === '#pause' && G.paused) { showScreen('#pause'); returnTo = '#menu'; return; } // (paused at night or while falling asleep)
     returnTo = '#menu';
     refreshMenu(); showScreen('#menu');
   }
@@ -4566,6 +4627,8 @@
     G.ready = true;
     window.__oopsReady = true; // (from now on a problem is the game's to report, not the "Oops" screen's)
     $('#bootMsg').textContent = bootNote();
+    // an iPhone has no fullscreen for pages (only "Add to Home Screen"): no button that does nothing
+    if (!(document.fullscreenEnabled || document.webkitFullscreenEnabled)) hide($('#sFull'));
     $('#bootGo').textContent = TAP + ' to fall asleep';
     show($('#bootGo'));
     $('#boot').addEventListener('click', bootGo);
@@ -4573,8 +4636,15 @@
   }
   /* sound slots the game copes without (each one has a stand-in sound) */
   const OPTIONAL_SOUNDS = ['clock_tick', 'type_key', 'reality_snap', 'redhorn_click', 'door_strain', 'hypnic_jolt', 'water_drip'];
-  /* the boot screen's small print: what is missing or misspelt (with ?dev in full; otherwise one hint, for the artist) */
+  /* an iPhone or iPad whose browser can't play past the silent switch (older than Safari 16.4) */
+  const IOS_SILENT = (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) && !navigator.audioSession;
+  /* the boot screen's small print */
   function bootNote() {
+    const note = artNote();
+    return IOS_SILENT ? 'no sound? flip the silent switch off' + (note ? ' · ' + note : '') : note;
+  }
+  /* what is missing or misspelt (with ?dev in full; otherwise one hint, for the artist) */
+  function artNote() {
     const miss = Array.from(Sound.missing), must = miss.filter((n) => OPTIONAL_SOUNDS.indexOf(n) < 0);
     const frames = Art.files.filter((f) => /frame/.test(f.slot) && !f.opt && f.path && !f.w).length;
     if (!DEV) return must.length || configWarnings.length || frames ? 'something needs a look: add ?dev to the address to see what' : '';

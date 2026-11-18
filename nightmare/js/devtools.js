@@ -104,7 +104,7 @@
     if (G.cams.up) return G.devGhost ? 'SEE-THROUGH MONSTER: click where its FEET go on this camera. Wheel or +/−: size. R: flip.'
       : 'G: a see-through monster to place on this camera.';
     return G.devGhost ? 'SEE-THROUGH MONSTER: turn a light ON (A or D), then click where its FEET go in that doorway. Wheel or +/−: size. R: flip.'
-      : 'Light OFF: drag a green door box by its edges or corners (or its middle to move it). Click anywhere else in the room for that spot\'s x and y.';
+      : 'Light OFF: drag a green door box by its edges or corners (or its middle to move it). Click anywhere else in the room for a clock or lamp spot; drag a box for the window.';
   }
   function warnHtml() {
     const w = GM.configWarnings.map((x) => '• ' + esc(x));
@@ -168,7 +168,7 @@
       const r = { slot: f.slot, path: f.path, found: f.w > 0, w: f.w, h: f.h, want: wantFor(f.slot), opt: f.opt, warn: [] };
       const name = fileName(f.path), size = `${f.w}×${f.h}`;
       if (!r.found) {
-        if (/frame/.test(f.slot) && f.path) r.warn.push(`${name} is missing, so this frame is skipped.`);
+        if (/frame/.test(f.slot) && f.path) r.warn.push(`${name} wasn't found at ${f.path}, so this frame is skipped. Check the name and the folder exactly (capital letters count).`);
         rows.push(r); continue;
       }
       if (f.slot === 'office.image' && f.w / f.h < 2.2) {
@@ -187,6 +187,11 @@
     for (const k in byMonster) {
       const list = byMonster[k].filter((r) => r.found), sizes = [...new Set(list.map((r) => r.w + '×' + r.h))];
       if (sizes.length > 1) list[0].warn.push(`${k.split('|')[0]}'s ${k.split('|')[1]}s are not all the same size (${sizes.join(', ')}): it will jump around. Use the same canvas size for every frame.`);
+    }
+    for (const side of ['left', 'right']) { // (a square or 4:3 desk room is zoomed in: a tall doorway can stick out of the screen)
+      const d = GM.officeDoor(side);
+      if (d.y < -0.01 || d.y + d.h > 1.01) rows.push({ slot: side + ' doorway', path: '', found: true, warn: [`Your ${side} doorway is taller than what fits on screen, so its top and bottom are cut off. ` +
+        'Make the picture wider (about 2400×900), or the doorway shorter (drag its green box: its cut-off edges sit at the top and bottom of the screen).'] });
     }
     for (const def of CFG.monsters) { const s = bodyShift(def); if (s) rows.push({ slot: def.name + ' (moving)', path: '', found: true, info: s, warn: [] }); }
     for (const name of Object.keys(CFG.sounds || {})) {
@@ -214,7 +219,7 @@
     D.panel.querySelector('.dRows').innerHTML = rows.slice().sort((a, c) => rank(a) - rank(c)).map((r) => {
       const icon = r.warn.length ? '<i class="bad">!</i>' : r.info ? '<i class="info">i</i>' : r.found ? '<i class="ok">✓</i>' : '<i class="dim">–</i>';
       const what = r.sound ? '' : r.found ? (r.w ? ` ${r.w}×${r.h}` + (r.warn.length && r.want ? ` (best: ${r.want})` : '') : '')
-        : r.path ? ' not drawn yet: the game uses a stand-in' + (r.want ? ` (draw it ${r.want})` : '') : ' (empty: the built-in look)';
+        : r.path ? ' not found, so the game uses a stand-in. Not drawn yet' + (r.want ? ` (draw it ${r.want})` : '') + '? Or check the name and folder exactly (capital letters count).' : ' (empty: the built-in look)';
       const so = r.sound && !r.found ? (r.opt ? ' optional, not added yet' : ' MISSING') : '';
       return `<div>${icon} <b>${esc(r.slot)}</b> <span class="dim">${esc(fileName(r.path))}</span>${esc(what + so)}` +
         r.warn.concat(r.info ? [r.info] : []).map((w) => `<div class="why">${esc(w)}</div>`).join('') + '</div>';
@@ -243,8 +248,8 @@
     const t = D.target;
     if (!t) return;
     const id = monDef().id;
-    if (t.kind === 'pose') output(`Paste into config.js (monster "${id}", under poses:)`, poseLine(t.key, camPose()));
-    else output(`Paste into config.js (monster "${id}", under doorPose:)`, poseLine(t.key, doorPose(t.key)));
+    const where = t.kind === 'pose' ? 'poses' : 'doorPose', line = poseLine(t.key, t.kind === 'pose' ? camPose() : doorPose(t.key));
+    output(`Paste into config.js (monster "${id}", under ${where}:): REPLACE its old "${t.key}:" line (or add it if there is none). Two "${t.key}:" lines = the last one wins.`, line);
   }
   function resize(f) {
     const t = D.target;
@@ -264,10 +269,17 @@
     const d = CFG.office.doors[side], q = (k) => `${k}: "${d[k] || ''}"`;
     return `${side}:${side === 'left' ? '  ' : ' '}{ x: ${f3(d.x)}, y: ${f3(d.y)}, w: ${f3(d.w)}, h: ${f3(d.h)}, ${q('darkImage')}, ${q('litImage')}, ${q('closedImage')} },`;
   }
+  /* a door box as the helper draws it: a top or bottom that sticks out of the screen (a zoomed-in square desk room)
+     is pulled in to the screen's edge, so it can still be grabbed. cutT / cutB: that edge is really further out */
+  const SCREEN_EDGE = 6;
+  function shownBox(side) {
+    const b = GM.doorBox(side), y0 = Math.max(b.y, SCREEN_EDGE), y1 = Math.min(b.y + b.h, H - SCREEN_EDGE);
+    return { x: b.x, y: y0, w: b.w, h: Math.max(10, y1 - y0), cutT: b.y < y0, cutB: b.y + b.h > y1 };
+  }
   /* which part of a door box is under the pointer: { side, l, r, t, b } (edges) or { side, move } (inside) */
   function doorHit(p) {
     for (const side of ['left', 'right']) {
-      const b = GM.doorBox(side);
+      const b = shownBox(side);
       if (p.x < b.x - EDGE || p.x > b.x + b.w + EDGE || p.y < b.y - EDGE || p.y > b.y + b.h + EDGE) continue;
       const e = { side, l: Math.abs(p.x - b.x) <= EDGE, r: Math.abs(p.x - b.x - b.w) <= EDGE, t: Math.abs(p.y - b.y) <= EDGE, b: Math.abs(p.y - b.y - b.h) <= EDGE };
       if (e.l || e.r || e.t || e.b) return e;
@@ -297,9 +309,18 @@
     if (!A.own.closed) A.closed = GM.paintShutter(side);
     if (Art.officeMissing) Art.office = GM.paintOffice();
   }
+  /* a click in the desk room: ready-made clock: and lamp: lines for that spot (the clock keeps its own size) */
+  const picX = (sx) => (sx - GM.officeOriginX()) / G.officeW;
   function officeSpotLine(p) {
-    const nx = (p.x - GM.officeOriginX()) / G.officeW, ny = toPicY(p.y / H);
-    output('A spot in your desk room picture (for office.clock, window or lamp: x and y)', `x: ${f3(nx)}, y: ${f3(ny)}`);
+    const nx = f3(picX(p.x)), ny = f3(toPicY(p.y / H)), r = f3(((CFG.office || {}).clock || {}).r || 0.03);
+    output('A spot in your desk room. Paste ONE of these under office: (replace the old clock: or lamp: line). For the window, drag a box instead.',
+      `clock: { x: ${nx}, y: ${ny}, r: ${r} },   // r: how big the clock's face is\nlamp:  { x: ${nx}, y: ${ny} },`);
+  }
+  /* a drag in empty desk room: a box for the window */
+  function windowLine(a, b) {
+    const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+    const x = picX(x0), w = (x1 - x0) / G.officeW, y = toPicY(y0 / H), h = (y1 - y0) / H * band().k;
+    output('Your window box. Paste it under office: (replace the old window: line).', `window: { x: ${f3(x)}, y: ${f3(y)}, w: ${f3(w)}, h: ${f3(h)} },`);
   }
 
   /* the jumpscare aim: the first jumpscare frame, as big as fits, with a crosshair on jumpscareFocus */
@@ -340,11 +361,11 @@
     }
   }
 
-  function down(p) {
+  function down(p, e) {
     if (D.jView) { // aim the jumpscare
       const r = jumpRect(), def = monDef();
       def.jumpscareFocus = { x: +f2(clamp((p.x - r.x) / r.w, 0, 1)), y: +f2(clamp((p.y - r.y) / r.h, 0, 1)) };
-      output(`Paste into config.js (monster "${def.id}": replace its jumpscareFocus line)`, `jumpscareFocus: { x: ${f2(def.jumpscareFocus.x)}, y: ${f2(def.jumpscareFocus.y)} },`);
+      output(`Paste into config.js (monster "${def.id}"): add it to its { … } block, or replace its jumpscareFocus line if it has one`, `jumpscareFocus: { x: ${f2(def.jumpscareFocus.x)}, y: ${f2(def.jumpscareFocus.y)} },`);
       return true;
     }
     if (G.cams.up) { // place its feet on this camera
@@ -362,15 +383,19 @@
       return true;
     }
     if (hit && !G.doors[hit.side].light) { // grab a door box
-      D.drag = Object.assign({ x0: p.x, y0: p.y, start: Object.assign({}, GM.officeDoor(hit.side)), moved: false }, hit);
+      const start = Object.assign({}, GM.officeDoor(hit.side)), sb = shownBox(hit.side);
+      if (hit.t && sb.cutT) { const bottom = start.y + start.h; start.y = sb.y / H; start.h = bottom - start.y; } // (a cut-off edge starts where you see it)
+      if (hit.b && sb.cutB) start.h = (sb.y + sb.h) / H - start.y;
+      D.drag = Object.assign({ x0: p.x, y0: p.y, start, moved: false }, hit);
       G.devDrag = true;
       return true;
     }
-    D.click = p; // a plain click in the room: its x and y (on release)
+    D.click = { x: p.x, y: p.y, mouse: !e || e.pointerType === 'mouse' }; // a plain click in the room: its spot (on release); a mouse drag: a window box
     return false;
   }
   function move(p) {
     if (D.drag) { dragDoor(p); return; }
+    if (D.click && D.click.mouse && playing() && !G.cams.up) D.click.to = p; // (dragging a window box; a finger drag looks around instead)
     if (playing() && !G.cams.up && !D.jView) { // the cursor shows what a press would grab
       const h = doorHit(p), lit = h && G.doors[h.side].light;
       $('#stage').style.cursor = !h || lit ? '' : h.move ? 'move' : (h.l || h.r) && (h.t || h.b) ? ((h.l && h.t) || (h.r && h.b) ? 'nwse-resize' : 'nesw-resize') : h.l || h.r ? 'ew-resize' : 'ns-resize';
@@ -380,11 +405,14 @@
     if (D.drag) {
       const g = D.drag;
       D.drag = null; G.devDrag = false;
-      if (g.moved) { repaintDoor(g.side); output('Paste into config.js, under office: doors: (it replaces the whole "' + g.side + ':" line)', doorLine(g.side)); }
+      if (g.moved) { repaintDoor(g.side); buildReport(); output('Paste into config.js, under office: doors: (it replaces the whole "' + g.side + ':" line)', doorLine(g.side)); }
       else officeSpotLine(p);
       return;
     }
-    if (D.click && playing() && !G.cams.up && Math.abs(p.x - D.click.x) < 6 && Math.abs(p.y - D.click.y) < 6) officeSpotLine(p);
+    if (D.click && playing() && !G.cams.up) {
+      if (Math.abs(p.x - D.click.x) < 6 && Math.abs(p.y - D.click.y) < 6) officeSpotLine(p);
+      else if (D.click.mouse) windowLine(D.click, p);
+    }
     D.click = null;
   }
   function wheel(e) {
@@ -407,19 +435,32 @@
     if (A) GM.drawSprite(c, A.soft[Math.floor(G.t * (def.fps || 4)) % A.soft.length], box, GM.doorPoseOf({ def }, side), 0.7);
   }
   /* the green door box, its numbers and its corner handles */
-  function doorFrame(c, side, box) {
-    const d = CFG.office.doors[side], grabbed = D.drag && D.drag.side === side;
+  function doorFrame(c, side) {
+    const d = CFG.office.doors[side], grabbed = D.drag && D.drag.side === side, box = shownBox(side);
     c.save(); c.strokeStyle = grabbed ? '#bfffbf' : '#3f3'; c.lineWidth = grabbed ? 3 : 2; c.setLineDash([8, 6]);
     c.strokeRect(box.x, box.y, box.w, box.h); c.setLineDash([]);
     c.fillStyle = '#3f3';
     for (const [hx, hy] of [[box.x, box.y], [box.x + box.w, box.y], [box.x, box.y + box.h], [box.x + box.w, box.y + box.h]]) c.fillRect(hx - 5, hy - 5, 10, 10);
-    c.font = '22px VT323, monospace';
-    c.fillText(`${side} door  x:${f3(d.x)} y:${f3(d.y)} w:${f3(d.w)} h:${f3(d.h)}`, box.x + 4, box.y - 10);
+    c.fillStyle = '#ff6'; // a cut-off edge: arrows say "it goes on past the screen"
+    for (const [cut, y, dir] of [[box.cutT, box.y, -1], [box.cutB, box.y + box.h, 1]]) if (cut) for (let i = 1; i <= 3; i++) {
+      const ax = box.x + box.w * i / 4;
+      c.beginPath(); c.moveTo(ax - 13, y - dir * 22); c.lineTo(ax + 13, y - dir * 22); c.lineTo(ax, y - dir * 6); c.fill();
+    }
+    c.fillStyle = '#3f3'; c.font = '22px VT323, monospace';
+    const label = `${side} door  x:${f3(d.x)} y:${f3(d.y)} w:${f3(d.w)} h:${f3(d.h)}`;
+    if (box.cutT) { c.fillText(label, box.x + 8, box.y + box.h / 2); c.fillText('(cut off by the screen)', box.x + 8, box.y + box.h / 2 + 24); } // (the top is busy: label in the middle)
+    else c.fillText(label, box.x + 4, box.y - 10);
     c.restore();
   }
   /* on top of everything: the stand-in hint, and the jumpscare aim */
   function overlay(ctx) {
     const st = G.state;
+    if (st === 'night' && D.click && D.click.to && !G.cams.up) { // the window box you are dragging out
+      const a = D.click, b = a.to;
+      ctx.save(); ctx.strokeStyle = '#6cf'; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
+      ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+      ctx.restore();
+    }
     if (st === 'night' && !D.jView) {
       if (G.cams.t >= 1) {
         const cam = GM.camById[G.cams.cur];
@@ -495,10 +536,52 @@
 
   function error(err) { D.errors++; D.lastError = String(err && err.message || err); }
 
+  /* ------------------------------------------------------------------ */
+  /*  PASTED TWICE? config.js read as text: a room written twice in one  */
+  /*  poses: or doorPose: block. JavaScript quietly keeps the LAST one,   */
+  /*  so a new line pasted above the old one seems to do nothing.         */
+  /* ------------------------------------------------------------------ */
+  /* comments taken out and the insides of strings blanked (same length, so positions still match the file) */
+  function stripJs(src) {
+    let out = '', q = null;
+    for (let i = 0; i < src.length; i++) {
+      const ch = src[i], nx = src[i + 1];
+      if (q) {
+        if (ch === '\\') { out += '  '; i++; } else if (ch === q) { q = null; out += ch; } else out += ch === '\n' ? '\n' : ' ';
+      } else if (ch === '/' && nx === '/') { while (i < src.length && src[i] !== '\n') { out += ' '; i++; } i--; }
+      else if (ch === '/' && nx === '*') { const e = src.indexOf('*/', i + 2), end = e < 0 ? src.length : e + 2; out += src.slice(i, end).replace(/[^\n]/g, ' '); i = end - 1; }
+      else { if (ch === '"' || ch === "'" || ch === '`') q = ch; out += ch; }
+    }
+    return out;
+  }
+  function checkPastedTwice() {
+    if (location.protocol === 'file:' || !window.fetch) return; // (a browser won't read files from a file:// page)
+    fetch('js/config.js', { cache: 'no-store' }).then((r) => (r.ok ? r.text() : '')).then((src) => {
+      const t = stripJs(src), re = /\b(poses|doorPose)\s*:\s*\{/g;
+      let m;
+      while ((m = re.exec(t))) {
+        let depth = 1, i = m.index + m[0].length, top = '';
+        for (; i < t.length && depth > 0; i++) { const ch = t[i]; if (ch === '{') depth++; else if (ch === '}') depth--; else if (depth === 1) top += ch; }
+        const keys = top.match(/[A-Za-z_$][\w$]*(?=\s*:)/g) || [], twice = keys.filter((k, j) => keys.indexOf(k) !== j);
+        if (!twice.length) continue;
+        const idRe = /\bid\s*:\s*["']([^"']+)["']/g, before = src.slice(0, m.index);
+        let who = '?', idm;
+        while ((idm = idRe.exec(before))) who = idm[1]; // (the monster this block belongs to: the last id: above it)
+        const line = src.slice(0, m.index).split('\n').length;
+        for (const k of new Set(twice)) {
+          const msg = `Monster "${who}": its ${m[1]}: has "${k}:" twice (config.js line ${line}). The game only uses the LAST one, so delete the old line.`;
+          GM.configWarnings.push(msg); console.warn('[config.js] ' + msg);
+        }
+      }
+      lastWarn = ''; updatePanel();
+    }).catch(() => {});
+  }
+
   function booted() {
     if (D.panel) return;
     buildPanel();
     buildReport();
+    checkPastedTwice();
     updatePanel();
     setInterval(updatePanel, 120);
     console.log('[dev] art helper on. Missing sounds:', Array.from(Sound.missing));
@@ -506,5 +589,5 @@
 
   Object.assign(Dev, { inDoorway, doorFrame, camGhost, overlay, gallery, booted, error, key, down, move, up, wheel });
   if (G.ready) booted();
-  window.__dev = { D, buildReport, reload, doorLine, doorHit, bodyShift, opaqueBox, updatePanel, key };
+  window.__dev = { D, buildReport, reload, doorLine, doorHit, shownBox, bodyShift, opaqueBox, updatePanel, key, stripJs, checkPastedTwice };
 })();

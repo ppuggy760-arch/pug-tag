@@ -53,7 +53,8 @@ A green **ART HELPER** box appears. Players never see it.
 and sound `config.js` asks for:
 
 * ✓ found, with its size
-* – not drawn yet (the game uses a stand-in)
+* – not found, so the game uses a stand-in: either it isn't drawn yet, or its
+  name or folder isn't exactly the same as in `config.js` (capital letters count)
 * **!** something to look at, in plain words, for example:
   * "office.png is 1600×900. Make it wider (about 2400×900) so there is room to look around."
   * "cam3_parlor.png is 1000×1000: its edges will be cropped (use 16:9, like 1600×900)."
@@ -94,16 +95,23 @@ into `config.js`. Press **copy**, then paste it over the old line.
   doorways are. With the light **off**, drag a box's **edges or corners** to
   fit your doorway, or drag its **middle** to move it. Copy the `left:` or
   `right:` line it gives you and paste it over the old one in `office: doors:`.
-* **A spot in the desk room:** click anywhere else in the room to get its `x`
-  and `y` (for the clock, window and lamp, see part 4).
+* **A spot in the desk room:** click anywhere else in the room. You get a
+  ready `clock:` line and a ready `lamp:` line for that spot: paste the one you
+  want under `office:` (see part 4). **For the window, drag a box** around it
+  with the mouse instead, and paste the `window:` line it gives you.
 * **A monster on a camera:** press **G**, open the cameras and pick a room.
   Click where the monster's **feet** go. Make it bigger or smaller with the
-  wheel or **+ / −**, and flip it with **R**. Paste the line under `poses:`.
+  wheel or **+ / −**, and flip it with **R**. In the monster's `poses:`,
+  **replace** the old line for that room with the new one (or add it, if that
+  room has no line yet). If the same room is written twice, the game only uses
+  the **last** one, and the art helper warns you.
 * **A monster in a doorway:** press **G**, then turn a light **on** (A or D).
-  Click where its feet go in the doorway. Paste the line under `doorPose:`.
+  Click where its feet go in the doorway. In `doorPose:`, **replace** the old
+  `left:` or `right:` line with the new one.
   Keep it small enough that its whole body (horns too!) fits in the doorway.
 * **Jumpscare aim:** press **J** and click the part of the picture that should
-  rush at the player (usually the face). Paste the `jumpscareFocus` line.
+  rush at the player (usually the face). Add the `jumpscareFocus` line to the
+  monster's `{ … }` block (or replace its old one).
 
 **Onion skin.** In ?dev mode, *Extras* shows every frame of your monster at
 once, faint, each with a coloured box around it. If the boxes jump around, so
@@ -147,8 +155,11 @@ and only a part of it fits on the screen at once. In Procreate, pick
 
 If your picture is square or 4:3 (like an iPad canvas, 2048 × 2048 or
 2732 × 2048), the game still works: it zooms in so you can look around, and
-cuts off some of the top and bottom (keeping the doorways in view). The art
-checklist will tell you.
+cuts off some of the top and bottom. Only about the **middle half** of a square
+picture's height fits on the screen, so paint your doorways **shorter** there
+(they should fit in that middle half), or they get cut off too. The art
+checklist tells you when a doorway doesn't fit, and its green box shows yellow
+arrows on the edge that is cut off.
 
 **The doorways.** Paint your two doorways where you like, then tell the game
 where they are, under `office: doors:` in `config.js`:
@@ -185,7 +196,9 @@ Make `darkImage`, `litImage` and `closedImage` the same shape as their door box.
   it when a monster is close, and when Lucidity runs out something stands in it.
 * `lamp: { x, y }` — the middle of your desk lamp's light. Sometimes it breathes.
 
-Click on them in the art helper to read their numbers. If your room has no
+Click on the clock or the lamp in the art helper and it writes the whole
+`clock:` / `lamp:` line for you; drag a box around the window for the
+`window:` line. If your room has no
 clock, window or lamp, leave them out: the game then skips those effects.
 
 ---
