@@ -297,7 +297,7 @@
   const configWarnings = [];
   function warnCfg(msg) { configWarnings.push(msg); console.warn('[config.js] ' + msg); }
   const TOP_KEYS = ['title', 'subtitle', 'hourSeconds', 'lucidityDrain', 'endlessDrain', 'nights', 'endlessRules', 'pinch',
-    'doorStrain', 'office', 'cameras', 'monsters', 'sounds', 'dreamVoice', 'credits'];
+    'doorStrain', 'office', 'cameras', 'monsters', 'sounds', 'dreamVoice', 'credits', 'bedroom', 'fallAsleep', 'morning', 'finale'];
   const MONSTER_KEYS = ['id', 'name', 'description', 'frames', 'fps', 'jumpscareFrames', 'jumpscareFps', 'jumpscareFocus',
     'jumpscareSound', 'levels', 'hourBoost', 'moveEvery', 'waitAtDoor', 'start', 'path', 'retreat', 'poses', 'doorPose'];
   /* an unknown key is only reported when it looks like a misspelt known one */
@@ -436,7 +436,8 @@
   /* ------------------------------------------------------------------ */
   /*  ART: load pictures, or paint dreamy stand-ins when they're missing */
   /* ------------------------------------------------------------------ */
-  const Art = { office: null, officeMissing: true, doors: { left: {}, right: {} }, cams: {}, camMissing: {}, monsters: {}, noise: [], vignette: null, scan: null, dot: null };
+  const Art = { office: null, officeMissing: true, doors: { left: {}, right: {} }, cams: {}, camMissing: {}, monsters: {}, noise: [], vignette: null, scan: null, dot: null,
+    bedroomNight: null, bedroomBlur: [], bedroomMorning: null, bedroomMissing: true, evidence: {}, drawing: null };
 
   function loadImage(url) {
     return new Promise((res) => {
@@ -460,6 +461,10 @@
     }
     const camP = {};
     for (const c of CFG.cameras) camP[c.id] = job(loadImage(c.image));
+    const bed = CFG.bedroom || {};
+    const bedP = { image: job(loadImage(bed.image)), morning: job(loadImage(bed.morningImage)) };
+    const evP = {};
+    for (const n of [2, 3, 4]) evP[n] = job(loadImage(evidenceCfg(n).image));
     const monP = {};
     for (const m of CFG.monsters) {
       monP[m.id] = {
@@ -481,6 +486,7 @@
       Art.monsters[m.id] = { frames, jump, soft, sil: soft.map((f) => silhouette(f, '#05030a')), missing };
     }
 
+    Art.drawing = paintPinnedDrawing(); // the "he walks at night" drawing (desk-room wall, Night 3's morning)
     const office = await officeP;
     Art.officeMissing = !office;
     Art.office = office || paintOffice();
@@ -498,6 +504,13 @@
       Art.camMissing[c.id] = !im;
       Art.cams[c.id] = im || paintRoom(c);
     }
+    // your real bedroom: one picture, tinted dark blue for the night and warm for the morning
+    const bedImg = await bedP.image, bedMorning = await bedP.morning;
+    Art.bedroomMissing = !bedImg;
+    Art.bedroomNight = shadeCopy(bedImg || paintBedroom('night'), 'multiply', '#1a2346', 0.75);
+    Art.bedroomBlur = TOUCH ? [] : bakeBlurs(Art.bedroomNight, [2, 4, 7, 10]); // (phones darken instead of blurring: no need to keep them)
+    Art.bedroomMorning = bedMorning ? shadeCopy(bedMorning) : shadeCopy(bedImg || paintBedroom('morning'), 'overlay', '#ffb070', 0.25);
+    for (const n of [2, 3, 4]) Art.evidence[n] = await evP[n];
     paintFx();
   }
 
@@ -523,6 +536,9 @@
     }
     return byColor[color];
   }
+  /* can this browser blend with 'saturation' / 'overlay'? (older ones silently ignore unknown blend modes) */
+  function blendOk(op) { const x = makeCanvas(1, 1).getContext('2d'); x.globalCompositeOperation = op; return x.globalCompositeOperation === op; }
+  const SAT_OK = blendOk('saturation');
   const ghostCache = new WeakMap();
   /* the "dream lie" look: colour drained out, then a violet wash */
   function ghostOf(img) {
@@ -531,13 +547,35 @@
     c = makeCanvas(img.width, img.height);
     const x = c.getContext('2d');
     x.drawImage(img, 0, 0);
-    x.globalCompositeOperation = 'saturation';
-    if (x.globalCompositeOperation === 'saturation') { // older browsers ignore it; they get the wash only
-      x.fillStyle = '#888'; x.fillRect(0, 0, c.width, c.height);
+    if (SAT_OK) { // older browsers get the wash only
+      x.globalCompositeOperation = 'saturation'; x.fillStyle = '#888'; x.fillRect(0, 0, c.width, c.height);
       x.globalCompositeOperation = 'destination-in'; x.drawImage(img, 0, 0);
     }
     x.globalCompositeOperation = 'source-atop'; x.fillStyle = 'rgba(157,132,255,.35)'; x.fillRect(0, 0, c.width, c.height);
     ghostCache.set(img, c);
+    return c;
+  }
+  /* softer and softer copies of a picture (half size: a blurred picture needs no detail), baked once so falling
+     asleep never runs a blur filter while it plays. [] when the browser can't blur a canvas. */
+  function bakeBlurs(img, radii) {
+    const probe = makeCanvas(1, 1).getContext('2d');
+    if (!('filter' in probe)) return [];
+    return radii.map((b) => {
+      const c = makeCanvas(W / 2, H / 2), x = c.getContext('2d');
+      x.filter = `blur(${b / 2}px)`; x.drawImage(img, -8, -8, W / 2 + 16, H / 2 + 16); // (a little oversized: no dark rim at the edges)
+      return { b, img: c };
+    });
+  }
+  /* a 1600x900 copy of a picture (cover-fit), optionally with a colour blended over it (op: 'multiply', 'overlay' …) */
+  function shadeCopy(img, op, color, alpha) {
+    const c = makeCanvas(W, H), x = c.getContext('2d');
+    x.fillStyle = '#000'; x.fillRect(0, 0, W, H); // see-through bits of a picture stay dark, never show the last frame
+    drawCover(x, img, 0, 0, W, H);
+    if (op) {
+      const ok = blendOk(op);
+      x.globalCompositeOperation = ok ? op : 'source-over'; x.globalAlpha = ok ? alpha : alpha * 0.6;
+      x.fillStyle = color; x.fillRect(0, 0, W, H);
+    }
     return c;
   }
 
@@ -654,20 +692,8 @@
     x.fillText('WAKE UP', 0, 0); x.restore();
 
     // drawing of the monster pinned to the wall
-    const first = CFG.monsters[0] && Art.monsters[CFG.monsters[0].id];
-    const px = 1700, py = 190, pw = 190, ph = 230;
-    x.save(); x.translate(px + pw / 2, py + ph / 2); x.rotate(0.05);
-    x.fillStyle = '#d9cfb8'; x.fillRect(-pw / 2, -ph / 2, pw, ph);
-    if (first && first.frames[0]) {
-      x.globalAlpha = 0.85; x.filter = 'sepia(0.6) contrast(1.2)';
-      const f = first.frames[0], s = Math.min((pw - 20) / f.width, (ph - 40) / f.height);
-      x.drawImage(f, -f.width * s / 2, -ph / 2 + 10, f.width * s, f.height * s);
-      x.filter = 'none'; x.globalAlpha = 1;
-    }
-    x.fillStyle = '#2a1a10'; x.font = '20px "Special Elite", monospace'; x.textAlign = 'center';
-    x.fillText('he walks at night', 0, ph / 2 - 12);
-    x.fillStyle = '#b01828'; x.beginPath(); x.arc(0, -ph / 2 + 4, 6, 0, 7); x.fill();
-    x.restore();
+    x.save(); x.translate(1700 + Art.drawing.width / 2, 190 + Art.drawing.height / 2); x.rotate(0.05);
+    x.drawImage(Art.drawing, -Art.drawing.width / 2, -Art.drawing.height / 2); x.restore();
 
     // desk
     const dx = 860, dw = 700, dy = 620;
@@ -717,6 +743,23 @@
     g = x.createLinearGradient(0, 0, OW, 0);
     g.addColorStop(0, 'rgba(0,0,0,.55)'); g.addColorStop(0.2, 'rgba(0,0,0,0)'); g.addColorStop(0.8, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.55)');
     x.fillStyle = g; x.fillRect(0, 0, OW, H);
+    return c;
+  }
+
+  /* a child's drawing of the first monster on a sheet of paper, with a red pin */
+  function paintPinnedDrawing() {
+    const pw = 190, ph = 230, c = makeCanvas(pw, ph), x = c.getContext('2d');
+    const first = CFG.monsters[0] && Art.monsters[CFG.monsters[0].id];
+    x.fillStyle = '#d9cfb8'; x.fillRect(0, 0, pw, ph);
+    if (first && first.frames[0]) {
+      x.globalAlpha = 0.85; x.filter = 'sepia(0.6) contrast(1.2)'; // baked once, never per frame
+      const f = first.frames[0], s = Math.min((pw - 20) / f.width, (ph - 40) / f.height);
+      x.drawImage(f, (pw - f.width * s) / 2, 10, f.width * s, f.height * s);
+      x.filter = 'none'; x.globalAlpha = 1;
+    }
+    x.fillStyle = '#2a1a10'; x.font = '20px "Special Elite", monospace'; x.textAlign = 'center';
+    x.fillText('he walks at night', pw / 2, ph - 12);
+    x.fillStyle = '#b01828'; x.beginPath(); x.arc(pw / 2, 4 + 6, 6, 0, 7); x.fill();
     return c;
   }
 
@@ -917,6 +960,115 @@
     return c;
   }
 
+  /* ----- your real bedroom (stand-in): seen from the bed, a closet door on the left, a window with blinds,
+     a bedside table on the right. mode 'night' or 'morning' changes the sky behind the blinds (and the night one
+     has the little alarm clock on the table). ----- */
+  /* where the morning's evidence goes (fractions of the bedroom picture, like the door boxes) */
+  const EVIDENCE_SPOTS = {
+    2: { x: 0.094, y: 0.167, w: 0.169, h: 0.556 }, // the closet door (it is open a crack)
+    3: { x: 0.880, y: 0.510, w: 0.070, h: 0.157 }, // on the bedside table: the drawing from the desk room
+    4: { x: 0.150, y: 0.762, w: 0.075, h: 0.038 }, // on the floor: a scrap of pink collar
+  };
+  function evidenceCfg(n) {
+    const v = ((CFG.morning || {}).evidence || {})[n];
+    return Object.assign({}, EVIDENCE_SPOTS[n], v && typeof v === 'object' ? v : { image: v || '' });
+  }
+  const spotPx = (b) => ({ x: b.x * W, y: b.y * H, w: b.w * W, h: b.h * H });
+  const WINDOW_PX = { x: 1050, y: 150, w: 300, h: 320 };
+  const TABLE_TOP = 600; // the bedside table's top (the clock stands on it)
+
+  function paintBedroom(mode) {
+    const c = makeCanvas(W, H), x = c.getContext('2d'), r = mulberry32(5), day = mode === 'morning';
+    let g = x.createLinearGradient(0, 0, 0, 650); g.addColorStop(0, '#80747f'); g.addColorStop(1, '#605560');
+    x.fillStyle = g; x.fillRect(0, 0, W, 650);                                       // wall
+    x.fillStyle = 'rgba(244,236,255,.08)';
+    for (let i = 0; i < 70; i++) { x.beginPath(); x.arc(r() * W, 60 + r() * 540, 3 + r() * 4, 0, 7); x.fill(); } // dotty wallpaper
+    x.fillStyle = 'rgba(0,0,0,.16)'; x.fillRect(0, 0, W, 36);
+    g = x.createLinearGradient(0, 650, 0, H); g.addColorStop(0, '#6a5342'); g.addColorStop(1, '#3a2b21');
+    x.fillStyle = g; x.fillRect(0, 650, W, H - 650);                                 // floor
+    x.fillStyle = '#3e3442'; x.fillRect(0, 640, W, 16);                              // skirting
+    x.strokeStyle = 'rgba(0,0,0,.25)'; x.lineWidth = 2;
+    for (let i = -12; i <= 12; i++) { x.beginPath(); x.moveTo(W / 2 + i * 70, 656); x.lineTo(W / 2 + i * 190, H); x.stroke(); }
+    x.fillStyle = 'rgba(122,74,94,.75)'; x.beginPath(); x.ellipse(760, 742, 390, 62, 0, 0, 7); x.fill(); // rug
+    // the closet door
+    const D = spotPx(EVIDENCE_SPOTS[2]);
+    x.fillStyle = '#433740'; x.fillRect(D.x - 16, D.y - 16, D.w + 32, D.h + 16);
+    g = x.createLinearGradient(D.x, 0, D.x + D.w, 0); g.addColorStop(0, '#8a7569'); g.addColorStop(1, '#6c5a51');
+    x.fillStyle = g; x.fillRect(D.x, D.y, D.w, D.h);
+    x.strokeStyle = 'rgba(0,0,0,.22)'; x.lineWidth = 4;
+    for (const [py, ph] of [[0.06, 0.38], [0.52, 0.42]]) x.strokeRect(D.x + D.w * 0.14, D.y + D.h * py, D.w * 0.72, D.h * ph);
+    x.fillStyle = '#d9c27e'; x.beginPath(); x.arc(D.x + D.w - 26, D.y + D.h * 0.5, 9, 0, 7); x.fill();
+    // a framed drawing of the moon
+    x.fillStyle = '#2f2632'; x.fillRect(600, 190, 170, 140); x.fillStyle = '#1d2142'; x.fillRect(612, 202, 146, 116);
+    x.fillStyle = '#f2e6b8'; x.beginPath(); x.arc(690, 258, 30, 0, 7); x.fill();
+    x.fillStyle = '#1d2142'; x.beginPath(); x.arc(704, 252, 27, 0, 7); x.fill();       // (a crescent, painted: no holes in the picture)
+    // the window with blinds (night sky or morning sky behind them)
+    const Wn = WINDOW_PX;
+    g = x.createLinearGradient(0, Wn.y, 0, Wn.y + Wn.h);
+    if (day) { g.addColorStop(0, '#cfe6f6'); g.addColorStop(1, '#fff0d2'); } else { g.addColorStop(0, '#0b1534'); g.addColorStop(1, '#1d1745'); }
+    x.fillStyle = g; x.fillRect(Wn.x, Wn.y, Wn.w, Wn.h);
+    if (!day) { for (let i = 0; i < 25; i++) { x.fillStyle = `rgba(255,255,255,${0.3 + r() * 0.6})`; x.fillRect(Wn.x + r() * Wn.w, Wn.y + r() * Wn.h, 2, 2); }
+      glow(x, Wn.x + Wn.w * 0.7, Wn.y + 80, 120, 'rgba(230,225,255,A)', 0.5); }
+    for (let y = Wn.y + 4; y < Wn.y + Wn.h - 8; y += 21) {
+      x.fillStyle = day ? 'rgba(244,236,222,.92)' : 'rgba(214,206,196,.85)'; x.fillRect(Wn.x, y, Wn.w, 13);
+      x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(Wn.x, y + 13, Wn.w, 2);
+    }
+    x.strokeStyle = '#3a3038'; x.lineWidth = 16; x.strokeRect(Wn.x, Wn.y, Wn.w, Wn.h);
+    x.fillStyle = '#4a3e46'; x.fillRect(Wn.x - 26, Wn.y + Wn.h + 6, Wn.w + 52, 16);   // sill
+    // the bedside table (its clock is drawn live, see drawAlarmClock)
+    x.fillStyle = '#4a3428'; x.fillRect(1385, TABLE_TOP + 16, 180, 170);
+    x.fillStyle = '#5c4031'; x.fillRect(1368, TABLE_TOP, 214, 18);
+    x.strokeStyle = 'rgba(0,0,0,.3)'; x.lineWidth = 3; x.strokeRect(1402, TABLE_TOP + 40, 146, 56);
+    x.fillStyle = '#d9c27e'; x.beginPath(); x.arc(1475, TABLE_TOP + 68, 6, 0, 7); x.fill();
+    if (!day) drawAlarmClock(x, 1500, TABLE_TOP - 34, 30, { h: 11, m: 59 }); // in the morning it's the big one by your face
+    // the end of your bed: the quilt over your feet
+    x.beginPath(); x.moveTo(0, 812); x.quadraticCurveTo(420, 748, 800, 776); x.quadraticCurveTo(1180, 806, W, 770); x.lineTo(W, H); x.lineTo(0, H); x.closePath();
+    g = x.createLinearGradient(0, 750, 0, H); g.addColorStop(0, '#6e5d92'); g.addColorStop(1, '#3a3056');
+    x.fillStyle = g; x.fill();
+    x.strokeStyle = 'rgba(255,255,255,.1)'; x.lineWidth = 3;
+    for (const [a, b] of [[260, 860], [620, 830], [1020, 850], [1360, 840]]) { x.beginPath(); x.moveTo(a, b); x.quadraticCurveTo(a + 90, b - 30, a + 200, b - 6); x.stroke(); }
+    noiseFill(x, W, H, 0.05, 9, 3);
+    return c;
+  }
+
+  /* a twin-bell wind-up alarm clock. o: { h, m, s (hands; s = second hand, optional), ring (0..1 shake), squash (0..1) } */
+  function drawAlarmClock(c, x, y, r, o) {
+    const ring = (o.ring || 0) * fxMul(), wob = Math.sin(G.t * Math.PI * 2 * 12); // the hammer rattles 12 times a second
+    c.save(); c.translate(x + wob * 6 * ring, y + Math.cos(G.t * 71) * 2 * ring);
+    if (o.squash) { c.translate(0, r * 1.05); c.scale(1 + 0.12 * o.squash, 1 - 0.18 * o.squash); c.translate(0, -r * 1.05); }
+    c.lineCap = 'round'; c.strokeStyle = '#2a0c10'; c.lineWidth = r * 0.13;
+    for (const s of [-1, 1]) { c.beginPath(); c.moveTo(s * r * 0.5, r * 0.72); c.lineTo(s * r * 0.72, r * 1.05); c.stroke(); } // legs
+    c.save(); c.translate(0, -r * 0.98); c.rotate(wob * 0.5 * ring);                                                   // hammer
+    c.lineWidth = r * 0.07; c.strokeStyle = '#6b5a2a'; c.beginPath(); c.moveTo(0, 0); c.lineTo(0, -r * 0.42); c.stroke();
+    c.fillStyle = '#d9c27e'; c.beginPath(); c.arc(0, -r * 0.44, r * 0.1, 0, 7); c.fill(); c.restore();
+    for (const s of [-1, 1]) {                                                                                       // bells
+      c.save(); c.translate(s * r * 0.6, -r * 0.78); c.rotate(s * 0.65);
+      c.fillStyle = '#d9c27e'; c.strokeStyle = '#7a6426'; c.lineWidth = r * 0.05;
+      c.beginPath(); c.arc(0, 0, r * 0.42, Math.PI, 0); c.closePath(); c.fill(); c.stroke(); c.restore();
+    }
+    c.fillStyle = '#a3202c'; c.strokeStyle = '#5a0e16'; c.lineWidth = r * 0.08;                                   // body + face
+    c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill(); c.stroke();
+    c.fillStyle = '#f3ead6'; c.beginPath(); c.arc(0, 0, r * 0.78, 0, 7); c.fill();
+    c.strokeStyle = '#3a2a22';
+    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; c.lineWidth = r * (i % 3 ? 0.03 : 0.06); c.beginPath(); c.moveTo(Math.sin(a) * r * 0.62, -Math.cos(a) * r * 0.62); c.lineTo(Math.sin(a) * r * 0.72, -Math.cos(a) * r * 0.72); c.stroke(); }
+    const hand = (turns, len, wid, col) => { const a = turns * Math.PI * 2; c.strokeStyle = col; c.lineWidth = wid; c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.sin(a) * len, -Math.cos(a) * len); c.stroke(); };
+    hand(((o.h || 0) % 12 + (o.m || 0) / 60) / 12, r * 0.42, r * 0.1, '#1d1210');
+    hand((o.m || 0) / 60, r * 0.62, r * 0.065, '#1d1210');
+    if (o.s != null) hand(o.s / 60, r * 0.66, r * 0.025, '#c4132b');
+    c.fillStyle = '#1d1210'; c.beginPath(); c.arc(0, 0, r * 0.07, 0, 7); c.fill();
+    c.restore();
+  }
+  /* sound rings around a ringing clock: three arcs on each side that wobble with the hammer (still with Dream effects Off) */
+  function drawRingArcs(c, x, y, r, alpha) {
+    c.save(); c.lineCap = 'round'; c.lineWidth = Math.max(2, r * 0.09);
+    for (let i = 0; i < 3; i++) {
+      const R = r * (1.45 + 0.42 * i) + Math.sin(G.t * Math.PI * 2 * 12 + i * 1.3) * r * 0.08 * fxMul();
+      c.strokeStyle = `rgba(255,248,230,${alpha * (0.75 - 0.2 * i)})`;
+      for (const a of [0, Math.PI]) { c.beginPath(); c.arc(x, y - r * 0.2, R, a - 0.45, a + 0.45); c.stroke(); }
+    }
+    c.restore();
+  }
+
   function paintFx() {
     for (let i = 0; i < 5; i++) {
       const c = makeCanvas(320, 180), x = c.getContext('2d');
@@ -970,10 +1122,25 @@
     cueLog: [],                         // the last 40 threat sounds (see cue)
     stats: {},
     stutter: { left: freshFlicker(), right: freshFlicker() }, lampFlick: freshFlicker(), menuFlick: freshFlicker(),
-    whisperT: 20, jumpT: 0, killer: null, cardT: 0,
+    whisperT: 20, jumpT: 0, killer: null,
+    // falling asleep (state 'asleep'): introT runs to introDur, then the hypnic jolt starts the night
+    introT: 0, introDur: 6.4, retry: false, cardShown: false, joltPlayed: false, settle: 0,
+    tickPh: 0,                          // the ticking clock's phase: a new tick at every whole number (see clockTick)
+    hush: false,                        // Lucidity zero: the clock has stopped and every sound is gone
+    // waking up (states 'waking' -> 'morning' -> 'win'): wakeT counts from 6 AM
+    wakeT: 0, wakeView: 'office', wakeClear: false, wakePan: 0, frozen: [], winWait: 0, slapT: 0, finale: null,
     voice: { text: '', shown: 0, active: false, hold: 0 },
     motes: [], devGhost: false, devPose: null, devPoseLabel: '', devMon: 0,
   };
+
+  /* a spot in the desk room picture from config office.clock / office.window. The stand-in office has its own;
+     a custom office without the key gets null, so nothing is drawn in the wrong place. */
+  const OFFICE_SPOTS = { clock: { x: 0.604, y: 0.651, r: 0.029 }, window: { x: 0.233, y: 0.178, w: 0.104, h: 0.3 } };
+  function officeSpot(key) {
+    const v = CFG.office[key];
+    if (v && typeof v.x === 'number' && typeof v.y === 'number') return v;
+    return Art.officeMissing ? OFFICE_SPOTS[key] : null;
+  }
 
   /* where a monster may walk next from a room (unknown rooms send it home) */
   const optionsFrom = (def, room) => (def.path && def.path[room]) || [def.start];
@@ -1160,14 +1327,23 @@
   /* ------------------------------------------------------------------ */
   /*  NIGHT FLOW                                                        */
   /* ------------------------------------------------------------------ */
-  function startNight(n, endless) {
-    G.night = n; G.endless = !!endless;
+  /* falling asleep: each slow blink is [when, how long] (the eyes stay shut after the last one), then the night card */
+  const INTRO = {
+    full: { dur: 6.4, dips: [[1.3, 0.15], [2.8, 0.25], [4.2, 0.45]], card: 4.6, text: 0.5 },
+    retry: { dur: 1.5, dips: [[0.2, 0.1], [0.62, 0.16]], card: 0.7 },  // after "Dream again": one blink, the card, the jolt
+  };
+  const JOLT_LEAD = 0.6; // hypnic_jolt.mp3 falls for .6 s before its thud, so it starts that early
+
+  /* n: night number. endless: the Endless Dream. retry: "Dream again" (the short way to fall asleep) */
+  function startNight(n, endless, retry) {
+    G.night = n; G.endless = !!endless; G.retry = !!retry;
     G.nightT = 0; G.hour = 0; G.timeScale = 1; G.paused = false;
     G.luc = 100; G.usage = 1; G.powerOut = false; G.powerT = 0; G.killAt = 0;
     G.doors.left = freshDoor(); G.doors.right = freshDoor();
     G.cams = freshCams();
     G.inside = null; G.insideT = 0; G.pinchCd = 0; G.danger = 0; G.flash = 0; G.clarity = 0; G.punch = null; G.lies = [];
     G.trauma = 0; G.kick = { x: 0, y: 0 }; G.later = []; G.parts = []; G.cueLog = []; G.glide = null;
+    G.settle = 0; G.hush = false; G.frozen = []; G.finale = null;
     document.querySelectorAll('.lucGain').forEach((el) => el.remove());
     G.stats = { bangs: 0, pinches: 0, fakesLit: 0, fakeCloses: 0, minLuc: 100, lunges: 0 };
     G.whisperT = rand(18, 40); G.killer = null; G.jumpT = 0;
@@ -1182,37 +1358,92 @@
     G.grace = n === 1 && !endless ? 22 : 10;
     Sound.resume();
     Sound.stopAll();
-    hideScreens(); hide($('#hud')); hide($('#voiceBox')); G.voice.active = false;
-    // night card
+    hideScreens(); resetHud(); G.voice.active = false;
+    // you fall asleep in your own bedroom (the night card comes once your eyes are shut)
+    G.state = 'asleep'; G.introT = 0; G.introDur = (retry ? INTRO.retry : INTRO.full).dur;
+    G.cardShown = false; G.joltPlayed = false; G.tickPh = -0.16;
     setHtml($('#cardNight'), null, numify(endless ? 'Endless Dream' : 'Night ' + n));
     setHtml($('#cardTime'), null, numify('12:00 AM'));
-    const card = $('#nightCard');
-    card.classList.remove('fade'); show(card);
-    // restart the intro animation
-    const inner = card.querySelector('.cardInner'); inner.style.animation = 'none'; void inner.offsetWidth; inner.style.animation = '';
-    G.state = 'card'; G.cardT = 0;
-    Sound.play('hour_chime', { vol: 0.6, rate: 0.8 });
+    $('#nightCard').classList.remove('fade');
+    if (!retry) Sound.play('breathing', { vol: 0.25, lowpass: 600, rate: 0.8 }); // your own sleepy breath
+  }
+  /* the HUD back to normal and hidden (between nights) */
+  function resetHud() {
+    const hud = $('#hud');
+    hud.classList.remove('fadeOut', 'dissolve', 'onlyVoice');
+    hide(hud); hide($('#voiceBox'));
   }
 
-  /* the night card has faded: the night really starts */
+  /* how open your eyes are while you fall asleep (1 open, 0 shut) */
+  function lidOpen(t) {
+    const dips = (G.retry ? INTRO.retry : INTRO.full).dips;
+    if (t >= dips[dips.length - 1][0]) return 0;
+    let o = 1;
+    for (const [at, w] of dips) o -= Math.exp(-(((t - at) / w) ** 2));
+    return clamp(o, 0, 1);
+  }
+  function updateAsleep(dt) {
+    const P = G.retry ? INTRO.retry : INTRO.full;
+    G.introT += dt;
+    clockTick(dt, 0.5, 1, 0.5);
+    if (!G.cardShown && G.introT >= P.card) showNightCard(G.retry ? 0.5 : 1.2);
+    if (!G.joltPlayed && G.introT >= G.introDur - JOLT_LEAD && Sound.has('hypnic_jolt')) { G.joltPlayed = true; Sound.play('hypnic_jolt', { vol: 0.9 }); }
+    if (G.introT >= G.introDur) beginNight();
+  }
+  /* "Night 3 · 12:00 AM" fades in behind your closed eyes */
+  function showNightCard(fadeIn) {
+    const card = $('#nightCard'), inner = card.querySelector('.cardInner');
+    G.cardShown = true;
+    card.classList.remove('fade'); show(card);
+    inner.style.animation = 'none'; void inner.offsetWidth; inner.style.animation = ''; inner.style.animationDuration = fadeIn + 's';
+    Sound.play('hour_chime', { vol: 0.6, rate: 0.8 });
+  }
+  /* a click, tap or key while you fall asleep skips to the jolt */
+  function skipIntro() { G.introT = Math.max(G.introT, G.introDur - 0.4); }
+
+  /* the hypnic jolt: you fall into the dream and land in the desk room */
   function beginNight() {
     const card = $('#nightCard'), hud = $('#hud');
     card.classList.add('fade');
-    G.state = 'night';
+    G.state = 'night'; G.settle = 1.2;
+    Sound.stopLoop('clock_tick', 0.3);
+    if (!G.joltPlayed) { // (the real jolt sound already started a moment ago; its stand-in is a deep, muffled bang)
+      G.joltPlayed = true;
+      Sound.playAny(['hypnic_jolt'], { vol: 0.9 }) || Sound.play('door_bang', { rate: 0.55, lowpass: 260, vol: 0.8 });
+    }
+    hit(0.5);
     hud.classList.remove('enter'); void hud.offsetWidth; hud.classList.add('enter');
     show(hud);
     updateHud(true);
     const voice = CFG.dreamVoice || {};
     startVoice(G.endless ? voice.endless : voice[G.night]);
-    after(1.3, () => hide(card));
+    after(0.5, () => hide(card));
   }
 
-  function startVoice(text) {
+  /* the wind-up clock ticking (falling asleep, Lucidity zero). rate 1 = a tick a second; fade: seconds to fade in.
+     Without clock_tick.mp3 a soft, low click plays on every tick instead. */
+  function clockTick(dt, vol, rate, fade) {
+    const before = Math.floor(G.tickPh);
+    G.tickPh += dt * rate;
+    if (Sound.has('clock_tick')) Sound.loop('clock_tick', vol, { music: false, rate, fade: fade || 0.3 });
+    else if (Math.floor(G.tickPh) !== before) Sound.play('ui_click', { vol: vol * 0.6, rate: 0.42 * rate + (before % 2 ? 0.06 : 0) });
+  }
+
+  /* hold: seconds the finished text stays before it fades */
+  function startVoice(text, hold) {
     const box = $('#voiceBox');
     if (!text) { hide(box); G.voice.active = false; return; }
-    G.voice = { text, shown: 0, active: true, hold: 0 };
+    G.voice = { text, shown: 0, active: true, hold: 0, holdFor: hold || 7 };
     $('#voiceText').textContent = '';
     show(box); box.style.opacity = 1;
+  }
+  /* the dream voice types itself out, waits, then fades */
+  function updateVoice(dt) {
+    const v = G.voice;
+    if (v.shown < v.text.length) {
+      v.shown = Math.min(v.text.length, v.shown + dt * 34);
+      $('#voiceText').innerHTML = '<span>' + escapeHtml(v.text.slice(0, Math.floor(v.shown))) + '<span class="caret">▌</span></span>'; // one line box: the caret stays at the end
+    } else if ((v.hold += dt) > v.holdFor) endVoice();
   }
   function endVoice() {
     G.voice.active = false;
@@ -1358,6 +1589,10 @@
     Sound.play('power_down', { vol: 0.95 });
     Sound.stopLoop('ambience', 0.4); Sound.stopLoop('light_buzz', 0.1); Sound.stopLoop('static', 0.1);
     if (G.voice.active) endVoice();
+    // the controls fall away (only the clock stays); the alarm clock starts to wind down
+    $('#hud').classList.add('dissolve');
+    G.tickPh = -0.16; G.hush = false;
+    Captions.show('clockSlow', 0, 1);
   }
 
   function jumpscare(m) {
@@ -1388,28 +1623,175 @@
     showScreen('#dead');
   }
 
-  function win() {
-    G.state = 'win'; G.later = [];
-    Sound.stopAll();
-    hide($('#hud')); if (G.voice.active) endVoice();
-    Sound.play('alarm', { vol: 0.9 });
-    setTimeout(() => { if (G.state === 'win') Sound.loop('morning', 0.8, { fade: 3, music: true }); }, 2600);
-    if (!G.endless) {
+  /* ------------------------------------------------------------------ */
+  /*  WAKING UP: the alarm rings inside the dream, you blink into your  */
+  /*  bedroom, slap it off, and something has followed you out          */
+  /* ------------------------------------------------------------------ */
+  /* wakeT: 6 AM = 0. Two blinks (one slow one with Dream effects Off), then the morning; the eyes are open at OPEN */
+  const WAKE = { morning: 2.05, open: 2.5, listen: 0.6, autoSlap: 8 };
+  function wakeLids(t) {
+    const up = (a, b) => ease(clamp((t - a) / (b - a), 0, 1));
+    if (t >= WAKE.morning) return 1 - up(WAKE.morning, WAKE.open);
+    if (save.fx === 'off') return up(1.4, 1.9);
+    return t < 1.4 ? up(1.1, 1.25) - up(1.25, 1.4) : up(1.7, 1.9);
+  }
+  /* where the desk clock sits on screen right now (null = this desk room has none) */
+  function clockOnScreen() {
+    const k = officeSpot('clock');
+    return k ? { x: officeOriginX() + k.x * G.officeW, y: k.y * H, r: (k.r || 0.03) * H } : null;
+  }
+  /* the alarm's left/right: from the desk clock (0 when the room has no clock) */
+  function clockPan() { const k = clockOnScreen(); return k ? clamp((k.x / W - 0.5) * 1.2, -1, 1) : 0; }
+
+  function startWaking() {
+    if (!G.endless) { // progress is saved the moment the alarm rings
       save.beaten = Math.max(save.beaten, G.night);
       save.night = clamp(G.night + 1, 1, NIGHTS);
       writeSave();
     }
-    const hEl = $('#winH'); hEl.textContent = '5'; hEl.classList.remove('roll');
-    const title = $('#winTitle'); title.classList.remove('show');
-    const last = !G.endless && G.night >= NIGHTS;
+    G.state = 'waking'; G.wakeT = 0; G.later = [];
+    G.wakeClear = G.powerOut; // saved at Lucidity zero: no pillow in the way, it rings loud and clear
+    G.wakePan = clockPan();
+    G.hour = 6; setText(hudEls.time, 'time', fmtHour(6));
+    $('#hud').classList.add('fadeOut');
+    if (G.voice.active) endVoice();
+    Sound.killLoops();
+    // whatever you could see freezes, then melts away
+    G.wakeView = G.cams.t >= 1 ? 'cams' : 'office';
+    G.frozen = G.monsters.filter((m) => G.wakeView === 'cams'
+      ? m.state === 'roam' && m.room === G.cams.cur && G.cams.lost <= 0
+      : m.state === 'door' && G.doors[m.door].light && !G.powerOut);
+    for (const m of G.monsters) m.animSpeed = 0;
+  }
+
+  /* how far a frozen monster has melted (0..1) */
+  const meltK = () => clamp(G.wakeT / 1.2, 0, 1);
+  /* the rectangle a visible monster fills on screen (for the red bits that rise off it) */
+  function frozenRect(m) {
+    if (G.wakeView === 'cams') {
+      const pose = leanPose(m.def.poses && m.def.poses[G.cams.cur], stareK(m, rule('stare', 0)));
+      return spriteRect(m.art.soft[m.frame()], camFeedBox(), pose);
+    }
+    return spriteRect(m.art.soft[m.frame()], doorBox(m.door), doorPoseOf(m, m.door));
+  }
+
+  function updateWaking(dt) {
+    G.wakeT += dt;
+    // the alarm, heard through a pillow at first, then clear (file mode can't muffle: it gets louder instead)
+    const k = G.wakeClear ? 1 : clamp((G.wakeT - 0.3) / 2.2, 0, 1);
+    Sound.loop('wake', Sound.web ? 0.9 : lerp(0.4, 0.9, k), { sound: 'alarm', lowpass: Math.round(500 * Math.pow(36, k)),
+      pan: lerp(G.wakePan, 0, clamp((G.wakeT - WAKE.morning) / 0.5, 0, 1)), fade: 0.1, music: false });
+    if (G.state === 'waking') {
+      if (G.wakeView === 'cams' && G.wakeT > 1.1) G.cams.t = Math.max(0, G.cams.t - dt * 4 / 0.28); // the monitor drops during the blink
+      const melt = meltK();
+      if (melt < 1) for (const m of G.frozen) {
+        const r = frozenRect(m), n = 40 * fxMul() * dt / 1.2; // about 40 red bits over the melt
+        spawnParts(Math.floor(n) + (Math.random() < n % 1 ? 1 : 0), { x: r.x + r.w / 2, y: r.y + r.h * (0.15 + 0.7 * melt), spreadX: r.w * 0.4, spreadY: r.h * 0.15,
+          vy: -70, jitter: 22, life: 1.1, r: 4, col: 'rgb(226,58,76)' });
+      }
+      if (G.wakeT >= WAKE.morning) enterMorning();
+    } else if (G.wakeT >= WAKE.open + WAKE.autoSlap) slapAlarm(); // nobody turned it off: it gives up by itself
+    if (G.state === 'morning' && G.wakeT >= WAKE.open + WAKE.listen) show($('#wakePrompt'));
+  }
+
+  /* your eyes are shut: when they open you are in your own bedroom */
+  function enterMorning() {
+    G.state = 'morning'; G.wakeT = Math.max(G.wakeT, WAKE.morning);
+    G.parts = []; G.cams.up = false; G.cams.t = 0;
+    setCls(hudEls.voice, 'docked', false);
+    hide($('#hud'));
+    $('#wakePrompt').textContent = TAP + ' to turn off the alarm';
+  }
+
+  /* you slap the alarm off: the real morning */
+  function slapAlarm() {
+    if (G.state === 'waking') enterMorning();
+    if (G.state !== 'morning') return;
+    G.state = 'win'; G.slapT = 0.25;
+    hide($('#wakePrompt'));
+    Sound.stopLoop('wake', 0.05);
+    Sound.play('door_close', { vol: 0.5, rate: 1.6 }); // the clunk of the button
+    Sound.loop('morning', 0.8, { fade: 3, music: true }); // birds
+    if (!G.endless && G.night >= NIGHTS) startFinale(); else showWinPanel();
+  }
+
+  /* "You woke up", what happened tonight, and the buttons (they wait a moment, so a fast second tap can't press one) */
+  function showWinPanel() {
+    const last = !G.endless && G.night >= NIGHTS, S = G.stats;
     $('#winSub').innerHTML = numify(G.endless ? 'The endless dream let you go… this time.'
       : last ? 'All five nights. The alarm rang, and this time you heard it.'
         : 'Night ' + G.night + ' survived. But you’ll fall asleep again tonight.');
+    const bits = [];
+    if (S.bangs) bits.push('Turned it away ×' + S.bangs);
+    bits.push(G.powerOut ? 'Saved by the alarm at 0% Lucidity' : 'Lucidity left ' + Math.max(0, Math.ceil(G.luc)) + '%');
+    if (S.pinches) bits.push('Pinched ×' + S.pinches);
+    $('#winStats').innerHTML = numify(bits.join('  ·  '));
     $('#wNext').textContent = (G.endless || last) ? 'Back to the menu' : 'Next night';
+    const title = $('#winTitle'); title.classList.remove('show');
     showScreen('#win');
-    G.flash = 1; G.flashColor = '255,244,220';
-    setTimeout(() => { void hEl.offsetWidth; hEl.classList.add('roll'); setTimeout(() => { hEl.textContent = '6'; }, 330); }, 1100);
-    setTimeout(() => title.classList.add('show'), 2000);
+    $('#win').classList.add('wait'); G.winWait = 0.9;
+    void title.offsetWidth; title.classList.add('show');
+  }
+
+  /* after Night 5: the voice has the last word, then the credits roll (they start with the person who drew the monsters) */
+  function startFinale() {
+    const F = CFG.finale || {};
+    G.finale = { phase: 'line', t: 0, y: 0 };
+    const hud = $('#hud');
+    hud.classList.remove('fadeOut', 'enter', 'dissolve'); hud.classList.add('onlyVoice'); show(hud);
+    startVoice(F.line || 'See? I told you I’d be the one ringing.', 2.5);
+  }
+  function buildCredits() {
+    const roll = $('#creditRoll'), list = CFG.credits || [];
+    roll.innerHTML = '';
+    const add = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; roll.appendChild(d); };
+    const groups = { Sound: [], Font: [] }, singles = [];
+    for (const c of list) {
+      if (!c || !c.who) continue;
+      const g = /^\s*(Sound|Font)/i.exec(c.what || '');
+      if (g) { const k = g[1][0].toUpperCase() + g[1].slice(1).toLowerCase(); if (groups[k].indexOf(c.who) < 0) groups[k].push(c.who); } else singles.push(c);
+    }
+    singles.forEach((c, i) => { add('cRole', c.what || ''); add(i ? 'cWho' : 'cWho cYou', c.who); }); // the first one is YOU
+    add('cTitle', CFG.title || 'UNTIL THE ALARM');
+    if (groups.Sound.length) { add('cRole', 'Sounds'); add('cNames', groups.Sound.join('  ·  ')); }
+    if (groups.Font.length) { add('cRole', 'Fonts'); add('cNames', groups.Font.join('  ·  ')); }
+    add('cEnd', (CFG.finale || {}).thanks || 'Thank you for waking up.');
+  }
+  function updateWin(dt) {
+    G.slapT = Math.max(0, G.slapT - dt);
+    if (G.winWait > 0 && (G.winWait -= dt) <= 0) { // the buttons are ready
+      $('#win').classList.remove('wait');
+      const b = $('#win').querySelector('button'); if (b) b.focus({ preventScroll: true });
+    }
+    const F = G.finale;
+    if (!F) return;
+    F.t += dt;
+    if (F.phase === 'line' && !G.voice.active && F.t > 0.5) { // the voice has faded: roll the credits
+      F.phase = 'credits'; F.y = H;
+      buildCredits(); show($('#credits'));
+    } else if (F.phase === 'credits') {
+      const roll = $('#creditRoll');
+      F.y -= Math.max(85, (H + roll.offsetHeight) / 24) * dt; // 85 px a second: about 20 s, never more than 24
+      roll.style.transform = `translateY(${F.y.toFixed(1)}px)`;
+      if (F.y < -roll.offsetHeight) endFinale();
+    }
+  }
+  /* the credits are over (or skipped) */
+  function endFinale() {
+    G.finale = null;
+    if (G.voice.active) endVoice();
+    resetHud();
+    showWinPanel(); // (this hides the credits too)
+  }
+
+  /* a click, tap or key outside the night: skip ahead (returns true when it used the input) */
+  function skipInput() {
+    if (G.paused) return false;
+    if (G.state === 'asleep') { skipIntro(); return true; }
+    if (G.state === 'waking') { enterMorning(); return true; }
+    if (G.state === 'morning') { if (G.wakeT >= WAKE.open + WAKE.listen) slapAlarm(); return true; }
+    if (G.state === 'win' && G.finale) { endFinale(); return true; }
+    return false;
   }
 
   /* ------------------------------------------------------------------ */
@@ -1435,8 +1817,11 @@
       for (const m of G.monsters) m.anim += dt * (m.def.fps || 4) * m.animSpeed;
     }
 
-    if (G.state === 'card') { G.cardT += dt; if (G.cardT >= 3.2) beginNight(); }
+    if (G.state === 'asleep' && !G.paused) updateAsleep(dt);
     if (G.state === 'night' && !G.paused) updateNight(dt * G.timeScale, dt);
+    if (G.state === 'waking' || G.state === 'morning') updateWaking(dt);
+    if (G.state === 'win') updateWin(dt);
+    if (G.voice.active && !G.paused && (G.state === 'night' || G.state === 'win')) updateVoice(dt);
     if (G.state === 'jumpscare') {
       G.jumpT += dt;
       if (G.jumpT > 1.45) die();
@@ -1520,11 +1905,12 @@
     const C = G.cams;
     runLater(dt);
     if (G.state !== 'night') return; // a timer ended the night
+    G.settle = Math.max(0, G.settle - realDt); // landing in the chair after the jolt
     // clock
     G.nightT += dt;
     const hs = Math.max(5, CFG.hourSeconds || 75);
     const hour = Math.floor(G.nightT / hs);
-    if (hour >= 6) { win(); return; }
+    if (hour >= 6) { startWaking(); return; }
     if (hour !== G.hour) {
       G.hour = hour;
       Sound.play('hour_chime', { vol: 0.55, rate: 0.9 });
@@ -1582,7 +1968,7 @@
         m.linger -= dt;
         m.doorT += dt;
         m.breathT -= dt;
-        if (m.breathT <= 0) {
+        if (m.breathT <= 0 && !G.hush) {
           m.breathT = rand(5, 9);
           const D = G.doors[m.door];
           cue('breath', m.door, { monster: m, vol: D.closed ? 0.35 : 0.6, lowpass: D.closed ? 700 : 0, rate: rand(0.9, 1.05) });
@@ -1616,11 +2002,12 @@
       }
     }
 
-    // out of lucidity: the dream stops listening
+    // out of lucidity: the dream stops listening. The clock ticks slower and lower, stops, two seconds of silence…
     if (G.powerOut) {
       G.powerT += dt;
-      if (G.powerT > 3 && G.powerT - dt <= 3) Sound.loop('music_box', 0.9, { fade: 1, music: true });
-      if (G.powerT >= G.killAt) { Sound.stopLoop('music_box', 0.05); if (G.killer) { jumpscare(G.killer); return; } }
+      if (G.killAt - G.powerT >= 2.2) clockTick(dt, 0.9, 1 - 0.55 * clamp(G.powerT / G.killAt, 0, 1));
+      else if (!G.hush) { G.hush = true; Sound.stopLoop('clock_tick', 0.05); Sound.killLoops(); }
+      if (G.powerT >= G.killAt && G.killer) { jumpscare(G.killer); return; }
     }
 
     // pinch cooldown
@@ -1636,6 +2023,8 @@
     if (G.powerOut) danger = Math.max(danger, 0.7);
     G.danger = lerp(G.danger, danger, clamp(realDt * 2, 0, 1));
 
+    if (G.hush) { updateHud(false); return; } // total silence before it comes
+
     // sound beds
     if (!G.powerOut) Sound.loop('ambience', C.up ? 0.4 : 0.6, { fade: 2 });
     Sound.loop('static', C.t > 0.5 ? 0.12 + C.staticAmt * 0.35 + (C.lost > 0 ? 0.3 : 0) : 0, { fade: 0.15, music: false, rate: 1 + 0.4 * lean });
@@ -1647,18 +2036,6 @@
     if (G.whisperT <= 0) {
       G.whisperT = rand(28, 70);
       Sound.play('whisper', { vol: rand(0.18, 0.35), rate: rand(0.75, 1.1), pan: rand(-0.9, 0.9) });
-    }
-
-    // dream voice typewriter
-    if (G.voice.active) {
-      const v = G.voice;
-      if (v.shown < v.text.length) {
-        v.shown = Math.min(v.text.length, v.shown + realDt * 34);
-        $('#voiceText').innerHTML = escapeHtml(v.text.slice(0, Math.floor(v.shown))) + '<span class="caret">▌</span>';
-      } else {
-        v.hold += realDt;
-        if (v.hold > 7) endVoice();
-      }
     }
 
     updateHud(false);
@@ -1677,50 +2054,95 @@
     c.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
   }
 
-  function drawSprite(c, img, box, pose, alpha) {
+  /* where a sprite lands in a box. pose: x = middle of its body, y = its feet, h = its height (fractions of the box),
+     flip mirrors it, sy stretches it taller from the feet */
+  function spriteRect(img, box, pose) {
     const p = pose || { x: 0.5, y: 1.02, h: 0.7 };
-    const h = (p.h || 0.7) * box.h, w = h * img.width / img.height;
+    const base = (p.h || 0.7) * box.h, h = base * (p.sy || 1), w = base * img.width / img.height;
     const cx = box.x + (p.x != null ? p.x : 0.5) * box.w, by = box.y + (p.y != null ? p.y : 1) * box.h;
+    return { x: cx - w / 2, y: by - h, w, h };
+  }
+  function drawSprite(c, img, box, pose, alpha) {
+    const r = spriteRect(img, box, pose);
     c.save(); c.globalAlpha = alpha == null ? 1 : alpha;
-    if (p.flip) { c.translate(cx, 0); c.scale(-1, 1); c.drawImage(img, -w / 2, by - h, w, h); }
-    else c.drawImage(img, cx - w / 2, by - h, w, h);
+    if (pose && pose.flip) { c.translate(r.x + r.w / 2, 0); c.scale(-1, 1); c.drawImage(img, -r.w / 2, r.y, r.w, r.h); }
+    else c.drawImage(img, r.x, r.y, r.w, r.h);
     c.restore();
+  }
+  /* a monster in a lit doorway or on a camera. At 6 AM it stops moving, stretches and melts away. */
+  function drawMonster(c, m, box, pose) {
+    const k = G.state === 'waking' ? meltK() : 0;
+    if (k >= 1) return;
+    drawSprite(c, m.art.soft[m.frame()], box, Object.assign({ x: 0.5, y: 1.02, h: 0.7 }, pose, { sy: 1 + 0.15 * k }), 1 - k);
   }
 
   function officeOriginX() { return G.officeW <= W ? (W - G.officeW) / 2 : -G.scroll; }
+  /* a doorway's box on screen right now */
+  function doorBox(side) {
+    const d = CFG.office.doors[side], ox = officeOriginX(), ow = G.officeW;
+    return { x: ox + d.x * ow, y: d.y * H, w: d.w * ow, h: d.h * H };
+  }
 
-  function drawOffice(c) {
-    const ox = officeOriginX(), ow = G.officeW;
-    c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
-    // gentle dream "breathing" of the room
+  /* the desk-room view: the room's slow "breathing", the flinch toward a doorway, and at Lucidity zero you
+     seem to shrink in your chair while the room grows away from you */
+  function officeView(c) {
     const br = 0.006 * fxMul();
-    const s = 1 + br + Math.sin(G.t * 0.6) * br;
-    c.save();
+    let s = 1 + br + Math.sin(G.t * 0.6) * br;
+    if (G.powerOut) s *= 1 - 0.16 * ease(clamp(G.powerT / G.killAt, 0, 1)) * fxMul();
     c.translate(W / 2, H / 2); c.scale(s, s); c.translate(-W / 2, -H / 2);
     if (G.punch) { // the flinch: a quick lean toward the doorway the light just found something in
-      const d = CFG.office.doors[G.punch.side], px = ox + (d.x + d.w / 2) * ow, py = (d.y + d.h / 2) * H;
+      const b = doorBox(G.punch.side), px = b.x + b.w / 2, py = b.y + b.h / 2;
       const k = 1 + 0.02 * ease(clamp(G.punch.t / 0.3, 0, 1)) * fxMul();
       c.translate(px, py); c.scale(k, k); c.translate(-px, -py);
     }
-    c.drawImage(Art.office, ox, 0, ow, H);
-    for (const side of ['left', 'right']) drawDoorway(c, side, ox, ow);
+  }
+
+  function drawOffice(c) {
+    c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
+    c.save(); officeView(c);
+    c.drawImage(Art.office, officeOriginX(), 0, G.officeW, H);
+    for (const side of ['left', 'right']) drawDoorway(c, side);
     c.restore();
 
     // lamp flicker (a slow timer, never a strobe) & darkness
     c.fillStyle = `rgba(0,0,0,${0.08 + flick(G.lampFlick)})`; c.fillRect(0, 0, W, H);
     if (G.powerOut) {
-      const dark = clamp(G.powerT / 1.2, 0, 1) * 0.86;
-      c.fillStyle = `rgba(0,0,0,${dark})`; c.fillRect(0, 0, W, H);
-      // it stands in the dark doorway, barely there: a slow 1.4 Hz pulse, or steady with effects Off
-      const off = save.fx === 'off';
-      if (G.powerT > 3 && G.killer && (off || Math.sin(G.t * 9) > -0.2)) {
-        const d = CFG.office.doors.left;
-        const box = { x: ox + d.x * ow, y: d.y * H, w: d.w * ow, h: d.h * H };
-        c.save(); c.beginPath(); c.rect(box.x, box.y, box.w, box.h); c.clip();
-        drawSprite(c, G.killer.art.soft[G.killer.frame()], box, doorPoseOf(G.killer, 'left'), off ? 0.2 : 0.22 + 0.1 * Math.sin(G.t * 3));
-        c.restore();
-      }
+      c.fillStyle = `rgba(0,0,0,${clamp(G.powerT / 1.2, 0, 1) * 0.86})`; c.fillRect(0, 0, W, H);
+      c.save(); officeView(c); drawApproach(c); c.restore();
     }
+  }
+
+  /* Lucidity zero: on each tick it stands somewhere new, bigger every time: the left door, the window, the right door … */
+  function approachAnchors() {
+    const list = [Object.assign(doorBox('left'), { side: 'left' })], w = officeSpot('window');
+    if (w) list.push({ x: officeOriginX() + w.x * G.officeW, y: w.y * H, w: w.w * G.officeW, h: w.h * H, side: 'window' });
+    list.push(Object.assign(doorBox('right'), { side: 'right' }));
+    return list;
+  }
+  function drawApproach(c) {
+    const m = G.killer;
+    if (!m || G.hush || G.powerT < 1.5) return;
+    const k = clamp(G.powerT / G.killAt, 0, 1), off = save.fx === 'off';
+    if (!off && ((G.tickPh % 1) + 1) % 1 >= 0.5) return; // seen only on the "tick" half of each tick (1 Hz or slower)
+    const anchors = approachAnchors(), a = anchors[Math.floor(G.powerT / 3.4) % anchors.length];
+    const h = 0.55 + 0.6 * k, f = m.frame();
+    const pose = { x: 0.5, y: a.side === 'window' ? 1 + h * 0.45 : 1, h, flip: a.side === 'right' }; // in the window: from the chest up
+    c.save(); c.beginPath(); c.rect(a.x, a.y, a.w, a.h); c.clip();
+    drawSprite(c, rimmedSil(m.art.sil[f]), a, pose, off ? lerp(0.15, 0.5, k) : 0.9);
+    c.restore();
+  }
+  /* a black silhouette with a thin red edge, so it reads in the dark (baked once per frame, so it fades as one shape) */
+  const rimCache = new WeakMap();
+  function rimmedSil(sil) {
+    let c = rimCache.get(sil);
+    if (c) return c;
+    c = makeCanvas(sil.width + 8, sil.height + 6);
+    const x = c.getContext('2d');
+    for (const [dx, dy] of [[0, 4], [8, 4], [4, 0]]) x.drawImage(sil, dx, dy);
+    x.globalCompositeOperation = 'source-in'; x.fillStyle = 'rgba(200,20,40,.35)'; x.fillRect(0, 0, c.width, c.height);
+    x.globalCompositeOperation = 'source-over'; x.drawImage(sil, 4, 4);
+    rimCache.set(sil, c);
+    return c;
   }
 
   /* a camera pose, leaning in toward the lens by k (0..1) while you stare at it (no zoom with Dream effects Off) */
@@ -1735,9 +2157,9 @@
     return (m.def.doorPose && m.def.doorPose[side]) || { x: side === 'left' ? 0.55 : 0.45, y: 1, h: 0.7, flip: side === 'right' };
   }
 
-  function drawDoorway(c, side, ox, ow) {
+  function drawDoorway(c, side) {
     const d = CFG.office.doors[side], D = G.doors[side], A = Art.doors[side];
-    const box = { x: ox + d.x * ow, y: d.y * H, w: d.w * ow, h: d.h * H };
+    const box = doorBox(side);
     if (box.x > W + 40 || box.x + box.w < -40) return;
     const lit = D.light && !G.powerOut;
     c.save();
@@ -1745,7 +2167,7 @@
     c.drawImage(lit ? A.lit : A.dark, box.x, box.y, box.w, box.h);
     if (lit) {
       const here = G.monsters.filter((m) => m.state === 'door' && m.door === side);
-      for (const m of here) drawSprite(c, m.art.soft[m.frame()], box, doorPoseOf(m, side), 1);
+      for (const m of here) drawMonster(c, m, box, doorPoseOf(m, side));
       // the light stutters while something real stands there (slow timer; a steady dim with effects Off)
       const dim = here.length ? (save.fx === 'off' ? 0.3 : flick(G.stutter[side])) : 0;
       if (dim) { c.fillStyle = `rgba(0,0,0,${dim})`; c.fillRect(box.x, box.y, box.w, box.h); }
@@ -1825,7 +2247,7 @@
     if (!lost) {
       const lim = rule('stare', 0);
       for (const m of G.monsters) {
-        if (m.state === 'roam' && m.room === cam.id) drawSprite(c, m.art.soft[m.frame()], box, leanPose(m.def.poses && m.def.poses[cam.id], stareK(m, lim)), 1);
+        if (m.state === 'roam' && m.room === cam.id) drawMonster(c, m, box, leanPose(m.def.poses && m.def.poses[cam.id], stareK(m, lim)));
       }
     }
     if (DEV && G.devGhost) {
@@ -1948,6 +2370,142 @@
     c.restore();
   }
 
+  /* ----- falling asleep, waking up, the morning ----- */
+  const FALL_ASLEEP = { // what you count in your head (config.js fallAsleep can change any of them)
+    1: 'one… two… three…', 2: 'one… two… two… two…', 3: 'one… three… nine… the house is counting with you',
+    4: 'don’t count. it counts backwards.', 5: 'don’t count. just listen for the alarm.', endless: 'there is no counting here.',
+  };
+  function fallAsleepLine() {
+    const own = CFG.fallAsleep || {}, key = G.endless ? 'endless' : G.night;
+    return String(own[key] != null ? own[key] : FALL_ASLEEP[key] || '');
+  }
+  const MORNING_CLOCK = { x: 800, y: 770, r: 92 }; // the alarm clock right by your face in the morning
+
+  /* your bedroom at night: streetlight sliding through the blinds, three slow blinks, counting, then sleep */
+  function drawFallAsleep(c) {
+    const t = G.introT, o = lidOpen(t), P = G.retry ? INTRO.retry : INTRO.full;
+    c.drawImage(Art.bedroomNight, 0, 0);
+    if (save.fx === 'full' && !TOUCH && Art.bedroomBlur.length) drawBlurred(c, (1 - o) * 6 + t * 0.8); // your eyes go out of focus
+    else { c.fillStyle = `rgba(0,0,0,${(1 - o) * 0.5})`; c.fillRect(0, 0, W, H); }
+    c.save(); c.globalCompositeOperation = 'lighter'; c.fillStyle = 'rgba(190,200,255,.06)';
+    for (let i = 0; i < 4; i++) { // a car's headlights pass through the blinds
+      const x = ((t * 260 * fxMul() + i * 90 + 500) % (W + 600)) - 300;
+      c.beginPath(); c.moveTo(x, 0); c.lineTo(x + 46, 0); c.lineTo(x - 214, H); c.lineTo(x - 260, H); c.closePath(); c.fill();
+    }
+    c.restore();
+    drawEyelids(c, 1 - o);
+    c.save(); c.textAlign = 'center';
+    if (P.text != null && t > P.text) { // counting in your head, typed slowly, fading with every blink
+      const line = fallAsleepLine(), n = Math.min(line.length, Math.floor((t - P.text) * 22));
+      c.globalAlpha = o; c.font = '38px "Special Elite", monospace'; c.fillStyle = '#e6dccc';
+      c.shadowColor = 'rgba(157,132,255,.6)'; c.shadowBlur = 12;
+      c.fillText(line.slice(0, n), W / 2, H * 0.78);
+    }
+    if (t > 0.8 && !G.cardShown) { // how to skip it
+      c.globalAlpha = 0.35; c.shadowBlur = 0; c.font = Math.round(TOUCH ? Math.max(26, 14 / stageScale) : 26) + 'px VT323, monospace'; // >= 14 real px on a phone
+      c.fillStyle = '#e9dfcf'; c.textAlign = 'right';
+      c.fillText(TAP + ' to skip', W - 40, H - 34);
+    }
+    c.restore();
+  }
+
+  /* the bedroom blurred by b px: the two nearest baked copies, cross-faded */
+  function drawBlurred(c, b) {
+    const L = [{ b: 0, img: null }].concat(Art.bedroomBlur);
+    let i = 0;
+    while (i < L.length - 1 && L[i + 1].b <= b) i++;
+    if (L[i].img) c.drawImage(L[i].img, 0, 0, W, H);
+    if (i < L.length - 1) { c.globalAlpha = clamp((b - L[i].b) / (L[i + 1].b - L[i].b), 0, 1); c.drawImage(L[i + 1].img, 0, 0, W, H); c.globalAlpha = 1; }
+  }
+
+  /* the dream as you leave it at 6 AM: the colour drains, daylight floods in from the window, the desk clock rings, you blink */
+  function drawWakeOverlay(c) {
+    const t = G.wakeT;
+    c.save();
+    if (SAT_OK) { c.globalCompositeOperation = 'saturation'; c.globalAlpha = Math.min(1, t / 2.5); c.fillStyle = '#888'; }
+    else { c.globalAlpha = 0.35 * Math.min(1, t / 2.5); c.fillStyle = '#777'; }
+    c.fillRect(0, 0, W, H);
+    c.restore();
+    const w = officeSpot('window');
+    const gx = w ? officeOriginX() + (w.x + w.w / 2) * G.officeW : W / 2, gy = w ? (w.y + w.h / 2) * H : H * 0.3;
+    const g = c.createRadialGradient(gx, gy, 0, gx, gy, W * 0.8);
+    g.addColorStop(0, `rgba(255,255,255,${clamp(t / 3.2, 0, 1)})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    const k = clockOnScreen();
+    if (k && G.cams.t < 1) drawRingArcs(c, k.x, k.y, k.r, 1);
+    drawEyelids(c, wakeLids(t));
+  }
+
+  /* your real bedroom in the morning: warm light through the blinds, the alarm clock, and whatever followed you out */
+  function drawMorning(c) {
+    c.drawImage(Art.bedroomMorning, 0, 0);
+    c.save(); c.fillStyle = 'rgba(255,220,160,.10)';
+    for (let i = 0; i < 5; i++) { // sunlight bars from the blinds across the wall
+      const y = 190 + i * 58;
+      c.beginPath(); c.moveTo(1040, y); c.lineTo(1040, y + 24); c.lineTo(380, y + 354); c.lineTo(380, y + 330); c.closePath(); c.fill();
+    }
+    c.restore();
+    drawEvidence(c);
+    drawMotes(c, 0.45);
+    const ringing = G.state !== 'win', K = MORNING_CLOCK;
+    if (ringing) drawRingArcs(c, K.x, K.y, K.r, 0.8);
+    drawAlarmClock(c, K.x, K.y, K.r, { h: 6, m: 0, ring: ringing ? 1 : 0, squash: G.state === 'win' ? G.slapT / 0.25 : 0 });
+    if (G.state === 'morning') drawEyelids(c, wakeLids(G.wakeT));
+  }
+
+  /* something followed you out of the dream (Nights 2-4; config morning.evidence can use your own pictures) */
+  function drawEvidence(c) {
+    const n = G.night;
+    if (G.endless || !EVIDENCE_SPOTS[n]) return;
+    const b = spotPx(evidenceCfg(n)), img = Art.evidence[n];
+    c.save();
+    if (img) { // your picture, fitted into the spot and standing on its bottom edge
+      const s = Math.min(b.w / img.width, b.h / img.height);
+      c.drawImage(img, b.x + (b.w - img.width * s) / 2, b.y + b.h - img.height * s, img.width * s, img.height * s);
+    } else if (n === 2) { // the closet door is open a crack
+      c.strokeStyle = '#2a2026'; c.lineWidth = 6; c.strokeRect(b.x, b.y, b.w, b.h);
+      const g = c.createLinearGradient(b.x + b.w - 44, 0, b.x + b.w, 0); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.45)');
+      c.fillStyle = g; c.fillRect(b.x + b.w - 44, b.y, 44, b.h);
+      c.fillStyle = '#050307'; c.fillRect(b.x + b.w - 4, b.y + 3, 4, b.h - 3);
+    } else if (n === 3) { // the drawing from the desk-room wall, leaning on your bedside table
+      const d = Art.drawing, s = Math.min(b.w / d.width, b.h / d.height), dw = d.width * s, dh = d.height * s;
+      c.translate(b.x + b.w / 2, b.y + b.h); c.rotate(-0.07);
+      c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(-dw / 2 + 6, -dh + 4, dw, dh);
+      c.drawImage(d, -dw / 2, -dh, dw, dh);
+    } else { // a ragged scrap of pink collar on the floor
+      const pts = [[0, 0.35], [0.18, 0.1], [0.4, 0.3], [0.62, 0.05], [0.85, 0.25], [1, 0.55], [0.78, 0.9], [0.45, 0.7], [0.15, 0.95]];
+      c.fillStyle = '#e8828f'; c.strokeStyle = '#a54d5b'; c.lineWidth = 2;
+      c.beginPath(); pts.forEach(([px, py], i) => c[i ? 'lineTo' : 'moveTo'](b.x + px * b.w, b.y + py * b.h)); c.closePath(); c.fill(); c.stroke();
+      c.fillStyle = 'rgba(120,40,52,.6)'; for (let i = 1; i < 6; i++) c.fillRect(b.x + b.w * i / 6.5, b.y + b.h * 0.48, 3, 2);
+      c.strokeStyle = '#d9c27e'; c.lineWidth = 2.5; c.beginPath(); c.arc(b.x + b.w + 5, b.y + b.h * 0.55, 5, 0, 7); c.stroke(); // its tag ring
+    }
+    c.restore();
+  }
+
+  /* the dream itself: the desk room or the cameras (with the monitor sliding in between) */
+  function drawDreamView(c) {
+    if (G.cams.t >= 1) { drawCams(c); return; }
+    const settling = G.state === 'night' && G.settle > 0;
+    const drop = settling ? 50 * ease(G.settle / 1.2) * fxMul() : 0; // you land in the chair after the jolt
+    c.save(); if (drop) c.translate(0, drop);
+    drawOffice(c);
+    drawMotes(c, G.powerOut ? 0.3 : 1);
+    drawParts(c);
+    c.restore();
+    if (drop) { c.fillStyle = '#000'; c.fillRect(0, 0, W, drop); }
+    if (G.cams.t > 0) {
+      const y = H * (1 - ease(G.cams.t));
+      c.save(); c.translate(0, y);
+      c.fillStyle = '#050806'; c.fillRect(0, 0, W, H);
+      c.globalAlpha = 0.9; c.imageSmoothingEnabled = false;
+      c.drawImage(Art.noise[Math.floor(G.t * 24) % Art.noise.length], 0, 0, W, H);
+      c.imageSmoothingEnabled = true; c.globalAlpha = 1;
+      c.strokeStyle = '#000'; c.lineWidth = 40; c.strokeRect(0, 0, W, H);
+      c.restore();
+    }
+    if (settling && save.fx === 'off' && G.settle > 0.8) { c.fillStyle = `rgba(0,0,0,${(G.settle - 0.8) / 0.4})`; c.fillRect(0, 0, W, H); } // Off: a plain fade-in
+  }
+
   /* art-helper only: which file would replace the stand-in picture on screen right now */
   function drawStandInHint(c, path) {
     const text = 'stand-in art — your picture goes at ' + path;
@@ -1961,34 +2519,28 @@
 
   function render() {
     const st = G.state;
-    const fx = save.fx;
-    let ghost = 1, warp = 0;
-    if (st === 'menu' || st === 'boot' || st === 'card') {
+    const fx = save.fx, amt = fx === 'full' ? 1 : fx === 'low' ? 0.35 : 0;
+    let ghost = 1, warp = 0, vignette = 1;
+    if (st === 'menu' || st === 'boot') {
       drawMenuScene(bx);
       drawMotes(bx, 1);
       drawParts(bx);
       warp = fx === 'full' ? 2 : 0;
       ghost = fx === 'full' ? 0.75 : 1;
-    } else if (st === 'night' || st === 'win' || st === 'dead') {
-      if (G.cams.t >= 1) drawCams(bx);
-      else {
-        drawOffice(bx);
-        drawMotes(bx, G.powerOut ? 0.3 : 1);
-        drawParts(bx);
-        if (G.cams.t > 0) {
-          const y = H * (1 - ease(G.cams.t));
-          bx.save(); bx.translate(0, y);
-          bx.fillStyle = '#050806'; bx.fillRect(0, 0, W, H);
-          bx.globalAlpha = 0.9; bx.imageSmoothingEnabled = false;
-          bx.drawImage(Art.noise[Math.floor(G.t * 24) % Art.noise.length], 0, 0, W, H);
-          bx.imageSmoothingEnabled = true; bx.globalAlpha = 1;
-          bx.strokeStyle = '#000'; bx.lineWidth = 40; bx.strokeRect(0, 0, W, H);
-          bx.restore();
-        }
-      }
-      const amt = fx === 'full' ? 1 : fx === 'low' ? 0.35 : 0;
+    } else if (st === 'asleep') {
+      drawFallAsleep(bx);
+    } else if (st === 'night' || st === 'dead' || st === 'waking') {
+      drawDreamView(bx);
       warp = (1.5 + G.danger * 7) * amt;
       ghost = fx === 'full' ? 0.82 : 1;
+      if (st === 'night') warp += 10 * G.settle * amt; // the jolt
+      if (st === 'waking') { // the dream lets go of you
+        drawWakeOverlay(bx);
+        warp *= clamp(1 - G.wakeT, 0, 1); ghost = lerp(ghost, 1, clamp(G.wakeT, 0, 1));
+      }
+    } else if (st === 'morning' || st === 'win') {
+      drawMorning(bx); // the real world: no warp, no ghosting
+      vignette = 0.45;
     } else if (st === 'jumpscare') {
       drawJumpscare(bx);
       warp = fx === 'full' ? 9 : fx === 'low' ? 3 : 0;
@@ -2024,7 +2576,7 @@
       ctx.drawImage(bloom, 0, 0, W, H);
       ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
     }
-    ctx.drawImage(Art.vignette, 0, 0);
+    ctx.globalAlpha = vignette; ctx.drawImage(Art.vignette, 0, 0); ctx.globalAlpha = 1;
     if (G.danger > 0.05 && (st === 'night')) {
       const pulse = 0.5 + 0.5 * Math.sin(G.t * (4 + G.danger * 5)) * fxMul(); // a slow pulse; steady with effects Off
       const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H);
@@ -2036,6 +2588,7 @@
       if (G.cams.t >= 1) { if (Art.camMissing[G.cams.cur]) drawStandInHint(ctx, camById[G.cams.cur].image); }
       else if (Art.officeMissing) drawStandInHint(ctx, CFG.office.image);
     }
+    if (DEV && (st === 'asleep' || st === 'morning' || st === 'win') && Art.bedroomMissing) drawStandInHint(ctx, (CFG.bedroom || {}).image || 'assets/rooms/bedroom.png');
     const fl = fx === 'off' ? Math.min(G.flash, 0.25) : G.flash;
     flashEl.style.opacity = fl > 0.01 ? fl : 0;
     if (fl > 0.01) flashEl.style.background = `rgb(${G.flashColor})`;
@@ -2172,12 +2725,12 @@
     document.querySelectorAll('.camBtn').forEach((b) => b.classList.toggle('sel', b.dataset.cam === cam.id));
   }
 
-  const SCREENS = ['#boot', '#menu', '#nightCard', '#pause', '#settings', '#extras', '#custom', '#dead', '#win'];
+  const SCREENS = ['#boot', '#menu', '#nightCard', '#pause', '#settings', '#extras', '#custom', '#dead', '#win', '#wakePrompt', '#credits'];
   function hideScreens() { SCREENS.forEach((s) => hide($(s))); }
   function showScreen(sel) {
     hideScreens(); show($(sel));
     // screens you reach mid-game get keyboard focus, so Enter picks the obvious button
-    if (sel === '#dead' || sel === '#win' || sel === '#pause') {
+    if (sel === '#dead' || sel === '#pause') { // (#win focuses its first button once the buttons appear, see updateWin)
       const b = $(sel).querySelector('button:not(.hidden):not([disabled])');
       if (b) b.focus({ preventScroll: true });
     }
@@ -2186,8 +2739,8 @@
   let returnTo = '#menu';
   function goMenu() {
     if (G.paused) Sound.pauseAll(false); // quitting from Pause must not leave the sound switched off
-    G.state = 'menu'; G.paused = false; G.later = [];
-    hide($('#hud')); hide($('#voiceBox'));
+    G.state = 'menu'; G.paused = false; G.later = []; G.finale = null;
+    resetHud(); G.voice.active = false;
     Sound.resume();
     Sound.stopAll();
     Sound.loop('menu_music', 0.75, { fade: 2.5 });
@@ -2214,12 +2767,14 @@
   const endlessUnlocked = () => save.beaten >= NIGHTS || DEV;
   function toTitleCase(s) { return s.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase()); }
 
+  /* the night (or falling asleep) holds its breath */
   function pauseGame(p) {
-    if (G.state !== 'night') return;
+    if (G.state !== 'night' && G.state !== 'asleep') return;
     if (p === G.paused) return;
     G.paused = p;
     Sound.pauseAll(p);
-    if (p) showScreen('#pause'); else hideScreens();
+    if (p) showScreen('#pause');
+    else { hideScreens(); if (G.state === 'asleep' && G.cardShown) show($('#nightCard')); }
   }
 
   function openSettings(from) {
@@ -2319,7 +2874,7 @@
   window.addEventListener('blur', () => { // another window got the focus: let go of everything and pause
     pointer.inside = false; pointer.dragId = null;
     for (const k in keys) keys[k] = false;
-    if (G.state === 'night') pauseGame(true);
+    if (G.state === 'night' || G.state === 'asleep') pauseGame(true);
   });
 
   stage.addEventListener('pointerdown', (e) => {
@@ -2328,6 +2883,7 @@
     pointer.type = e.pointerType || 'mouse';
     pointer.x = p.x; pointer.y = p.y; pointer.lastX = p.x;
     if (e.target.closest('button, input, label, textarea, a')) return;
+    if (skipInput()) return; // falling asleep, waking up, the credits
     if (G.state === 'night' && !G.paused) {
       if (DEV && G.cams.up && G.devGhost) { devPlace(p); return; }
       if (DEV && !G.cams.up) devOfficeClick(p);
@@ -2347,20 +2903,24 @@
     const k = e.key;
     if (k === 'ArrowLeft' || k === 'ArrowRight') { keys[k] = true; e.preventDefault(); }
     const playing = G.state === 'night' && !G.paused;
-    if ((k === ' ' || k === 'Spacebar') && (playing || G.state === 'boot')) e.preventDefault(); // elsewhere Space presses buttons
+    const scene = !G.paused && (['asleep', 'waking', 'morning'].indexOf(G.state) >= 0 || !!G.finale); // no buttons on screen
+    if ((k === ' ' || k === 'Spacebar') && (playing || scene || G.state === 'boot')) e.preventDefault(); // elsewhere Space presses buttons
+    if (scene && k === 'Enter') e.preventDefault();
+    if (e.repeat && (k === 'Enter' || k === ' ') && (G.state === 'win' || G.state === 'dead')) e.preventDefault(); // a key held through the slap or the scare presses nothing
     if (e.repeat) return;
     if (G.state === 'boot' && (k === 'Enter' || k === ' ')) { bootGo(); return; }
-    if (G.state === 'card' && (k === 'Enter' || k === ' ' || k === 'Escape')) return;
     if (k === 'Escape' || k === 'p' || k === 'P') {
       // a sub-screen (even one opened from Pause) goes back first; only then does Esc pause/resume
       if (['#settings', '#extras', '#custom'].some((s) => !$(s).classList.contains('hidden'))) backFromSub();
-      else if (G.state === 'night') pauseGame(!G.paused);
+      else if (G.state === 'night' || G.state === 'asleep') pauseGame(!G.paused);
+      else skipInput();
       return;
     }
     if (DEV && playing && k === 'Tab') { e.preventDefault(); devKey('tab'); return; }
+    if (scene && k !== 'Tab' && k.length && !/^(Shift|Control|Alt|Meta|CapsLock|Fn)$/.test(k)) { skipInput(); return; } // any key skips ahead
     if (!playing) return;
     const lk = k.toLowerCase();
-    pressFx(KEY_BTN[lk === ' ' || k === 'ArrowUp' || k === 'ArrowDown' ? 's' : lk]);
+    if (!G.powerOut) pressFx(KEY_BTN[lk === ' ' || k === 'ArrowUp' || k === 'ArrowDown' ? 's' : lk]); // (the buttons are falling away at Lucidity zero)
     if (lk === 'q') setDoor('left', !G.doors.left.closed);
     else if (lk === 'e') setDoor('right', !G.doors.right.closed);
     else if (lk === 'a') setLight('left', !G.doors.left.light);
@@ -2372,7 +2932,11 @@
   });
   window.addEventListener('keyup', (e) => { keys[e.key] = false; });
 
-  document.addEventListener('visibilitychange', () => { if (document.hidden && G.state === 'night') pauseGame(true); });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) return;
+    if (G.state === 'night' || G.state === 'asleep') pauseGame(true);
+    else if (G.state === 'waking' || G.state === 'morning') slapAlarm(); // don't leave an alarm ringing in a hidden tab
+  });
 
   function bind(sel, fn) {
     $(sel).addEventListener('click', (e) => { e.preventDefault(); Sound.play('ui_click', { vol: 0.45 }); fn(e); });
@@ -2404,7 +2968,7 @@
   bind('#xBack', () => backFromSub());
   bind('#cBack', () => backFromSub());
   bind('#cGo', () => { if (endlessUnlocked()) startNight(NIGHTS, true); });
-  bind('#dRetry', () => startNight(G.night, G.endless));
+  bind('#dRetry', () => startNight(G.night, G.endless, true)); // the short way to fall asleep
   bind('#dMenu', () => goMenu());
   bind('#wNext', () => { if (G.endless || G.night >= NIGHTS) goMenu(); else startNight(G.night + 1, false); });
   bind('#wMenu', () => goMenu());
@@ -2555,7 +3119,9 @@
 
   /* for testers and bots: drive the game from the browser console */
   window.__game = {
-    G, Sound, Art, CFG, startNight, beginNight, goMenu, pauseGame, monsterMove, jumpscare, win, powerOutStart,
+    G, Sound, Art, CFG, startNight, beginNight, goMenu, pauseGame, monsterMove, jumpscare, powerOutStart,
+    startWaking, enterMorning, slapAlarm, skipInput, skipIntro, showWinPanel, endFinale, clockTick, clockPan, officeSpot,
+    lidOpen, wakeLids, fallAsleepLine, paintBedroom, drawAlarmClock, evidenceCfg,
     setDoor, setLight, toggleCams, switchCam, pinch, enterOffice, layout,
     after, cue, hit, rule, fxMul, doorDist, doorSide, calm, arrive, stepToward, spawnParts,
     noise, pinchGain, pinchCfg, strainCfg, bangDoor, pulseCls,

@@ -39,7 +39,7 @@ Open the game with **`?dev`** at the end of the address, like
   paste into `config.js` under `poses:`.
 * **Z** / **X** put the monster at the left / right door, so you can check how
   it looks in the doorway (turn the light on).
-* **K** tests the jumpscare, **T** speeds up time, **N** skips to 5:59 AM,
+* **K** tests the jumpscare, **T** speeds up time, **N** skips to 5:59 AM (to see waking up),
   **M** makes the monsters move, **L** drops Lucidity to 5%.
 
 ## 3. The desk room (office)
@@ -68,7 +68,45 @@ Make each one the same shape as the door box. You don't need to draw a
 cracked or damaged door: when a door is held shut too long, the game draws
 cracks over your `closedImage` and makes it shudder by itself.
 
-## 4. Camera rooms
+Two more spots you can mark in your desk room (also under `office` in
+`config.js`; take away the `//` in front of the line to switch them on):
+
+* `clock: { x, y, r }`: the alarm clock on your desk. `x` and `y` are its
+  middle and `r` is how big it is (a fraction of the picture height). At 6 AM
+  the alarm rings right there, and the sound comes from that side.
+* `window: { x, y, w, h }`: the window box, like a door box. When your
+  Lucidity runs out, something comes and stands in it.
+
+Click on them in art-helper mode to read the numbers. If your room has no
+clock or no window, leave them out: the game then skips those effects instead
+of drawing them in the wrong place.
+
+## 4. Your bedroom (the real world)
+
+Every night starts in your bedroom: you fall asleep, count, and drop into the
+dream. When the alarm rings at 6 AM you wake up in the same room and slap the
+alarm off.
+
+| File | What it is |
+|---|---|
+| `assets/rooms/bedroom.png` | Your room **seen from your bed**, **1600 × 900**. The game makes it dark blue at night and warm in the morning, so draw it in normal daylight colours. |
+
+Optional, in `config.js`:
+
+* `bedroom.morningImage`: a different picture for the morning (leave `""` and
+  the game warms up your normal one).
+* `morning.evidence`: something follows you out of the dream. Night 2 the
+  closet door is open a crack, Night 3 the "he walks at night" drawing lies on
+  the bedside table, Night 4 a scrap of pink collar is on the floor. Draw your
+  own as a **transparent PNG** and put its path next to the night's number.
+  To move it, write `{ image: "…", x: 0.15, y: 0.76, w: 0.08, h: 0.04 }`
+  (a box in your bedroom picture, like the door boxes). The picture stands on
+  the bottom of that box.
+
+The big alarm clock in the morning is drawn by the game, so you don't need to
+draw it.
+
+## 5. Camera rooms
 
 Make one picture per camera, ideally **1600 × 900** (16:9):
 
@@ -87,7 +125,7 @@ copying a line in `cameras:`. Number keys 1–9 pick cameras.
 Draw rooms **without** the monster in them. The game places your animated
 monster into the room by itself, using the `poses` numbers.
 
-## 5. Monsters
+## 6. Monsters
 
 Each monster is a list of frames, transparent PNGs played in order:
 
@@ -121,21 +159,30 @@ To add a new monster:
 > **Tip:** crop each frame close to the monster's body (not much empty space
 > around it). Then the sizes in `poses` and `doorPose` behave the way you expect.
 
-## 6. Sounds
+## 7. Sounds
 
 All sounds are real recordings downloaded from OpenGameArt.org under free
 licenses. See `CREDITS.md`. To swap one, put a new file in `assets/audio/` and
 change its path in `sounds:` in `config.js`.
+
+`alarm` is the hero sound: it rings inside the dream at 6 AM (muffled at
+first, as if through a pillow) and then in your room until you turn it off.
+`clock_tick` ticks while you fall asleep, and slows down and stops when your
+Lucidity runs out.
 
 The sounds marked `// optional:` in `config.js` (`clock_tick`, `type_key`,
 `reality_snap`, `redhorn_click`, `door_strain`, `hypnic_jolt`, `water_drip`)
 can be missing: the game then plays a stand-in, like a slowed-down or muffled
 copy of another sound.
 
-## 7. Text and game settings
+## 8. Text and game settings
 
 * `title` and `subtitle`: the name on the menu
+* `fallAsleep`: what you count in your head while you fall asleep (one line per night)
 * `dreamVoice`: what the voice says at the start of each night
+* `finale`: after Night 5, the voice says `line`, then the credits roll. They
+  start with the **first line of `credits`**, which is you: change `"You!"` to
+  your name if you like. `thanks` is the very last line.
 * `hourSeconds`: how long an in-game hour lasts (default 75 seconds)
 * `nights`: one `{ … }` block per night. `drain` is how fast Lucidity drains
   (bigger = harder); the other settings in each block are explained in the

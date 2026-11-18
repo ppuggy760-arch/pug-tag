@@ -79,7 +79,52 @@ window.GAME_CONFIG = {
       left:  { x: 0.030, y: 0.178, w: 0.150, h: 0.700, darkImage: "", litImage: "", closedImage: "" },
       right: { x: 0.820, y: 0.178, w: 0.150, h: 0.700, darkImage: "", litImage: "", closedImage: "" },
     },
+    /* When you draw your own desk room, you can tell the game where two
+       things are in it (use ?dev and click on them to read the numbers).
+       Take away the // at the start of the line to switch it on.
+         clock:  the alarm clock on the desk. x, y = its middle, r = how big it is
+                 (a fraction of the picture height). At 6 AM it rings there.
+         window: the window box (x, y, w, h, like the doors). When your
+                 Lucidity runs out, something comes and stands in it.
+       Leave them out if your room has no clock or no window. */
+    // clock:  { x: 0.604, y: 0.651, r: 0.029 },
+    // window: { x: 0.233, y: 0.178, w: 0.104, h: 0.300 },
   },
+
+  /* ------------------------------------------------------------------
+     YOUR BEDROOM: every night starts and ends here, in the real world.
+     image:        ONE picture of your room, seen from your bed (1600 x 900).
+                   The game makes it dark blue at night and warm in the morning.
+     morningImage: (optional) a different picture for the morning. "" = the
+                   game warms up "image" by itself.
+     Until you draw it, the game paints a stand-in bedroom.
+     ------------------------------------------------------------------ */
+  bedroom: { image: "assets/rooms/bedroom.png", morningImage: "" },
+
+  /* What you count in your head while you fall asleep (one line per night). */
+  fallAsleep: {
+    1: "one… two… three…",
+    2: "one… two… two… two…",
+    3: "one… three… nine… the house is counting with you",
+    4: "don't count. it counts backwards.",
+    5: "don't count. just listen for the alarm.",
+    endless: "there is no counting here.",
+  },
+
+  /* THE MORNING. Something follows you out of the dream:
+     night 2: the closet door is open a crack,
+     night 3: the "he walks at night" drawing is on your bedside table,
+     night 4: a scrap of pink collar lies on the floor.
+     Draw your own (a transparent PNG) and put its path here.
+     "" = the game draws it for you.
+     To move it, write  { image: "…", x: 0.15, y: 0.76, w: 0.08, h: 0.04 }
+     instead (where it goes in your bedroom picture, like the door boxes). */
+  morning: { evidence: { 2: "", 3: "", 4: "" } },
+
+  /* THE LAST MORNING (after Night 5): what the dream voice says, then the
+     credits roll. The credits start with the FIRST line of "credits" at the
+     bottom of this file: that's you! "thanks" is the very last line. */
+  finale: { line: "See? I told you I'd be the one ringing.", thanks: "Thank you for waking up." },
 
   /* ------------------------------------------------------------------
      CAMERAS. One entry per room you can watch.
@@ -179,7 +224,7 @@ window.GAME_CONFIG = {
     door_open:  "assets/audio/door_open.mp3",
     light_buzz: "assets/audio/light_buzz.mp3",
     power_down: "assets/audio/power_down.mp3",
-    alarm:      "assets/audio/alarm.mp3",
+    alarm:      "assets/audio/alarm.mp3",      // the 6 AM alarm clock (it rings inside the dream, then in your room)
     morning:    "assets/audio/morning.mp3",
     cam_open:   "assets/audio/cam_open.mp3",
     cam_close:  "assets/audio/cam_close.mp3",
@@ -188,7 +233,7 @@ window.GAME_CONFIG = {
     ui_click:   "assets/audio/ui_click.mp3",
     hour_chime: "assets/audio/hour_chime.mp3",
     // optional:
-    clock_tick:    "assets/audio/clock_tick.mp3",     // a wind-up clock ticking (falling asleep, the last half hour)
+    clock_tick:    "assets/audio/clock_tick.mp3",     // a wind-up clock ticking (falling asleep, and slowing down when Lucidity runs out)
     type_key:      "assets/audio/type_key.mp3",       // one typewriter key, while the dream voice types
     reality_snap:  "assets/audio/reality_snap.mp3",   // a sharp snap when you pinch yourself
     redhorn_click: "assets/audio/redhorn_click.mp3",  // Redhorn's clicking in the walls
@@ -210,12 +255,13 @@ window.GAME_CONFIG = {
     endless: "There is no voice here. Only the dream.",
   },
 
-  /* Credits shown in the Extras screen (see also CREDITS.md). */
+  /* Credits shown in the Extras screen (see also CREDITS.md) and rolled after Night 5.
+     The first line is YOU: change "You!" to your name if you like. */
   credits: [
     { what: "Monster art & animation (Redhorn)", who: "You!", license: "" },
     { what: "Sound: Night ambience", who: "congusbongus", license: "CC0", url: "https://opengameart.org/content/lost-in-a-bad-place-horror-ambience-loop" },
     { what: "Sound: Title-screen music", who: "Tsorthan Grove (tsorthan-grove)", license: "CC0", url: "https://opengameart.org/content/moonlit-lullaby-for-the-lost" },
-    { what: "Sound: Music box (Lucidity runs out)", who: "Aureolus_Omicron (aureolusomicron)", license: "CC0", url: "https://opengameart.org/content/4-music-box-tracks" },
+    { what: "Sound: Music box", who: "Aureolus_Omicron (aureolusomicron)", license: "CC0", url: "https://opengameart.org/content/4-music-box-tracks" },
     { what: "Sound: Whispers", who: "eugeneloza", license: "CC0", url: "https://opengameart.org/content/voices-of-madness" },
     { what: "Sound: Heartbeat", who: "bart (Bart Kelsey)", license: "CC0", url: "https://opengameart.org/content/heartbeat-sounds" },
     { what: "Sound: Jumpscare scream", who: "Vinrax", license: "CC0", url: "https://opengameart.org/content/horror-scream1" },
