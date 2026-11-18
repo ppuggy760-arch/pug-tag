@@ -10,6 +10,7 @@
   --u: 16px;                 /* 1% of the 1600px stage */
   --scale: 1;                /* how much the stage is shrunk on screen, set by game.js layout() */
   --blurK: 1;                /* blur strength: 1 Full, .5 Low, 0 Off (Dream effects setting) */
+  --fxk: 1;                  /* how much things shake and move: 1 Full, .4 Low, 0 Off */
   --bone: #e9dfcf;
   --bone-dim: #a79b8a;
   --blood: #c4132b;
@@ -65,10 +66,28 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 #lucBar { height: calc(var(--u)*.45); background: rgba(255,255,255,.08); border: 1px solid var(--line); border-radius: 99px; overflow: hidden; margin-top: calc(var(--u)*.3); }
 #lucFill { height: 100%; width: 100%; background: linear-gradient(90deg, #6b4bd6, #b7a6ff); box-shadow: 0 0 10px var(--dream-glow); transition: width .25s linear; }
 #lucFill.low { background: linear-gradient(90deg, #7a0d1c, #ff4057); }
-#usage { display: flex; gap: calc(var(--u)*.35); justify-content: flex-end; margin-top: calc(var(--u)*.5); }
-#usage i { width: calc(var(--u)*1.1); height: calc(var(--u)*.55); border-radius: 2px; background: rgba(255,255,255,.08); border: 1px solid var(--line); }
-#usage i.on { background: #b7a6ff; box-shadow: 0 0 8px var(--dream-glow); }
-#usage i.on.hot { background: #ff4057; box-shadow: 0 0 8px var(--blood-glow); }
+/* what is draining you: five little glyphs (asleep, left door, right door, light, cameras) that light up while in use */
+#usage { display: flex; gap: .55em; justify-content: flex-end; align-items: flex-end; margin-top: .55em; font-size: var(--u); }
+#usage i { position: relative; display: block; width: 1.25em; height: 1.2em; color: rgba(233,223,207,.3); transition: color .2s, filter .2s; }
+#usage i.on { color: #b7a6ff; filter: drop-shadow(0 0 .3em var(--dream-glow)); }
+#usage i::before, #usage i::after { content: ""; position: absolute; }
+#usage i[data-k=you]::before { left: .32em; top: .32em; width: .6em; height: .6em; border-radius: 50%; background: currentColor; }
+/* a door: a doorway with a thick hinge side (left or right); its shutter fills in (--s) the longer you hold it */
+#usage i.door::before { inset: 0 .1em; border: .13em solid currentColor; border-bottom: none; border-radius: .12em .12em 0 0; }
+#usage i[data-k=ldoor]::before { border-left-width: .32em; }
+#usage i[data-k=rdoor]::before { border-right-width: .32em; }
+#usage i.door::after { left: .1em; right: .1em; top: 0; height: calc(var(--s, 0) * 100%); background: currentColor; opacity: .7; border-radius: .12em .12em 0 0; }
+#usage i.door.over { color: #ff4057; filter: drop-shadow(0 0 .35em var(--blood-glow)); animation: strainPulse 1s ease-in-out infinite; }
+@keyframes strainPulse { 50% { opacity: .55; } }
+#usage i[data-k=light]::before { inset: 0 .05em; background: currentColor;
+  clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%); }
+#usage i[data-k=cam]::before { left: 0; right: 0; top: .05em; height: .78em; border: .13em solid currentColor; border-radius: .14em; }
+#usage i[data-k=cam]::after { left: .4em; right: .4em; bottom: 0; height: .22em; background: currentColor; }
+/* "+8": a pinch's Lucidity rising out of the box */
+.lucGain { position: absolute; right: calc(var(--u)*6.4); top: calc(var(--u)*1.7); font-family: "VT323", monospace; font-size: calc(var(--u)*2.6);
+  color: #e2d8ff; text-shadow: 0 0 .4em var(--dream-glow), 0 0 .2em #000; pointer-events: none; animation: gainUp .9s ease-out forwards; }
+@keyframes gainUp { from { opacity: 0; translate: 0 calc(var(--u)*1.2*var(--fxk)); } 20% { opacity: 1; }
+  to { opacity: 0; translate: 0 calc(var(--u)*-1.8*var(--fxk)); } }
 
 .doorPanel { position: absolute; bottom: calc(var(--u)*1.6); display: flex; flex-direction: column; gap: calc(var(--u)*.7); }
 #leftPanel { left: calc(var(--u)*1.6); }
@@ -82,7 +101,19 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 .hudBtn.door.on { background: rgba(120, 12, 30, .78); border-color: #ff6a7d; box-shadow: 0 0 1.4em var(--blood-glow); color: #fff; }
 .hudBtn.light.on { background: rgba(230, 200, 120, .82); color: #1b1206; border-color: #fff1c6; box-shadow: 0 0 1.6em rgba(255, 220, 140, .7); }
 .hudBtn.light.on kbd { color: #3a2b10; border-color: rgba(0,0,0,.3); }
-.hudBtn.jammed { opacity: .45; filter: grayscale(1); }
+/* a held door: a thin bar fills while it is free and turns red once it costs extra */
+.hudBtn.door { overflow: hidden; }
+.hudBtn .strain { position: absolute; left: 0; bottom: 0; height: 3px; width: calc(var(--s, 0) * 100%); background: var(--dream); transition: background .2s; }
+.hudBtn.door.over .strain { background: #ff4057; box-shadow: 0 0 6px #ff4057; }
+/* one-shot button effects (game.js pulseCls; each class is named after its animation) */
+.hudBtn.pressed, #camBar.pressed, #pauseBtn.pressed { animation: pressed .11s ease-out; }
+@keyframes pressed { from { translate: 0 1px; scale: .97; filter: brightness(1.25); } }
+.hudBtn.hit { animation: hit .45s ease-out; } /* the door held: it shudders with the bang */
+@keyframes hit { 0% { box-shadow: 0 0 2em #ff2040; translate: calc(3px * var(--fxk)) 0; } 30% { translate: calc(-3px * var(--fxk)) 0; }
+  60% { translate: calc(1.5px * var(--fxk)) 0; } 100% { translate: 0 0; } }
+.hudBtn.deny { animation: deny .25s linear; } /* the dream won't let you */
+@keyframes deny { 0%, 100% { translate: 0 0; } 20% { translate: calc(-4px * var(--fxk)) 0; border-color: #ff6a7d; }
+  40% { translate: calc(4px * var(--fxk)) 0; } 60% { translate: calc(-3px * var(--fxk)) 0; } 80% { translate: calc(2px * var(--fxk)) 0; } }
 .hudBtn.dead, #camBar.dead { opacity: .25; pointer-events: none !important; box-shadow: none; }
 .hudBtn:focus-visible, #camBar:focus-visible { outline: 2px solid rgba(233,223,207,.6); outline-offset: 2px; }
 
@@ -90,6 +121,9 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
   font-size: calc(var(--u)*1.25); padding: calc(var(--u)*.45) calc(var(--u)*.9); }
 #pinchCd { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--dream); }
 #pinchBtn.cool { opacity: .5; }
+/* how much a pinch would give right now (+2 / +4 / +8) */
+#pinchAmt { font-family: "VT323", monospace; font-style: normal; font-size: 1.15em; letter-spacing: 0; color: #b7a6ff; }
+#pinchBtn.big:not(.cool) #pinchAmt { color: #fff; text-shadow: 0 0 .5em var(--dream), 0 0 1em var(--dream-glow); }
 
 #camBar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--u)*1.4); width: calc(var(--u)*34);
   padding: calc(var(--u)*.8) 0; display: flex; align-items: center; justify-content: center; gap: calc(var(--u)*1);
@@ -139,6 +173,18 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 .camBtn.sel { background: #cfe9d5; color: #06130c; box-shadow: 0 0 10px rgba(160,255,200,.6); }
 #youMark { position: absolute; left: 50%; top: 93%; transform: translate(-50%, -50%); font-family: "Fell SC", serif;
   font-size: calc(var(--u)*1.2); letter-spacing: .2em; color: #ffd7a0; padding: .1em .5em; border: 1px dashed rgba(255,215,160,.6); }
+/* a pinch makes a noise right where you are */
+#youMark::after { content: ""; position: absolute; left: 50%; top: 50%; width: 3em; height: 3em; margin: -1.5em 0 0 -1.5em; border-radius: 50%;
+  border: 2px solid rgba(255,215,160,.85); opacity: 0; pointer-events: none; }
+#youMark.ripple::after { animation: ripple 1s ease-out; }
+@keyframes ripple { from { transform: scale(0); opacity: 1; } to { transform: scale(3); opacity: 0; } }
+[data-fx=off] #youMark.ripple::after { animation: none; }
+/* a bang while you're on the cameras: that side of YOU glows red (the door held) */
+#youMark::before { content: ""; position: absolute; top: -60%; bottom: -60%; width: 120%; opacity: 0; pointer-events: none; }
+#youMark.bangL::before { right: 50%; background: radial-gradient(ellipse at 100% 50%, rgba(255,32,64,.85), rgba(255,32,64,0) 70%); animation: bangL 1s ease-out; }
+#youMark.bangR::before { left: 50%; background: radial-gradient(ellipse at 0% 50%, rgba(255,32,64,.85), rgba(255,32,64,0) 70%); animation: bangR 1s ease-out; }
+@keyframes bangL { from { opacity: 1; } to { opacity: 0; } }
+@keyframes bangR { from { opacity: 1; } to { opacity: 0; } }
 
 #devInfo { position: absolute; left: calc(var(--u)*1.6); top: calc(var(--u)*14.5); font-family: "VT323", monospace; font-size: calc(var(--u)*1.2);
   color: #9cff9c; background: rgba(0,0,0,.65); padding: .5em .8em; white-space: pre; pointer-events: auto; user-select: text; -webkit-user-select: text; max-width: 46%; }
@@ -251,9 +297,9 @@ input[type=range] { width: 50%; accent-color: #b7a6ff; }
 #flash { position: absolute; inset: 0; z-index: 30; pointer-events: none; background: #fff; opacity: 0; }
 
 /* ---------- Dream effects setting (html[data-fx], set by game.js) ---------- */
-[data-fx=low] { --blurK: .5; }
-[data-fx=off] { --blurK: 0; }
-[data-fx=off] .glitch, [data-fx=off] #bootTitle, [data-fx=off] #bootGo, [data-fx=off] #lucPct.low { animation: none; }
+[data-fx=low] { --blurK: .5; --fxk: .4; }
+[data-fx=off] { --blurK: 0; --fxk: 0; }
+[data-fx=off] .glitch, [data-fx=off] #bootTitle, [data-fx=off] #bootGo, [data-fx=off] #lucPct.low, [data-fx=off] #usage i.door.over { animation: none; }
 [data-fx=off] .cardInner, [data-fx=off] .deathTitle { animation-name: fadeIn; }
 [data-fx=off] #hud.enter, [data-fx=off] #hud.enter #voiceBox { animation-name: fadeIn; }
 
@@ -273,6 +319,8 @@ input[type=range] { width: 50%; accent-color: #b7a6ff; }
   #camBar { width: calc(var(--u)*36); min-height: calc(48px / var(--scale)); padding: calc(var(--u)*1.2) 0; font-size: max(calc(var(--u)*2), var(--t16)); }
   /* the pinch button sits just above the (taller) camera bar */
   #pinchBtn { bottom: calc(var(--u)*2.4 + max(var(--u)*4.4, 48px / var(--scale))); font-size: max(calc(var(--u)*1.6), var(--t14)); min-height: var(--tap); }
+  #usage { font-size: max(var(--u), calc(11px / var(--scale))); }
+  .hudBtn .strain { height: max(3px, calc(3px / var(--scale))); }
   #pauseBtn { width: max(calc(var(--u)*3.2), var(--tap)); height: max(calc(var(--u)*3.2), var(--tap)); font-size: max(calc(var(--u)*1.7), var(--t16)); }
 
   .camBtn { font-size: max(calc(var(--u)*1.9), var(--t14)); min-width: calc(44px / var(--scale)); min-height: calc(44px / var(--scale));

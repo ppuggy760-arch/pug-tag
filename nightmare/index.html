@@ -24,7 +24,9 @@
       <div class="lucLabel">LUCIDITY</div>
       <div id="lucPct">100%</div>
       <div id="lucBar"><div id="lucFill"></div></div>
-      <div id="usage" aria-label="drain"><i></i><i></i><i></i><i></i><i></i></div>
+      <div id="usage" aria-label="what is draining your Lucidity">
+        <i data-k="you" title="Just being asleep"></i><i data-k="ldoor" class="door" title="Left door (it costs more the longer you hold it)"></i><i data-k="rdoor" class="door" title="Right door (it costs more the longer you hold it)"></i><i data-k="light" title="A door light"></i><i data-k="cam" title="Cameras"></i>
+      </div>
     </div>
 
     <div id="voiceBox" class="hidden">
@@ -33,15 +35,15 @@
     </div>
 
     <div id="leftPanel" class="doorPanel">
-      <button id="btnLDoor" class="hudBtn door"><span>DOOR</span><kbd>Q</kbd></button>
+      <button id="btnLDoor" class="hudBtn door"><span>DOOR</span><kbd>Q</kbd><b class="strain"></b></button>
       <button id="btnLLight" class="hudBtn light"><span>LIGHT</span><kbd>A</kbd></button>
     </div>
     <div id="rightPanel" class="doorPanel">
-      <button id="btnRDoor" class="hudBtn door"><span>DOOR</span><kbd>E</kbd></button>
+      <button id="btnRDoor" class="hudBtn door"><span>DOOR</span><kbd>E</kbd><b class="strain"></b></button>
       <button id="btnRLight" class="hudBtn light"><span>LIGHT</span><kbd>D</kbd></button>
     </div>
 
-    <button id="pinchBtn" class="hudBtn pinch"><span>PINCH</span><kbd>F</kbd><b id="pinchCd"></b></button>
+    <button id="pinchBtn" class="hudBtn pinch"><span>PINCH</span><em id="pinchAmt">+4</em><kbd>F</kbd><b id="pinchCd"></b></button>
     <button id="camBar"><span>▲&nbsp;&nbsp;CAMERAS&nbsp;&nbsp;▲</span><kbd>SPACE</kbd></button>
 
     <div id="camOverlay" class="hidden">
@@ -132,6 +134,8 @@
         <p class="keysOnly">Left side: <kbd>Q</kbd> door, <kbd>A</kbd> light. Right side: <kbd>E</kbd> door, <kbd>D</kbd> light.</p>
         <p class="keysOnly"><kbd>SPACE</kbd> cameras, <kbd>1</kbd>–<kbd>9</kbd> switch camera, <kbd>F</kbd> pinch yourself, <kbd>ESC</kbd> pause.</p>
         <p>Everything drains <b>Lucidity</b>. If it hits <span class="num">0</span>%, the dream stops listening to you.</p>
+        <p>A shut door is like holding your breath: cheap for a little while, then it costs more and more. Open it once it bangs.</p>
+        <p>Pinching yourself gives Lucidity back, more the lower you are. But it is loud, and it draws the monster closer.</p>
       </div>
       <div class="sub2">Credits</div>
       <div id="creditList"></div>

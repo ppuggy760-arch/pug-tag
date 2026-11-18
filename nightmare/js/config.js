@@ -27,8 +27,10 @@ window.GAME_CONFIG = {
        pinchRadius: how many rooms away a pinch can be heard.
        youCam:      true = the spooky "CAM 7" can appear once tonight.
        stare:       seconds you can watch it on a camera before it steps closer (0 = never).
-       gasp:        seconds a shut door can stay shut before it gives up and opens (0 = never).
-       doorFree:    seconds a door can stay shut before it costs extra Lucidity.
+       gasp:        seconds a shut door can stay shut before it gasps for air and opens
+                    by itself (0 = never). It never opens with a monster behind it.
+       doorFree:    seconds a door can stay shut before it costs extra Lucidity
+                    (see doorStrain below).
        falseDawn:   the hour a fake 6 AM happens (5.33 = 5:20 AM). Leave out for none.
      (Old config files with lucidityDrain: [ ... ] still work.)
      ------------------------------------------------------------------ */
@@ -37,16 +39,29 @@ window.GAME_CONFIG = {
     { drain: 0.10, stepChance: 1,    lies: true,  pinchRadius: 1, youCam: false, stare: 0, gasp: 0,  doorFree: 12 },
     { drain: 0.11, stepChance: 0.8,  lies: true,  pinchRadius: 2, youCam: true,  stare: 0, gasp: 0,  doorFree: 11 },
     { drain: 0.12, stepChance: 0.65, lies: true,  pinchRadius: 2, youCam: true,  stare: 5, gasp: 32, doorFree: 10 },
-    { drain: 0.13, stepChance: 0.5,  lies: true,  pinchRadius: 2, youCam: true,  stare: 4, gasp: 28, doorFree: 10, falseDawn: 5.33 },
+    { drain: 0.125, stepChance: 0.5, lies: true,  pinchRadius: 2, youCam: true,  stare: 4, gasp: 28, doorFree: 10, falseDawn: 5.33 },
   ],
   /* The same settings for the Endless Dream (custom night). */
   endlessRules: { stepChance: 0.6, lies: true, pinchRadius: 2, youCam: true, stare: 4.5, gasp: 28, doorFree: 10 },
   /* Lucidity drain in the Endless Dream. */
   endlessDrain: 0.13,
 
-  /* PINCH YOURSELF: gives back lucidity but makes noise
-     (every monster's next move is a guaranteed step closer). */
-  pinch: { amount: 6, cooldown: 30 },
+  /* PINCH YOURSELF: gives back Lucidity, but it is LOUD. A monster close to
+     your doors (see pinchRadius above) steps one room closer straight away,
+     one waiting at a door stops waiting, and the rest move at their next chance.
+       amount:      how much Lucidity a pinch gives back.
+       cooldown:    seconds before you can pinch again.
+       lowBonus:    below 30% Lucidity it gives this many times more (2 = double).
+       highPenalty: above 60% it gives only this much of it (0.25 = a quarter). */
+  pinch: { amount: 4, cooldown: 45, lowBonus: 2, highPenalty: 0.25 },
+
+  /* HELD-BREATH DOORS: a shut door is like holding your breath. It is cheap
+     for a while (doorFree seconds, see nights above), then it costs more and
+     more Lucidity, and it groans and cracks. Open it to let it breathe out.
+       rampSeconds: seconds it takes to go from normal cost to the most it can cost.
+       maxCost:     the most one shut door can cost (1 = never extra, 3 = three times).
+       giveUpAfter: seconds a monster waits at a shut door before it bangs and leaves. */
+  doorStrain: { rampSeconds: 10, maxCost: 3, giveUpAfter: 8 },
 
   /* ------------------------------------------------------------------
      THE DESK ROOM (the office you sit in).
@@ -187,10 +202,10 @@ window.GAME_CONFIG = {
      of each night. Use \n\n for a new paragraph.
      ------------------------------------------------------------------ */
   dreamVoice: {
-    1: "Hey. Hey — can you hear me? Good. You're asleep. I know, it doesn't feel like it. That's how this place works.\n\nThis is the Desk Room. Same desk, same walls, every night, until the alarm rings at six.\n\nSomething walks the halls of this dream. It's red. It's tall. It doesn't blink.\n\nWatch it on the cameras. If it comes to your door, shut the door. Use the lights to check — it's always darker out there than it should be.\n\nEverything you do costs Lucidity: doors, lights, cameras. If your Lucidity runs out, the dream stops listening to you.\n\nIf you're slipping, pinch yourself. It helps. But it's loud, and it will hear you.\n\nJust make it to six. The alarm always comes. Usually.",
+    1: "Hey. Hey — can you hear me? Good. You're asleep. I know, it doesn't feel like it. That's how this place works.\n\nThis is the Desk Room. Same desk, same walls, every night, until the alarm rings at six.\n\nSomething walks the halls of this dream. It's red. It's tall. It doesn't blink.\n\nWatch it on the cameras. If it comes to your door, shut the door. Use the lights to check — it's always darker out there than it should be. Doors are like holding your breath. Don't hold them forever.\n\nEverything you do costs Lucidity: doors, lights, cameras. If your Lucidity runs out, the dream stops listening to you.\n\nIf you're slipping, pinch yourself. It helps more the deeper you've sunk. But it's loud, and it will hear you.\n\nJust make it to six. The alarm always comes. Usually.",
     2: "You came back. Most people don't remember the first night.\n\nIt remembers you, though. It's quicker now — it's learned the way to your room.\n\nDon't waste the light. Listen for its breathing at the door.",
     3: "The halls were longer tonight. Did you notice? The dream is building the house out of your memories.\n\nIf you hear it bang on the door, that's good. That means the door held.",
-    4: "Don't stare at it on the cameras for too long. I think it likes being watched.\n\nI can barely hear you anymore. You're sinking deeper.",
+    4: "Don't stare at it on the cameras for too long. I think it likes being watched.\n\nThe doors are tired. Don't make them hold their breath for nothing.\n\nI can barely hear you anymore. You're sinking deeper.",
     5: "This is the last night I can reach you.\n\nWhen the alarm rings, don't hesitate. Don't look back. Just wake up.\n\nI'll be the one ringing.",
     endless: "There is no voice here. Only the dream.",
   },

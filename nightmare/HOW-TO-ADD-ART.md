@@ -64,7 +64,9 @@ Optional extra pictures for each door (leave `""` to use the built-in look):
 * `litImage`: the doorway with the light on (an empty hallway)
 * `closedImage`: the shut door
 
-Make each one the same shape as the door box.
+Make each one the same shape as the door box. You don't need to draw a
+cracked or damaged door: when a door is held shut too long, the game draws
+cracks over your `closedImage` and makes it shudder by itself.
 
 ## 4. Camera rooms
 
@@ -130,7 +132,7 @@ The sounds marked `// optional:` in `config.js` (`clock_tick`, `type_key`,
 can be missing: the game then plays a stand-in, like a slowed-down or muffled
 copy of another sound.
 
-## 7. Text
+## 7. Text and game settings
 
 * `title` and `subtitle`: the name on the menu
 * `dreamVoice`: what the voice says at the start of each night
@@ -140,3 +142,15 @@ copy of another sound.
   comments right above it in `config.js`. Leave a setting out and the game uses
   its own value. (An older `lucidityDrain: [ … ]` list still works too.)
 * `endlessRules` and `endlessDrain`: the same settings for the Endless Dream
+* `pinch`: how much Lucidity a pinch gives back and how often you can do it.
+  It gives more when you are low (`lowBonus`) and less when you are high
+  (`highPenalty`). A pinch is loud: monsters near your doors come closer.
+* `doorStrain`: doors are like holding your breath. A shut door is cheap for
+  `doorFree` seconds (set per night in `nights`), then costs more and more,
+  up to `maxCost` times as much. `giveUpAfter` is how long a monster waits at
+  a shut door before it bangs and leaves.
+
+The little glyphs under the Lucidity bar show what is draining you right now:
+a dot (just being asleep), the left door, the right door, a star (a light) and
+a screen (the cameras). A door glyph fills up while you hold that door and
+turns red once it costs extra.
