@@ -10,6 +10,7 @@
   --u: 16px;                 /* 1% of the 1600px stage */
   --scale: 1;                /* how much the stage is shrunk on screen, set by game.js layout() */
   --blurK: 1;                /* blur strength: 1 Full, .5 Low, 0 Off (Dream effects setting) */
+  --fxk: 1;                  /* how much things shake and move: 1 Full, .4 Low, 0 Off */
   --bone: #e9dfcf;
   --bone-dim: #a79b8a;
   --blood: #c4132b;
@@ -47,10 +48,36 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 #hud.enter { animation: hudIn 1.4s ease-out backwards; }
 #hud.enter #voiceBox { animation: hudIn 1s .5s ease-out backwards; }
 @keyframes hudIn { from { opacity: 0; filter: blur(calc(6px * var(--blurK))); } to { opacity: 1; filter: none; } }
+/* 6 AM: the HUD fades as you wake up */
+#hud.fadeOut { opacity: 0; transition: opacity .4s; }
+#hud.fadeOut button { pointer-events: none; }
+/* Lucidity zero: the controls fall away one after another (the clock stays). Each one waits its turn
+   already dimmed (--from), then drops and tips over (--tilt). Dream effects Off: they only fade. */
+#hud.dissolve .doorPanel, #hud.dissolve #camBar, #hud.dissolve #pinchBtn, #hud.dissolve #lucBox {
+  animation: fallAway 1.6s cubic-bezier(.5,0,.9,.6) both; }
+@keyframes fallAway { from { opacity: var(--from, 1); translate: 0 0; rotate: 0deg; } to { opacity: 0; translate: 0 160px; rotate: var(--tilt, 8deg); } }
+@keyframes fadeAway { from { opacity: var(--from, 1); } to { opacity: 0; } }
+#hud.dissolve #lucBox { animation-delay: .1s; --tilt: -6deg; }
+#hud.dissolve #leftPanel { animation-delay: .3s; }
+#hud.dissolve #rightPanel { animation-delay: .45s; --tilt: -8deg; }
+#hud.dissolve #pinchBtn { animation-delay: .6s; --from: .25; }
+#hud.dissolve #camBar { animation-delay: .9s; --from: .25; --tilt: 3deg; }
+[data-fx=off] #hud.dissolve .doorPanel, [data-fx=off] #hud.dissolve #camBar, [data-fx=off] #hud.dissolve #pinchBtn,
+[data-fx=off] #hud.dissolve #lucBox { animation-name: fadeAway; }
+/* the last morning: only the dream voice is left, in the middle of the screen */
+#hud.onlyVoice > :not(#voiceBox) { display: none !important; }
+#hud.onlyVoice #voiceBox { top: 40%; transform: translate(-50%, -50%); width: calc(var(--u)*46); text-align: center;
+  font-size: calc(var(--u)*1.7); padding: calc(var(--u)*1.4) calc(var(--u)*2.4); background: rgba(8, 5, 14, .62); }
+#hud.onlyVoice #voiceSkip { display: none; }
 
 #clockBox { position: absolute; left: calc(var(--u)*1.6); top: calc(var(--u)*1.2); text-shadow: 0 0 .4em #000, 0 0 1em var(--dream-glow); }
 #hudNight { font-family: "Fell SC", serif; font-size: calc(var(--u)*1.6); letter-spacing: .18em; color: var(--bone-dim); }
-#hudTime { font-family: "VT323", monospace; font-size: calc(var(--u)*4.4); line-height: .95; color: var(--bone); }
+#hudTime { font-family: "VT323", monospace; font-size: calc(var(--u)*4.4); line-height: .95; color: var(--bone); transition: color 1.5s, text-shadow 1.5s; }
+/* the final half hour (and the False Dawn): minutes, in the warm colour of a morning that is almost here */
+#hudTime.dawn { color: #ffd9a0; text-shadow: 0 0 .4em #000, 0 0 .5em rgba(255, 190, 110, .75), 0 0 1.4em rgba(255, 150, 80, .45); }
+/* the False Dawn is over: the clock rolls back down to the real time */
+#hudTime.rollBack { animation: rollBack .7s cubic-bezier(.2,.8,.3,1); }
+@keyframes rollBack { from { opacity: 0; translate: 0 calc(-.7em * var(--fxk)); } 40% { opacity: 1; } to { translate: 0 0; } }
 #pauseBtn { position: absolute; left: 100%; top: calc(var(--u)*.2); margin-left: calc(var(--u)*1.2);
   width: calc(var(--u)*3.2); height: calc(var(--u)*3.2); border-radius: 50%; font-size: calc(var(--u)*1.7); line-height: 1;
   color: var(--bone-dim); background: var(--panel); border: 1px solid var(--line); text-shadow: 0 0 .5em var(--dream-glow); }
@@ -58,17 +85,65 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 
 #lucBox { position: absolute; right: calc(var(--u)*1.6); top: calc(var(--u)*1.2); text-align: right; min-width: calc(var(--u)*15);
   text-shadow: 0 0 .4em #000; }
-.lucLabel { font-family: "Fell SC", serif; font-size: calc(var(--u)*1.4); letter-spacing: .25em; color: var(--bone-dim); }
+.lucTop { display: flex; justify-content: flex-end; align-items: center; gap: calc(var(--u)*.6); }
+.lucLabel { display: inline-block; font-family: "Fell SC", serif; font-size: calc(var(--u)*1.4); letter-spacing: .25em; color: var(--bone-dim); }
+/* your eye: an almond, a violet iris, and a lid that droops as Lucidity sinks (game.js moves the lid) */
+#lucEye { width: calc(var(--u)*2.9); height: calc(var(--u)*1.45); overflow: visible; filter: drop-shadow(0 0 .3em #000); }
+#lucEye .ball { transform-origin: 24px 12px; transform-box: view-box; }
+#lucEye .white { fill: #e9dfcf; opacity: .85; }
+#lucEye .iris { fill: #7a5ee0; transition: fill 1s; }
+#lucEye .pupil { fill: #07050c; }
+#lucEye .lid { fill: #241829; }
+#lucEye .lash { fill: none; stroke: #a79b8a; stroke-width: 1.6; stroke-linecap: round; }
+#lucEye .rim { fill: none; stroke: rgba(233,223,207,.45); stroke-width: 1; }
+#lucEye.low .iris { fill: #e0283f; }
+/* a pinch: one quick blink (none with Dream effects Off) */
+#lucEye.blink .ball { animation: blink .18s ease-in-out; }
+@keyframes blink { 50% { scale: 1 calc(1 - .9 * var(--fxk)); } }
+/* 15% or less: every 1.5 s the eye twitches, a tiny jerk sideways (it moves; it never flashes) */
+#lucEye.twitch .ball { animation: twitch 1.5s ease-in-out infinite; }
+@keyframes twitch { 0%, 70%, 86%, 100% { translate: 0 0; } 74% { translate: calc(-1.4px * var(--fxk)) calc(.6px * var(--fxk)); } 80% { translate: calc(1.2px * var(--fxk)) 0; } }
+/* each new hour: the clock drops into place, and the hour drifts past the middle of the screen, huge and faint */
+#hudTime.hourLand { animation: hourLand .7s cubic-bezier(.2,.8,.3,1); }
+@keyframes hourLand { from { opacity: 0; translate: 0 calc(-.6em * var(--fxk)); } 50% { opacity: 1; } to { translate: 0 0; } }
+#hourGhost { position: absolute; left: 0; right: 0; top: 38%; text-align: center; font-family: "Fell SC", serif; font-size: calc(var(--u)*9);
+  letter-spacing: .12em; color: var(--bone); text-shadow: 0 0 .3em var(--dream-glow); opacity: 0; pointer-events: none; }
+#hourGhost.ghostOut { animation: ghostOut 2.4s ease-in-out; }
+@keyframes ghostOut { 0% { opacity: 0; filter: blur(0); } 35% { opacity: .35; } 100% { opacity: 0; filter: blur(calc(8px * var(--blurK))); } }
+/* below 30% Lucidity the HUD's words slip for a blink: "13 AM", "LUCKILY" … (never the percentage) */
+.slip { color: #ff5d6c !important; filter: blur(calc(.6px * var(--blurK))); transform: skewX(-8deg); transition: none !important; }
 #lucPct { font-family: "VT323", monospace; font-size: calc(var(--u)*3.4); line-height: 1; color: var(--bone); }
 #lucPct.low { color: #ff5d6c; animation: lowPulse 1s infinite; }
 @keyframes lowPulse { 50% { opacity: .45; } }
-#lucBar { height: calc(var(--u)*.45); background: rgba(255,255,255,.08); border: 1px solid var(--line); border-radius: 99px; overflow: hidden; margin-top: calc(var(--u)*.3); }
-#lucFill { height: 100%; width: 100%; background: linear-gradient(90deg, #6b4bd6, #b7a6ff); box-shadow: 0 0 10px var(--dream-glow); transition: width .25s linear; }
+#lucBar { position: relative; height: calc(var(--u)*.45); background: rgba(255,255,255,.08); border: 1px solid var(--line); border-radius: 99px; margin-top: calc(var(--u)*.3); }
+#lucFill { height: 100%; width: 100%; border-radius: 99px; background: linear-gradient(90deg, #6b4bd6, #b7a6ff); box-shadow: 0 0 10px var(--dream-glow); transition: width .25s linear; }
+/* the line where the dream starts to lie (from Night 2): a thin violet notch, brighter once you are below it */
+#lucBox.lies #lucBar::after { content: ""; position: absolute; left: var(--lieAt, 60%); top: -.35em; bottom: -.35em; width: 2px; margin-left: -1px;
+  background: #c9b8ff; opacity: .55; box-shadow: 0 0 4px var(--dream-glow); border-radius: 1px; }
+#lucBox.lies.under #lucBar::after { opacity: 1; box-shadow: 0 0 6px #c9b8ff, 0 0 12px var(--dream-glow); }
 #lucFill.low { background: linear-gradient(90deg, #7a0d1c, #ff4057); }
-#usage { display: flex; gap: calc(var(--u)*.35); justify-content: flex-end; margin-top: calc(var(--u)*.5); }
-#usage i { width: calc(var(--u)*1.1); height: calc(var(--u)*.55); border-radius: 2px; background: rgba(255,255,255,.08); border: 1px solid var(--line); }
-#usage i.on { background: #b7a6ff; box-shadow: 0 0 8px var(--dream-glow); }
-#usage i.on.hot { background: #ff4057; box-shadow: 0 0 8px var(--blood-glow); }
+/* what is draining you: five little glyphs (asleep, left door, right door, light, cameras) that light up while in use */
+#usage { display: flex; gap: .55em; justify-content: flex-end; align-items: flex-end; margin-top: .55em; font-size: var(--u); }
+#usage i { position: relative; display: block; width: 1.25em; height: 1.2em; color: rgba(233,223,207,.3); transition: color .2s, filter .2s; }
+#usage i.on { color: #b7a6ff; filter: drop-shadow(0 0 .3em var(--dream-glow)); }
+#usage i::before, #usage i::after { content: ""; position: absolute; }
+#usage i[data-k=you]::before { left: .32em; top: .32em; width: .6em; height: .6em; border-radius: 50%; background: currentColor; }
+/* a door: a doorway with a thick hinge side (left or right); its shutter fills in (--s) the longer you hold it */
+#usage i.door::before { inset: 0 .1em; border: .13em solid currentColor; border-bottom: none; border-radius: .12em .12em 0 0; }
+#usage i[data-k=ldoor]::before { border-left-width: .32em; }
+#usage i[data-k=rdoor]::before { border-right-width: .32em; }
+#usage i.door::after { left: .1em; right: .1em; top: 0; height: calc(var(--s, 0) * 100%); background: currentColor; opacity: .7; border-radius: .12em .12em 0 0; }
+#usage i.door.over { color: #ff4057; filter: drop-shadow(0 0 .35em var(--blood-glow)); animation: strainPulse 1s ease-in-out infinite; }
+@keyframes strainPulse { 50% { opacity: .55; } }
+#usage i[data-k=light]::before { inset: 0 .05em; background: currentColor;
+  clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%); }
+#usage i[data-k=cam]::before { left: 0; right: 0; top: .05em; height: .78em; border: .13em solid currentColor; border-radius: .14em; }
+#usage i[data-k=cam]::after { left: .4em; right: .4em; bottom: 0; height: .22em; background: currentColor; }
+/* "+8": a pinch's Lucidity rising out of the box */
+.lucGain { position: absolute; right: calc(var(--u)*6.4); top: calc(var(--u)*1.7); font-family: "VT323", monospace; font-size: calc(var(--u)*2.6);
+  color: #e2d8ff; text-shadow: 0 0 .4em var(--dream-glow), 0 0 .2em #000; pointer-events: none; animation: gainUp .9s ease-out forwards; }
+@keyframes gainUp { from { opacity: 0; translate: 0 calc(var(--u)*1.2*var(--fxk)); } 20% { opacity: 1; }
+  to { opacity: 0; translate: 0 calc(var(--u)*-1.8*var(--fxk)); } }
 
 .doorPanel { position: absolute; bottom: calc(var(--u)*1.6); display: flex; flex-direction: column; gap: calc(var(--u)*.7); }
 #leftPanel { left: calc(var(--u)*1.6); }
@@ -82,7 +157,19 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 .hudBtn.door.on { background: rgba(120, 12, 30, .78); border-color: #ff6a7d; box-shadow: 0 0 1.4em var(--blood-glow); color: #fff; }
 .hudBtn.light.on { background: rgba(230, 200, 120, .82); color: #1b1206; border-color: #fff1c6; box-shadow: 0 0 1.6em rgba(255, 220, 140, .7); }
 .hudBtn.light.on kbd { color: #3a2b10; border-color: rgba(0,0,0,.3); }
-.hudBtn.jammed { opacity: .45; filter: grayscale(1); }
+/* a held door: a thin bar fills while it is free and turns red once it costs extra */
+.hudBtn.door { overflow: hidden; }
+.hudBtn .strain { position: absolute; left: 0; bottom: 0; height: 3px; width: calc(var(--s, 0) * 100%); background: var(--dream); transition: background .2s; }
+.hudBtn.door.over .strain { background: #ff4057; box-shadow: 0 0 6px #ff4057; }
+/* one-shot button effects (game.js pulseCls; each class is named after its animation) */
+.hudBtn.pressed, #camBar.pressed, #pauseBtn.pressed { animation: pressed .11s ease-out; }
+@keyframes pressed { from { translate: 0 1px; scale: .97; filter: brightness(1.25); } }
+.hudBtn.hit { animation: hit .45s ease-out; } /* the door held: it shudders with the bang */
+@keyframes hit { 0% { box-shadow: 0 0 2em #ff2040; translate: calc(3px * var(--fxk)) 0; } 30% { translate: calc(-3px * var(--fxk)) 0; }
+  60% { translate: calc(1.5px * var(--fxk)) 0; } 100% { translate: 0 0; } }
+.hudBtn.deny { animation: deny .25s linear; } /* the dream won't let you */
+@keyframes deny { 0%, 100% { translate: 0 0; } 20% { translate: calc(-4px * var(--fxk)) 0; border-color: #ff6a7d; }
+  40% { translate: calc(4px * var(--fxk)) 0; } 60% { translate: calc(-3px * var(--fxk)) 0; } 80% { translate: calc(2px * var(--fxk)) 0; } }
 .hudBtn.dead, #camBar.dead { opacity: .25; pointer-events: none !important; box-shadow: none; }
 .hudBtn:focus-visible, #camBar:focus-visible { outline: 2px solid rgba(233,223,207,.6); outline-offset: 2px; }
 
@@ -90,6 +177,9 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
   font-size: calc(var(--u)*1.25); padding: calc(var(--u)*.45) calc(var(--u)*.9); }
 #pinchCd { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--dream); }
 #pinchBtn.cool { opacity: .5; }
+/* how much a pinch would give right now (+2 / +4 / +8) */
+#pinchAmt { font-family: "VT323", monospace; font-style: normal; font-size: 1.15em; letter-spacing: 0; color: #b7a6ff; }
+#pinchBtn.big:not(.cool) #pinchAmt { color: #fff; text-shadow: 0 0 .5em var(--dream), 0 0 1em var(--dream-glow); }
 
 #camBar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--u)*1.4); width: calc(var(--u)*34);
   padding: calc(var(--u)*.8) 0; display: flex; align-items: center; justify-content: center; gap: calc(var(--u)*1);
@@ -102,7 +192,8 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 #voiceBox { position: absolute; left: 50%; top: calc(var(--u)*1.3); transform: translateX(-50%); width: calc(var(--u)*40);
   padding: calc(var(--u)*1) calc(var(--u)*1.4) calc(var(--u)*.6); background: rgba(8, 5, 14, .7); border: 1px solid var(--line);
   border-radius: calc(var(--u)*.4); font-family: "Special Elite", monospace; font-size: calc(var(--u)*1.12); line-height: 1.45;
-  color: #e6dccc; text-shadow: 0 0 .5em rgba(157,132,255,.5); pointer-events: auto; }
+  color: #e6dccc; text-shadow: 0 0 .5em rgba(157,132,255,.5); pointer-events: auto; animation: voiceIn .4s ease-out; }
+@keyframes voiceIn { from { opacity: 0; } }
 /* while the cameras are up the voice tucks into the bottom-left corner, out of the picture */
 #voiceBox.docked { left: calc(var(--u)*2); top: auto; bottom: calc(var(--u)*6); transform: none; width: calc(var(--u)*30);
   background: rgba(8, 5, 14, .45); }
@@ -112,6 +203,47 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 @keyframes caret { 50% { opacity: 0; } }
 .tiny { font-family: "VT323", monospace; font-size: calc(var(--u)*1.2); color: var(--bone-dim); float: right; margin-top: .3em; }
 .tiny:hover { color: #fff; }
+#voiceBox { cursor: pointer; } /* a click finishes the typing, or goes on to the next beat */
+/* the dream's own words ({wrong|right} in config.js): a red, dripping hand that shivers a little
+   (two positions, under 3 changes a second; still with Dream effects Off) */
+#voiceText .intrude { position: relative; font-family: "Eater", "Fell SC", serif; font-size: .92em; letter-spacing: .02em; color: #d01a35;
+  text-shadow: 0 0 .35em rgba(255, 30, 60, .65), 0 0 .12em #000; animation: intrude .8s steps(1) infinite; }
+@keyframes intrude { 0% { left: calc(-.06em * var(--fxk)); top: calc(.04em * var(--fxk)); } 50% { left: calc(.06em * var(--fxk)); top: calc(-.04em * var(--fxk)); } }
+[data-fx=off] #voiceText .intrude { animation: none; }
+#voiceText kbd, #pVoiceLog kbd { font-size: .9em; color: var(--bone); vertical-align: .05em; }
+/* the lesson: the voice stays bright, even tucked away while the cameras are up */
+#voiceBox.lesson { border-color: rgba(233,223,207,.42); box-shadow: 0 0 1.4em rgba(157,132,255,.22); }
+#voiceBox.lesson.docked { background: rgba(8, 5, 14, .7); }
+#voiceBox.lesson.docked > * { opacity: 1; }
+#clockNote { font-family: "Fell", serif; font-style: italic; font-size: calc(var(--u)*1.15); color: var(--bone-dim); margin-top: .2em; }
+
+/* ---------- the first-night lesson's coach marks ----------
+   a dashed ring (game.js draws it in, moves it onto the button and wobbles it, all scaled by Dream effects);
+   arrows at the screen edge when the thing to find is in the room; on touch screens a finger that drags */
+#coach { position: absolute; left: 0; top: 0; width: 1600px; height: 900px; pointer-events: none; overflow: visible;
+  filter: drop-shadow(0 0 6px rgba(157,132,255,.75)); }
+#coach .ring { fill: none; stroke: var(--bone); stroke-width: 4; stroke-dasharray: 16 12; stroke-linecap: round; }
+#coach .draw { fill: none; stroke: #fff; stroke-width: 16; }
+#coach.urgent .ring { stroke: #fff; stroke-width: 6; }
+#coachEdge { position: absolute; top: 40%; left: calc(var(--u)*2.2); display: flex; flex-direction: column; align-items: flex-start; gap: .2em;
+  pointer-events: none; color: var(--bone); text-shadow: 0 0 .3em #000, 0 0 .9em var(--dream-glow); }
+#coachEdge.right { left: auto; right: calc(var(--u)*2.2); align-items: flex-end; }
+#coachEdge b { font-family: "Fell SC", serif; font-weight: normal; font-size: calc(var(--u)*5.5); line-height: 1; letter-spacing: -.08em;
+  animation: nudgeL 1.3s ease-in-out infinite alternate; }
+#coachEdge.right b { animation-name: nudgeR; }
+@keyframes nudgeL { to { translate: calc(var(--u) * -1.2 * var(--fxk)) 0; } }
+@keyframes nudgeR { to { translate: calc(var(--u) * 1.2 * var(--fxk)) 0; } }
+#coachEdge.urgent b { color: #fff; text-shadow: 0 0 .3em #000, 0 0 .5em var(--dream), 0 0 1.2em var(--dream-glow); }
+#coachEdge span { font-family: "Fell", serif; font-style: italic; font-size: calc(var(--u)*1.35); color: var(--bone-dim); }
+#coachDrag { position: absolute; left: 50%; top: 56%; width: calc(var(--u)*26); margin-left: calc(var(--u)*-13); height: calc(var(--u)*8); pointer-events: none;
+  text-align: center; font-family: "Fell", serif; font-style: italic; color: var(--bone); text-shadow: 0 0 .3em #000; }
+#coachDrag i { position: absolute; left: 22%; top: 0; width: calc(var(--u)*3.6); height: calc(var(--u)*3.6); margin-left: calc(var(--u)*-1.8); border-radius: 50%;
+  background: rgba(233,223,207,.28); border: 2px solid var(--bone); box-shadow: 0 0 1em var(--dream-glow); animation: dragR 1.8s ease-in-out infinite; }
+#coachDrag.right i { left: 78%; animation-name: dragL; }
+#coachDrag span { position: absolute; left: 0; right: 0; bottom: 0; font-size: calc(var(--u)*1.35); }
+@keyframes dragR { 0% { opacity: 0; translate: 0 0; } 15% { opacity: 1; } 80% { opacity: 1; translate: calc(var(--u) * 14 * var(--fxk)) 0; } 100% { opacity: 0; translate: calc(var(--u) * 14 * var(--fxk)) 0; } }
+@keyframes dragL { 0% { opacity: 0; translate: 0 0; } 15% { opacity: 1; } 80% { opacity: 1; translate: calc(var(--u) * -14 * var(--fxk)) 0; } 100% { opacity: 0; translate: calc(var(--u) * -14 * var(--fxk)) 0; } }
+[data-fx=off] #coachDrag i { animation: none; }
 
 /* ---------- camera overlay ---------- */
 #camOverlay { position: absolute; inset: 0; pointer-events: none; font-family: "VT323", monospace; color: #e8f1e6;
@@ -137,12 +269,58 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
   white-space: nowrap; }
 .camBtn:hover { background: rgba(30, 70, 50, .95); }
 .camBtn.sel { background: #cfe9d5; color: #06130c; box-shadow: 0 0 10px rgba(160,255,200,.6); }
+/* CAM 7: a camera that was never on the map (dashed, like YOU). It fades in with one soft dip, never a strobe. */
+.camBtn.ghostCam { border-style: dashed; color: #ffe3bf; border-color: rgba(255,215,160,.6); background: rgba(30, 18, 10, .85); }
+.camBtn.ghostCam.sel { background: #ffe3bf; color: #1a0f06; box-shadow: 0 0 10px rgba(255,215,160,.6); }
+.camBtn.ghostIn { animation: ghostIn .5s linear; }
+@keyframes ghostIn { 0% { opacity: 0; } 40% { opacity: .7; } 60% { opacity: calc(.7 - .45 * var(--fxk)); } 100% { opacity: 1; } } /* (no dip with Dream effects Off) */
+#camLinks line.ghostLink { display: none; stroke: rgba(255,215,160,.45); }
+#camLinks line.ghostLink.on { display: inline; }
 #youMark { position: absolute; left: 50%; top: 93%; transform: translate(-50%, -50%); font-family: "Fell SC", serif;
   font-size: calc(var(--u)*1.2); letter-spacing: .2em; color: #ffd7a0; padding: .1em .5em; border: 1px dashed rgba(255,215,160,.6); }
+/* a pinch makes a noise right where you are */
+#youMark::after { content: ""; position: absolute; left: 50%; top: 50%; width: 3em; height: 3em; margin: -1.5em 0 0 -1.5em; border-radius: 50%;
+  border: 2px solid rgba(255,215,160,.85); opacity: 0; pointer-events: none; }
+#youMark.ripple::after { animation: ripple 1s ease-out; }
+@keyframes ripple { from { transform: scale(0); opacity: 1; } to { transform: scale(3); opacity: 0; } }
+[data-fx=off] #youMark.ripple::after { animation: none; }
+/* a bang while you're on the cameras: that side of YOU glows red (the door held) */
+#youMark::before { content: ""; position: absolute; top: -60%; bottom: -60%; width: 120%; opacity: 0; pointer-events: none; }
+#youMark.bangL::before { right: 50%; background: radial-gradient(ellipse at 100% 50%, rgba(255,32,64,.85), rgba(255,32,64,0) 70%); animation: bangL 1s ease-out; }
+#youMark.bangR::before { left: 50%; background: radial-gradient(ellipse at 0% 50%, rgba(255,32,64,.85), rgba(255,32,64,0) 70%); animation: bangR 1s ease-out; }
+@keyframes bangL { from { opacity: 1; } to { opacity: 0; } }
+@keyframes bangR { from { opacity: 1; } to { opacity: 0; } }
+/* (Sound captions on) breathing at a door while you're on the cameras: that side of YOU glows softly */
+#youMark.breathL::before { right: 50%; background: radial-gradient(ellipse at 100% 50%, rgba(255,150,160,.6), rgba(255,150,160,0) 70%); animation: breathL 1s ease-out; }
+#youMark.breathR::before { left: 50%; background: radial-gradient(ellipse at 0% 50%, rgba(255,150,160,.6), rgba(255,150,160,0) 70%); animation: breathR 1s ease-out; }
+@keyframes breathL { from { opacity: 1; } to { opacity: 0; } }
+@keyframes breathR { from { opacity: 1; } to { opacity: 0; } }
 
-#devInfo { position: absolute; left: calc(var(--u)*1.6); top: calc(var(--u)*14.5); font-family: "VT323", monospace; font-size: calc(var(--u)*1.2);
-  color: #9cff9c; background: rgba(0,0,0,.65); padding: .5em .8em; white-space: pre; pointer-events: auto; user-select: text; -webkit-user-select: text; max-width: 46%; }
-#devInfo textarea { width: 100%; height: 5em; background: #000; color: #9cff9c; font: inherit; border: 1px solid #285; }
+/* ---------- sound captions (Settings) ----------
+   three lanes side by side (left / middle / right, by where the sound came from). In the desk room they sit
+   in the middle of the screen, away from the doorways and the door buttons; on the cameras they move down
+   above the camera bar, off the picture and left of the map. Each caption lives 2.6 s; --v is how loud it was. */
+#captions { position: absolute; z-index: 6; pointer-events: none; --capU: var(--u);
+  left: 25%; right: 25%; top: 40%; display: grid; grid-template-columns: 1fr auto 1fr; gap: calc(var(--u)*1.5); align-items: start; }
+#captions > div { display: flex; flex-direction: column; gap: calc(var(--u)*.4); min-width: 0; }
+#captions .capL { align-items: flex-end; text-align: right; }
+#captions .capC { align-items: center; text-align: center; }
+#captions .capR { align-items: flex-start; text-align: left; }
+#captions.cams { left: calc(var(--u)*3); right: calc(var(--u)*30); top: auto; bottom: calc(var(--u)*6.2); align-items: end; }
+#captions.cams.voice { left: calc(var(--u)*33); }
+#captions.paused .cap { animation-play-state: paused; }
+.cap { max-width: 100%; animation: capLife 2.6s ease-out forwards; }
+.cap span { display: inline-block; max-width: 100%; font-family: "Fell", serif; font-style: italic; line-height: 1.25;
+  font-size: calc(var(--capU) * (1.2 + .6 * var(--v, 1))); opacity: calc(.55 + .45 * var(--v, 1));
+  padding: .12em .75em .18em; border-radius: 99px; color: #f3e9da; background: rgba(6, 4, 10, .74);
+  border: 1px solid rgba(233,223,207,.14); box-shadow: 0 0 .8em rgba(0,0,0,.65); text-shadow: 0 0 .3em #000; }
+@keyframes capLife { 0% { opacity: 0; translate: 0 0; } 6% { opacity: 1; } 72% { opacity: 1; }
+  100% { opacity: 0; translate: 0 calc(var(--u) * -.6 * var(--fxk)); } }
+/* the edge of the screen a footstep, breath or bang came from: one soft red rise that fades (never blinks) */
+.edge { position: absolute; top: 0; bottom: 0; width: calc(var(--u)*8); z-index: 6; pointer-events: none; opacity: 0; transition: opacity .9s ease-out; }
+#edgeL { left: 0; background: linear-gradient(90deg, rgba(200,30,50,.45), rgba(200,30,50,0)); }
+#edgeR { right: 0; background: linear-gradient(270deg, rgba(200,30,50,.45), rgba(200,30,50,0)); }
+
 
 /* ======================= SCREENS ======================= */
 .screen { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; text-align: center; }
@@ -155,8 +333,9 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 
 .menuBtn { display: block; margin: calc(var(--u)*.55) auto; padding: calc(var(--u)*.45) calc(var(--u)*1.6);
   font-family: "Fell SC", serif; font-size: calc(var(--u)*2.1); letter-spacing: .14em; color: var(--bone);
-  transition: color .2s, text-shadow .2s, letter-spacing .3s; position: relative; }
-.menuBtn:hover, .menuBtn:focus-visible { color: #fff; outline: none; letter-spacing: .2em; text-shadow: 0 0 .5em var(--blood-glow), 0 0 1.2em var(--blood-glow); }
+  transition: color .2s, text-shadow .2s, transform .3s; position: relative; }
+/* (it leans out a little: a transform, not letter-spacing, so the page never has to lay itself out again) */
+.menuBtn:hover, .menuBtn:focus-visible { color: #fff; outline: none; transform: translateX(.25em); text-shadow: 0 0 .5em var(--blood-glow), 0 0 1.2em var(--blood-glow); }
 .menuBtn:hover::before, .menuBtn:focus-visible::before, .menuBtn:active::before { content: "❧"; position: absolute; left: -.2em; transform: translateX(-100%) scaleX(-1); color: var(--blood); }
 .menuBtn:active { color: #fff; text-shadow: 0 0 .5em var(--blood-glow), 0 0 1.2em var(--blood-glow); }
 .menuBtn em { font-family: "Fell", serif; font-style: italic; letter-spacing: .04em; color: var(--bone-dim); font-size: .8em; }
@@ -184,18 +363,21 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 .menuInner .menuBtn:hover::before { left: -.4em; }
 .menuList { margin-top: calc(var(--u)*3); }
 #menuTitle { font-size: calc(var(--u)*6.2); }
-.glitch { animation: titleDrift 7s ease-in-out infinite; }
-@keyframes titleDrift { 0%,100% { transform: translate(0,0); filter: blur(0); letter-spacing: .12em; }
-  45% { transform: translate(.15em, -.05em); filter: blur(calc(.6px * var(--blurK))); letter-spacing: .15em; }
-  50% { transform: translate(-.1em, .05em) skewX(-2deg); filter: blur(calc(1.4px * var(--blurK))); }
-  55% { transform: translate(0,0); filter: blur(0); } }
+/* the title drifts and slips: only transform and opacity move, so it costs the browser nothing per frame
+   (an animated blur or letter-spacing made the menu the slowest screen in the game) */
+.glitch { animation: titleDrift 7s ease-in-out infinite; will-change: transform, opacity; }
+@keyframes titleDrift { 0%,100% { transform: translate(0,0); opacity: 1; }
+  45% { transform: translate(.15em, -.05em) scaleX(1.02); opacity: .92; }
+  50% { transform: translate(-.1em, .05em) skewX(-2deg) scaleX(1.03); opacity: .78; }
+  55% { transform: translate(0,0); opacity: 1; } }
 
-/* night card */
-#nightCard { background: #000; transition: opacity 1.2s; }
+/* night card (behind your closed eyes as you fall asleep; it snaps away with the jolt) */
+#nightCard { background: #000; transition: opacity .25s; }
+[data-fx=off] #nightCard { transition-duration: .4s; }
 #nightCard .title { font-size: calc(var(--u)*7.5); }
 #nightCard.fade { opacity: 0; pointer-events: none; }
 .cardInner { animation: cardIn 2.4s ease-out both; }
-@keyframes cardIn { from { opacity: 0; filter: blur(calc(14px * var(--blurK))); letter-spacing: .5em; } to { opacity: 1; filter: blur(0); } }
+@keyframes cardIn { from { opacity: 0; filter: blur(calc(14px * var(--blurK))); transform: scale(1.12, 1); } to { opacity: 1; filter: blur(0); transform: none; } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* panels */
@@ -215,6 +397,7 @@ input[type=range] { width: 50%; accent-color: #b7a6ff; }
 .seg button.sel { background: rgba(157,132,255,.35); color: #fff; }
 .sub2 { font-family: "Fell SC", serif; font-size: calc(var(--u)*2); letter-spacing: .15em; margin: calc(var(--u)*1.6) 0 calc(var(--u)*.6); color: var(--bone); }
 .howto { font-size: calc(var(--u)*1.3); line-height: 1.6; color: var(--bone-dim); }
+.panel.wide #xLesson { margin: 0 0 calc(var(--u)*.6); padding-left: 0; font-size: calc(var(--u)*1.7); } /* Extras: play the lesson again */
 .howto p { margin: .2em 0; }
 .howto b { color: var(--bone); }
 #gallery { display: flex; gap: calc(var(--u)*1.5); flex-wrap: wrap; }
@@ -236,24 +419,104 @@ input[type=range] { width: 50%; accent-color: #b7a6ff; }
   text-shadow: 0 0 .3em rgba(0,0,0,.9), 0 0 .8em rgba(255, 30, 60, .6); animation: deathIn 1.4s ease-out both; }
 @keyframes deathIn { from { opacity: 0; transform: scale(1.4); filter: blur(calc(10px * var(--blurK))); } to { opacity: 1; transform: none; filter: none; } }
 #deadSub { margin-bottom: 1em; }
-#deadTip { font-size: calc(var(--u)*1.3); margin-bottom: 1.5em; }
+#deadTip { font-size: calc(var(--u)*1.3); margin-bottom: 1.5em; max-width: calc(var(--u)*52); margin-inline: auto; }
+/* what happened: the last moments, typed like the dream voice (the untyped rest keeps its place, so nothing jumps) */
+#deadRecap { width: fit-content; max-width: calc(var(--u)*62); margin: 0 auto calc(var(--u)*1); text-align: left; cursor: pointer;
+  font-family: "Special Elite", monospace; font-size: calc(var(--u)*1.4); line-height: 1.5; color: #f3e6d2; text-shadow: 0 0 .3em #000; }
+#deadRecap .rest { visibility: hidden; }
+/* the tip (and for a Lucidity death, where it all went) fade in once the recap is written */
+#deadTip, #deadSpend { opacity: 0; transition: opacity .7s; }
+#deadTip.show, #deadSpend.show { opacity: 1; }
+#deadSpend { width: calc(var(--u)*36); margin: 0 auto calc(var(--u)*1.2); }
+#deadSpend .bar { display: flex; height: calc(var(--u)*.9); border-radius: 99px; overflow: hidden; border: 1px solid var(--line); background: rgba(255,255,255,.06); }
+#deadSpend .bar i { display: block; height: 100%; }
+#deadSpend .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: .2em 1.2em; margin-top: .55em; font-size: calc(var(--u)*1.2); color: var(--bone-dim); }
+#deadSpend .legend b { display: inline-block; width: .75em; height: .75em; border-radius: 2px; margin-right: .4em; vertical-align: -.05em; }
+#deadSpend .doors, #deadSpend .doors b { background: #c4132b; } #deadSpend .legend .doors { background: none; }
+#deadSpend .cams, #deadSpend .cams b { background: #4fbf8f; } #deadSpend .legend .cams { background: none; }
+#deadSpend .lights, #deadSpend .lights b { background: #e6c46e; } #deadSpend .legend .lights { background: none; }
+#deadSpend .base, #deadSpend .base b { background: #9d84ff; } #deadSpend .legend .base { background: none; }
 
-/* win */
-#win { background: radial-gradient(ellipse at 50% 45%, rgba(60, 44, 30, .9) 0%, rgba(0,0,0,.97) 75%); }
-.winClock { font-family: "VT323", monospace; font-size: calc(var(--u)*11); color: #fff4dc; text-shadow: 0 0 .3em rgba(255, 220, 160, .7); }
-#winH { display: inline-block; }
-#winH.roll { animation: roll .7s ease-in-out both; }
-@keyframes roll { 0% { transform: translateY(0); opacity: 1; } 45% { transform: translateY(-60%); opacity: 0; }
-  55% { transform: translateY(60%); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
-#winTitle { opacity: 0; transition: opacity 2s; }
+/* pause: everything the voice said tonight */
+#pVoice { margin: calc(var(--u)*1) auto 0; max-width: calc(var(--u)*46); text-align: left; }
+#pVoice summary { cursor: pointer; text-align: center; font-family: "Fell SC", serif; font-size: calc(var(--u)*1.45); letter-spacing: .1em; color: var(--bone-dim); }
+#pVoice summary:hover, #pVoice summary:focus-visible { color: #fff; outline: none; }
+#pVoiceLog { margin-top: .6em; max-height: calc(var(--u)*17); overflow-y: auto; touch-action: pan-y; padding-right: .4em;
+  font-family: "Special Elite", monospace; font-size: calc(var(--u)*1.12); line-height: 1.45; color: #e6dccc; }
+#pVoiceLog p { margin: .4em 0; }
+#pVoiceLog s { font-family: "Eater", serif; font-size: .9em; color: rgba(208, 26, 53, .8); text-decoration-thickness: 2px; margin-right: .3em; }
+
+/* the morning (your real bedroom is drawn behind these) */
+#wakePrompt { align-items: flex-end; padding-bottom: calc(var(--u)*19); pointer-events: none; font-family: "Fell SC", serif;
+  font-size: calc(var(--u)*2.3); letter-spacing: .14em; color: #fff6e6; text-shadow: 0 0 .3em #000, 0 0 .8em rgba(40,20,10,.9);
+  animation: wakeAsk 1.6s ease-in-out infinite alternate; }
+@keyframes wakeAsk { from { opacity: .55; } to { opacity: 1; } }
+[data-fx=off] #wakePrompt { animation: none; }
+#win { align-items: flex-start; padding-top: calc(var(--u)*6);
+  background: radial-gradient(ellipse 52% 46% at 50% 31%, rgba(20, 12, 8, .82) 0%, rgba(20, 12, 8, .6) 50%, rgba(20, 12, 8, 0) 100%); }
+#winTitle { opacity: 0; transition: opacity 2s; color: #fff4e2; text-shadow: 0 0 .25em rgba(0,0,0,.9), 0 0 .8em rgba(255, 190, 120, .55); }
 #winTitle.show { opacity: 1; }
+#win .subtitle { color: #f0e2cc; text-shadow: 0 0 .3em #000; }
+#winStats { margin: .8em 0 .6em; font-size: calc(var(--u)*1.35); color: #e8d8c0; text-shadow: 0 0 .3em #000; }
+#win .menuBtn { text-shadow: 0 0 .3em #000, 0 0 .6em rgba(0,0,0,.8); }
+#win.wait .winBtns, #dead.wait .deadBtns { visibility: hidden; } /* a moment after the slap or the scare, so a stray key or tap can't press a button */
+/* the credits after Night 5, rolling up over the morning */
+#credits { pointer-events: none; overflow: hidden; display: block;
+  background: linear-gradient(90deg, rgba(14,8,6,0) 18%, rgba(14,8,6,.55) 35%, rgba(14,8,6,.55) 65%, rgba(14,8,6,0) 82%); }
+#creditRoll { position: absolute; left: 0; right: 0; top: 0; text-align: center; color: #fff1dc; text-shadow: 0 0 .3em #000, 0 0 .9em rgba(0,0,0,.7); }
+#creditRoll .cRole { font-family: "Fell SC", serif; font-size: calc(var(--u)*1.5); letter-spacing: .2em; color: #e2cfb2; margin-top: calc(var(--u)*2.6); }
+#creditRoll .cWho { font-family: "Fell", serif; font-size: calc(var(--u)*2.6); margin-top: .1em; }
+#creditRoll .cYou { font-family: "Fell SC", serif; font-size: calc(var(--u)*5.2); color: #fff; text-shadow: 0 0 .3em #000, 0 0 .9em rgba(255, 190, 120, .7); }
+#creditRoll .cTitle { font-family: "Fell SC", serif; font-size: calc(var(--u)*3.6); letter-spacing: .14em; margin-top: calc(var(--u)*5); }
+#creditRoll .cNames { font-family: "Fell", serif; font-style: italic; font-size: calc(var(--u)*1.6); line-height: 1.7; margin: .3em auto 0; max-width: calc(var(--u)*56); }
+#creditRoll .cEnd { font-family: "Special Elite", monospace; font-size: calc(var(--u)*2); margin-top: calc(var(--u)*7); padding-bottom: calc(var(--u)*4); }
 
 #flash { position: absolute; inset: 0; z-index: 30; pointer-events: none; background: #fff; opacity: 0; }
 
+/* ---------- the art helper (index.html?dev only, see js/devtools.js) ---------- */
+#devPanel { position: absolute; z-index: 25; top: calc(var(--u)*11); max-width: 36%; max-height: 58%; overflow: auto; padding: .5em .8em;
+  font-family: "VT323", monospace; font-size: calc(var(--u)*1.2); line-height: 1.15; color: #9cff9c; background: rgba(0,0,0,.8);
+  border: 1px solid #285; border-radius: 4px; pointer-events: auto; user-select: text; -webkit-user-select: text; touch-action: pan-y; }
+#devPanel.dockL { left: calc(var(--u)*1.6); }
+#devPanel.dockR { right: calc(var(--u)*1.6); }
+#devPanel.cams { max-height: 34%; }
+#devPanel.cams.dockL { top: calc(var(--u)*15); max-height: 32%; } /* (under the camera's name) */
+#devPanel.idle { top: auto; bottom: calc(var(--u)*1.6); max-height: 70%; }
+#devPanel.min .dBody { display: none; }
+#devPanel .dTop { display: flex; gap: .6em; align-items: center; white-space: nowrap; }
+#devPanel .dMin { margin-left: auto; }
+#devPanel button { font: inherit; color: #cfffcf; border: 1px solid #285; border-radius: 3px; padding: .05em .45em; background: rgba(20,60,30,.6); margin: .15em .2em .15em 0; }
+#devPanel button:hover { background: rgba(40,110,60,.85); }
+#devPanel .dHelp { color: #e9dfcf; margin: .4em 0; }
+#devPanel .dWarn { color: #ff8a96; white-space: pre-wrap; margin: .3em 0; }
+#devPanel .dState { white-space: pre-wrap; margin: .4em 0 0; font: inherit; }
+#devPanel summary { cursor: pointer; color: #e9dfcf; margin-top: .3em; }
+#devPanel .dRows { max-height: calc(var(--u)*16); overflow: auto; margin-top: .2em; }
+#devPanel .dRows .why { color: #ffb0b8; margin-left: 1.4em; }
+#devPanel i { font-style: normal; display: inline-block; width: 1em; text-align: center; }
+#devPanel i.ok { color: #9cff9c; } #devPanel i.bad { color: #ff5d6c; } #devPanel i.info { color: #9fd7ff; } #devPanel .dim { color: #7a9a7a; }
+#devPanel .dOut { margin-top: .4em; }
+#devPanel .dLabel { color: #e9dfcf; }
+#devPanel textarea { width: 100%; height: 3.2em; background: #000; color: #9cff9c; font: inherit; border: 1px solid #285; resize: vertical; }
+
+/* "Oops! The dream got stuck." (a mistake stopped the game from starting; see index.html). Outside the stage, real-world sizes. */
+#oops { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: #07050c; color: var(--bone); overflow: auto; touch-action: pan-y; user-select: text; -webkit-user-select: text; }
+.oopsInner { max-width: 760px; width: 100%; margin: auto; font-family: "Special Elite", monospace; font-size: clamp(15px, 2.2vw, 20px); line-height: 1.5; }
+.oopsTitle { font-family: "Fell SC", serif; font-size: clamp(26px, 5vw, 44px); letter-spacing: .08em; color: #ff8a96; margin-bottom: .5em;
+  text-shadow: 0 0 .5em rgba(214, 22, 52, .55); }
+#oopsCode { font-family: "VT323", monospace; font-size: clamp(16px, 2.4vw, 22px); background: #000; color: #9cff9c; border: 1px solid #285;
+  padding: .5em .8em; margin: .7em 0; white-space: pre-wrap; word-break: break-word; }
+#oopsHint { margin: .8em 0 0 1.2em; }
+#oopsHint li { margin: .35em 0; }
+#oopsHint b, #oopsMsg b { color: #fff; }
+#oopsTech { margin-top: 1em; font-family: "VT323", monospace; font-size: clamp(14px, 2vw, 18px); color: var(--bone-dim); }
+
 /* ---------- Dream effects setting (html[data-fx], set by game.js) ---------- */
-[data-fx=low] { --blurK: .5; }
-[data-fx=off] { --blurK: 0; }
-[data-fx=off] .glitch, [data-fx=off] #bootTitle, [data-fx=off] #bootGo, [data-fx=off] #lucPct.low { animation: none; }
+[data-fx=low] { --blurK: .5; --fxk: .4; }
+[data-fx=off] { --blurK: 0; --fxk: 0; }
+[data-fx=off] .glitch, [data-fx=off] #bootTitle, [data-fx=off] #bootGo, [data-fx=off] #lucPct.low, [data-fx=off] #usage i.door.over,
+[data-fx=off] #lucEye.twitch .ball { animation: none; }
 [data-fx=off] .cardInner, [data-fx=off] .deathTitle { animation-name: fadeIn; }
 [data-fx=off] #hud.enter, [data-fx=off] #hud.enter #voiceBox { animation-name: fadeIn; }
 
@@ -273,6 +536,8 @@ input[type=range] { width: 50%; accent-color: #b7a6ff; }
   #camBar { width: calc(var(--u)*36); min-height: calc(48px / var(--scale)); padding: calc(var(--u)*1.2) 0; font-size: max(calc(var(--u)*2), var(--t16)); }
   /* the pinch button sits just above the (taller) camera bar */
   #pinchBtn { bottom: calc(var(--u)*2.4 + max(var(--u)*4.4, 48px / var(--scale))); font-size: max(calc(var(--u)*1.6), var(--t14)); min-height: var(--tap); }
+  #usage { font-size: max(var(--u), calc(11px / var(--scale))); }
+  .hudBtn .strain { height: max(3px, calc(3px / var(--scale))); }
   #pauseBtn { width: max(calc(var(--u)*3.2), var(--tap)); height: max(calc(var(--u)*3.2), var(--tap)); font-size: max(calc(var(--u)*1.7), var(--t16)); }
 
   .camBtn { font-size: max(calc(var(--u)*1.9), var(--t14)); min-width: calc(44px / var(--scale)); min-height: calc(44px / var(--scale));
@@ -283,7 +548,16 @@ input[type=range] { width: 50%; accent-color: #b7a6ff; }
   #camName { font-size: max(calc(var(--u)*2.1), var(--t16)); }
   #camRecRow { font-size: max(calc(var(--u)*1.7), var(--t14)); }
   #youMark { font-size: max(calc(var(--u)*1.2), var(--t14)); }
+  #captions { --capU: max(var(--u), calc(12px / var(--scale))); left: 16%; right: 16%; }
+  #lucBox.lies #lucBar::after { width: max(2px, calc(2px / var(--scale))); margin-left: min(-1px, calc(-1px / var(--scale))); }
+  #captions.cams { left: calc(var(--u)*3); right: calc(var(--u)*34); bottom: calc(var(--u)*3.4 + max(var(--u)*4.4, 48px / var(--scale))); }
+  /* with the voice docked there is only a narrow gap left between it and the map: the three lanes stack into one
+     column there (each caption still shows its ‹ › side), so words never squeeze into slivers or onto the map */
+  #captions.cams.voice { left: calc(var(--u)*43); grid-template-columns: minmax(0, 1fr); gap: calc(var(--u)*.4); --capU: max(var(--u), calc(11px / var(--scale))); }
+  #captions.cams.voice > div { align-items: center; text-align: center; }
+  #captions.cams.voice .cap span { font-size: calc(var(--capU) * (1.1 + .3 * var(--v, 1))); }
   #hudNight, .lucLabel { font-size: max(calc(var(--u)*1.5), var(--t14)); }
+  #lucEye { width: max(calc(var(--u)*2.9), calc(30px / var(--scale))); height: max(calc(var(--u)*1.45), calc(15px / var(--scale))); }
 
   #voiceBox { width: calc(var(--u)*56); font-size: max(calc(var(--u)*1.12), var(--t14)); }
   #voiceText { max-height: max(calc(var(--u)*13), calc(var(--t14) * 1.45 * 5)); }
@@ -297,13 +571,32 @@ input[type=range] { width: 50%; accent-color: #b7a6ff; }
   .panel .menuBtn { margin-block: calc(var(--u)*.2); }
   .panel > .dim { font-size: max(calc(var(--u)*1.3), var(--t14)); }
   .btnRow { display: flex; justify-content: center; align-items: center; gap: calc(var(--u)*3); }
+  /* Settings on a phone: the rows in two columns, so everything (Back too) fits without scrolling */
+  #settings .panel { width: 96%; }
+  .setRows { display: grid; grid-template-columns: 1fr 1fr; column-gap: calc(var(--u)*4); }
+  .setRows .row { gap: 1em; }
+  .setRows input[type=range] { width: 46%; }
   .btnRow .menuBtn { margin-inline: 0; }
   .seg button { min-height: var(--tap); font-size: max(calc(var(--u)*1.35), var(--t14)); }
   input[type=range] { min-height: var(--tap); }
   .subtitle { font-size: max(calc(var(--u)*1.9), var(--t14)); }
   .dim.small, .small { font-size: max(calc(var(--u)*1.1), var(--t14)); }
-  .howto, .gDesc, #deadTip, #creditList { font-size: max(calc(var(--u)*1.3), var(--t14)); }
+  .howto, .gDesc, #deadTip, #creditList, #winStats { font-size: max(calc(var(--u)*1.3), var(--t14)); }
+  #wakePrompt { font-size: max(calc(var(--u)*2.3), var(--t16)); }
+  #creditRoll .cRole, #creditRoll .cNames { font-size: max(calc(var(--u)*1.6), var(--t14)); }
+  #hud.onlyVoice #voiceBox { font-size: max(calc(var(--u)*1.7), var(--t16)); }
+  #clockNote, #coachEdge span, #coachDrag span { font-size: max(calc(var(--u)*1.35), var(--t14)); }
+  #deadRecap { font-size: max(calc(var(--u)*1.4), var(--t14)); max-width: 92%; }
+  #deadSpend { width: calc(var(--u)*50); }
+  #deadSpend .legend { font-size: max(calc(var(--u)*1.2), var(--t14)); }
+  #deadSpend .bar { height: max(calc(var(--u)*.9), calc(8px / var(--scale))); }
+  .deadBtns { display: flex; justify-content: center; gap: calc(var(--u)*3); flex-wrap: wrap; }
+  .deadBtns .menuBtn { margin-inline: 0; }
+  #pVoice summary { font-size: max(calc(var(--u)*1.45), var(--t14)); min-height: var(--tap); line-height: var(--tap); }
+  #pVoiceLog { font-size: max(calc(var(--u)*1.12), var(--t14)); max-height: calc(var(--u)*24); }
   .sub2 { font-size: max(calc(var(--u)*2), var(--t16)); }
+  #devPanel { font-size: max(calc(var(--u)*1.2), var(--t14)); max-width: 46%; }
+  #devPanel button { min-height: var(--tap); }
 }
 
 /* portrait phones (not tablets): ask to rotate */

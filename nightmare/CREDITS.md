@@ -14,7 +14,7 @@ Every sound is a real recording downloaded from [OpenGameArt.org](https://openga
 |---|---|---|---|---|
 | `ambience.mp3` | Night ambience | [Lost in a bad place (horror ambience loop)](https://opengameart.org/content/lost-in-a-bad-place-horror-ambience-loop) | congusbongus | CC0 |
 | `menu_music.mp3` | Title-screen music | [Moonlit Lullaby for the Lost (loop version)](https://opengameart.org/content/moonlit-lullaby-for-the-lost) | Tsorthan Grove (tsorthan-grove) | CC0 |
-| `music_box.mp3` | Music box (Lucidity runs out) | [4 Music Box Tracks - musicbox1_spooky_waltz](https://opengameart.org/content/4-music-box-tracks) | Aureolus_Omicron (aureolusomicron) | CC0 |
+| `music_box.mp3` | Music box | [4 Music Box Tracks - musicbox1_spooky_waltz](https://opengameart.org/content/4-music-box-tracks) | Aureolus_Omicron (aureolusomicron) | CC0 |
 | `whisper.mp3` | Whispers | [Voices of Madness - a3-menacing.ogg (from sounds-of-madness-ogg.zip)](https://opengameart.org/content/voices-of-madness) | eugeneloza | CC0 |
 | `heartbeat.mp3` | Heartbeat | [Heartbeat sounds - heartbeat_fast_reverb.wav](https://opengameart.org/content/heartbeat-sounds) | bart (Bart Kelsey) | CC0 |
 | `jumpscare.mp3` | Jumpscare scream | [Horror scream1](https://opengameart.org/content/horror-scream1) | Vinrax | CC0 |
@@ -40,7 +40,7 @@ Every sound is a real recording downloaded from [OpenGameArt.org](https://openga
 | `redhorn_click.mp3` | Redhorn's clicking | [Spider Chattering](https://opengameart.org/content/spider-chattering) | spookymodem | CC-BY 3.0 |
 | `door_strain.mp3` | Door groaning | [25 spooky sound effects (creak1.wav)](https://opengameart.org/content/25-spooky-sound-effects) | bart (Bart Kelsey) | CC-BY 3.0 |
 | `hypnic_jolt.mp3` | Falling into the dream | [Wierd Whooshes](https://opengameart.org/content/wierd-whooshes) layered with [Muffled Distant Explosion](https://opengameart.org/content/muffled-distant-explosion) | bosslevelaudio, NenadSimic | CC0 |
-| `water_drip.mp3` | Drowned Parlor drips | [Dripping water loop](https://opengameart.org/content/dripping-water-loop) | qubodup | CC0 |
+| `water_drip.mp3` | Drowned Parlor drips | [Dripping water loop](https://opengameart.org/content/dripping-water-loop) | Independent.nu (submitted by qubodup) | CC0 |
 
 CC-BY 3.0 sounds are used under https://creativecommons.org/licenses/by/3.0/ and are credited above. CC0 sounds are public domain; they are credited anyway as thanks.
 

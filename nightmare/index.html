@@ -17,14 +17,32 @@
     <div id="clockBox">
       <div id="hudNight">NIGHT <span class="num">1</span></div>
       <div id="hudTime">12 AM</div>
+      <div id="clockNote" class="hidden">the clock waits for you</div>
       <button id="pauseBtn" aria-label="Pause" title="Pause (Esc)">☾</button>
     </div>
 
     <div id="lucBox">
-      <div class="lucLabel">LUCIDITY</div>
+      <div class="lucTop">
+        <!-- your eye: the lid droops as your Lucidity sinks (it blinks when you pinch yourself) -->
+        <svg id="lucEye" viewBox="0 0 48 24" aria-hidden="true">
+          <defs><clipPath id="eyeClip"><path d="M2 12 Q24 -4 46 12 Q24 28 2 12 Z"/></clipPath></defs>
+          <g class="ball">
+            <path class="white" d="M2 12 Q24 -4 46 12 Q24 28 2 12 Z"/>
+            <g clip-path="url(#eyeClip)">
+              <circle class="iris" cx="24" cy="12" r="6.5"/><circle class="pupil" cx="24" cy="12" r="2.8"/>
+              <path class="lid" d="M0 0 L48 0 L48 12 L46 12 Q24 -8 2 12 L0 12 Z"/>
+            </g>
+            <path class="lash" d="M2 12 Q24 -8 46 12"/>
+            <path class="rim" d="M2 12 Q24 -4 46 12 Q24 28 2 12 Z"/>
+          </g>
+        </svg>
+        <span id="lucLabel" class="lucLabel">LUCIDITY</span>
+      </div>
       <div id="lucPct">100%</div>
       <div id="lucBar"><div id="lucFill"></div></div>
-      <div id="usage" aria-label="drain"><i></i><i></i><i></i><i></i><i></i></div>
+      <div id="usage" aria-label="what is draining your Lucidity">
+        <i data-k="you" title="Just being asleep"></i><i data-k="ldoor" class="door" title="Left door (it costs more the longer you hold it)"></i><i data-k="rdoor" class="door" title="Right door (it costs more the longer you hold it)"></i><i data-k="light" title="A door light"></i><i data-k="cam" title="Cameras"></i>
+      </div>
     </div>
 
     <div id="voiceBox" class="hidden">
@@ -33,15 +51,15 @@
     </div>
 
     <div id="leftPanel" class="doorPanel">
-      <button id="btnLDoor" class="hudBtn door"><span>DOOR</span><kbd>Q</kbd></button>
+      <button id="btnLDoor" class="hudBtn door"><span>DOOR</span><kbd>Q</kbd><b class="strain"></b></button>
       <button id="btnLLight" class="hudBtn light"><span>LIGHT</span><kbd>A</kbd></button>
     </div>
     <div id="rightPanel" class="doorPanel">
-      <button id="btnRDoor" class="hudBtn door"><span>DOOR</span><kbd>E</kbd></button>
+      <button id="btnRDoor" class="hudBtn door"><span>DOOR</span><kbd>E</kbd><b class="strain"></b></button>
       <button id="btnRLight" class="hudBtn light"><span>LIGHT</span><kbd>D</kbd></button>
     </div>
 
-    <button id="pinchBtn" class="hudBtn pinch"><span>PINCH</span><kbd>F</kbd><b id="pinchCd"></b></button>
+    <button id="pinchBtn" class="hudBtn pinch"><span>PINCH</span><em id="pinchAmt">+3</em><kbd>F</kbd><b id="pinchCd"></b></button>
     <button id="camBar"><span>▲&nbsp;&nbsp;CAMERAS&nbsp;&nbsp;▲</span><kbd>SPACE</kbd></button>
 
     <div id="camOverlay" class="hidden">
@@ -56,8 +74,21 @@
       </div>
     </div>
 
-    <div id="devInfo" class="hidden"></div>
+    <!-- the first-night lesson: a dashed ring around what to use next, or arrows at the edge to look around -->
+    <svg id="coach" class="hidden" viewBox="0 0 1600 900" aria-hidden="true">
+      <mask id="coachDraw" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="900"><ellipse class="draw"/></mask>
+      <g class="wob"><ellipse class="ring" mask="url(#coachDraw)"/></g>
+    </svg>
+    <div id="coachEdge" class="hidden" aria-hidden="true"><b>‹ ‹ ‹</b><span></span></div>
+    <div id="coachDrag" class="hidden" aria-hidden="true"><i></i><span>drag</span></div>
+
+    <!-- each new hour drifts past, huge and faint -->
+    <div id="hourGhost" aria-hidden="true"></div>
   </div>
+
+  <!-- sound captions (Settings): what you hear, on the side it came from; over the cameras too -->
+  <div id="edgeL" class="edge"></div><div id="edgeR" class="edge"></div>
+  <div id="captions" aria-live="polite"><div class="capL"></div><div class="capC"></div><div class="capR"></div></div>
 
   <!-- =============== SCREENS =============== -->
   <div id="boot" class="screen">
@@ -98,12 +129,14 @@
       <button id="pResume" class="menuBtn">Resume</button>
       <button id="pSettings" class="menuBtn">Settings</button>
       <button id="pQuit" class="menuBtn">Wake up (quit to menu)</button>
+      <details id="pVoice" class="hidden"><summary>What the voice said</summary><div id="pVoiceLog"></div></details>
     </div>
   </div>
 
   <div id="settings" class="screen hidden">
     <div class="panel">
       <div class="title small">Settings</div>
+      <div class="setRows">
       <label class="row">Master volume <input id="sVol" type="range" min="0" max="100"></label>
       <label class="row"><span class="nowrap">Music &amp; ambience</span> <input id="sMusic" type="range" min="0" max="100"></label>
       <div class="row">Dream effects
@@ -111,12 +144,23 @@
           <button data-v="full">Full</button><button data-v="low">Low</button><button data-v="off">Off</button>
         </span>
       </div>
-      <div class="dim small">“Low” and “Off” reduce screen warping, shaking and flashes.</div>
+      <div class="row">Sound captions
+        <span class="seg" id="sCap">
+          <button data-v="off">Off</button><button data-v="on">On</button>
+        </span>
+      </div>
+      <div class="row">Scares
+        <span class="seg" id="sScare">
+          <button data-v="normal">Normal</button><button data-v="gentle">Gentle</button>
+        </span>
+      </div>
+      </div>
+      <div class="dim small">“Low” and “Off” reduce screen warping, shaking and flashes, and run faster on slow devices.<br>Captions show every sound as words, on the side it came from.<br>Gentle: quieter, softer jumpscares for younger dreamers. Difficulty stays the same.</div>
       <div class="btnRow">
         <button id="sFull" class="menuBtn">Toggle fullscreen</button>
         <button id="sReset" class="menuBtn danger">Erase save</button>
+        <button id="sBack" class="menuBtn">Back</button>
       </div>
-      <button id="sBack" class="menuBtn">Back</button>
     </div>
   </div>
 
@@ -125,6 +169,7 @@
       <div class="title small">Extras</div>
       <div id="gallery"></div>
       <div class="sub2">How to play</div>
+      <button id="xLesson" class="menuBtn">▸ Replay the first-night lesson</button>
       <div class="howto">
         <p><b>Survive until the alarm rings at <span class="num">6</span> AM.</b></p>
         <p class="touchOnly">On a touch screen: drag across the room to look around, tap DOOR and LIGHT on each side, tap CAMERAS at the bottom, and tap ☾ to pause.</p>
@@ -132,6 +177,12 @@
         <p class="keysOnly">Left side: <kbd>Q</kbd> door, <kbd>A</kbd> light. Right side: <kbd>E</kbd> door, <kbd>D</kbd> light.</p>
         <p class="keysOnly"><kbd>SPACE</kbd> cameras, <kbd>1</kbd>–<kbd>9</kbd> switch camera, <kbd>F</kbd> pinch yourself, <kbd>ESC</kbd> pause.</p>
         <p>Everything drains <b>Lucidity</b>. If it hits <span class="num">0</span>%, the dream stops listening to you.</p>
+        <p>A shut door is like holding your breath: cheap for a little while, then it costs more and more. Open it once it bangs.</p>
+        <p>Pinching yourself gives Lucidity back, more the lower you are. But it is loud, and it draws the monster closer. Never pinch while it breathes at an open door: it comes straight in.</p>
+        <p>You’ll hear it before you see it: it clicks in the walls, louder the closer it gets. It always breathes at your door before it comes in.</p>
+        <p>Below the line on the Lucidity bar, the dream starts to lie. A fake never moves, glows violet, and its breathing runs backwards. The light shows the truth, and a pinch clears every lie.</p>
+        <p>The dream voice speaks a little at a time: click or tap it to hurry it on. The pause menu remembers what it said.</p>
+        <p>At <span class="num">6</span> AM the alarm rings and you wake up in your room. Turn it off, then look around: sometimes something follows you out.</p>
       </div>
       <div class="sub2">Credits</div>
       <div id="creditList"></div>
@@ -152,20 +203,30 @@
   <div id="dead" class="screen hidden">
     <div class="panel clear">
       <div id="deadTitle" class="deathTitle">IT FOUND YOU</div>
-      <div id="deadSub" class="subtitle">You will not wake up from this one.</div>
+      <div id="deadSub" class="subtitle">You fell deeper.</div>
+      <div id="deadRecap" title="click to see it all"></div>
+      <div id="deadSpend" class="hidden"><div class="bar"></div><div class="legend"></div></div>
       <div id="deadTip" class="dim"></div>
-      <button id="dRetry" class="menuBtn">Dream again</button>
-      <button id="dMenu" class="menuBtn">Menu</button>
+      <div class="deadBtns">
+        <button id="dRetry" class="menuBtn">Dream again</button>
+        <button id="dLighter" class="menuBtn hidden">Dream lighter <em>(this night only)</em></button>
+        <button id="dMenu" class="menuBtn">Menu</button>
+      </div>
     </div>
   </div>
 
+  <!-- the morning: "tap to turn off the alarm", the last morning's credits, then "You woke up" -->
+  <div id="wakePrompt" class="screen hidden">tap to turn off the alarm</div>
+  <div id="credits" class="screen hidden"><div id="creditRoll"></div></div>
   <div id="win" class="screen hidden">
     <div class="panel clear">
-      <div id="winClock" class="winClock"><span id="winH">5</span>&nbsp;AM</div>
       <div id="winTitle" class="title">You woke up</div>
       <div id="winSub" class="subtitle"></div>
-      <button id="wNext" class="menuBtn">Next night</button>
-      <button id="wMenu" class="menuBtn">Menu</button>
+      <div id="winStats" class="dim"></div>
+      <div class="winBtns">
+        <button id="wNext" class="menuBtn">Next night</button>
+        <button id="wMenu" class="menuBtn">Menu</button>
+      </div>
     </div>
   </div>
 
@@ -173,8 +234,77 @@
 </div>
 <div id="rotate"><div>↻</div>Turn your phone sideways<br><small>the dream needs a wide screen</small></div>
 
+<!-- when something stops the game from starting (most often a typo in js/config.js), this says what and where,
+     instead of leaving the screen stuck on "falling asleep…" -->
+<div id="oops" role="alert" style="display:none"><div class="oopsInner">
+  <div class="oopsTitle">Oops! The dream got stuck.</div>
+  <div id="oopsMsg"></div>
+  <pre id="oopsCode" style="display:none"></pre>
+  <ul id="oopsHint"></ul>
+  <div id="oopsTech"></div>
+</div></div>
+
 <noscript>This game needs JavaScript.</noscript>
-<script src="js/config.js"></script>
-<script src="js/game.js"></script>
+<script>
+/* Catches mistakes while the game starts. It is here, BEFORE config.js, so it also sees a typo inside config.js. */
+(function () {
+  var shown = false, configOk = false, muted = false;
+  var $ = function (id) { return document.getElementById(id); };
+  var HINTS = {
+    syntax: ['Look at the end of the line <b>before</b> it: is a comma <b>,</b> missing?',
+      'Every <b>{</b> needs a <b>}</b>, every <b>[</b> needs a <b>]</b>, and every <b>"</b> needs another <b>"</b>.',
+      'Fix it, save the file, and reload this page. Stuck? Undo your last change.'],
+    noLine: ['Most often it is a missing comma <b>,</b> between two <b>{ … }</b> blocks, or a missing <b>}</b> <b>]</b> or <b>"</b>.',
+      'Undo your last change, save, and reload this page.',
+      'To see the exact line: play from a little web server (HOW-TO-ADD-ART.md, part 1), or press F12 and look in the Console.'],
+    shape: ['Check the last thing you changed in js/config.js.',
+      'Compare it with a part that works, like the Redhorn block.'],
+    missing: ['It must be in the <b>js</b> folder, next to the other game files.'],
+  };
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  /* o: { msg (html), hint (a HINTS key), tech (the browser's own words), file, line } */
+  function oops(o) {
+    if (shown || window.__oopsReady) return;
+    shown = true;
+    var box = $('oops'); if (!box) return;
+    $('oopsMsg').innerHTML = o.msg;
+    var warn = (window.__oopsWarn || []).slice(0, 6).map(function (w) { return 'config.js check: ' + esc(w); });
+    $('oopsHint').innerHTML = warn.concat(HINTS[o.hint] || []).map(function (h) { return '<li>' + h + '</li>'; }).join('');
+    $('oopsTech').textContent = o.tech ? '(the browser says: ' + o.tech + ')' : '';
+    box.style.display = '';
+    // served from a website: show the lines around the mistake
+    if (o.file && o.line && location.protocol !== 'file:' && window.fetch) {
+      fetch(o.file).then(function (r) { return r.text(); }).then(function (text) {
+        var lines = text.split('\n'), out = [];
+        for (var i = Math.max(1, o.line - 4); i <= Math.min(lines.length, o.line); i++) out.push((i === o.line ? '→ ' : '  ') + i + ' | ' + lines[i - 1]);
+        $('oopsCode').textContent = out.join('\n'); $('oopsCode').style.display = '';
+      }).catch(function () {});
+    }
+  }
+  function unknown() { oops({ msg: 'Something stopped the game from starting.', hint: 'shape' }); }
+  window.addEventListener('error', function (e) {
+    if (window.__oopsReady) return; // the game is running: from now on it reports its own problems
+    var file = (e.filename || '').split('?')[0], name = file.split('/').pop();
+    if (!name || /^Script error\.?$/.test(e.message || '')) { muted = true; if (configOk) unknown(); return; } // (file:// hides the details)
+    if (name === 'config.js') oops({ msg: 'There is a mistake in <b>js/config.js</b> on line <b>' + e.lineno + '</b>:', hint: 'syntax', tech: e.message, file: file, line: e.lineno });
+    else oops({ msg: 'Something in <b>js/config.js</b> isn\'t the way the game expects, so it couldn\'t start.', hint: 'shape', tech: e.message + ' (' + name + ' line ' + e.lineno + ')' });
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason || {};
+    if (!window.__oopsReady) oops({ msg: 'Something stopped the game from starting.', hint: 'shape', tech: String(r.message || r) });
+  });
+  window.__oops = oops;
+  window.__oopsWarn = []; // game.js adds its config.js warnings here
+  window.__oopsMissing = function (f) { oops({ msg: 'The file <b>' + esc(f) + '</b> is missing.', hint: 'missing' }); };
+  /* right after config.js: could the browser read it? */
+  window.__oopsCheckConfig = function () {
+    configOk = !!window.GAME_CONFIG;
+    if (!configOk) oops({ msg: '<b>js/config.js</b> has a mistake, so the game can\'t read it.', hint: muted ? 'noLine' : 'syntax' });
+  };
+})();
+</script>
+<script src="js/config.js" onerror="__oopsMissing('js/config.js')"></script>
+<script>__oopsCheckConfig();</script>
+<script src="js/game.js" onerror="__oopsMissing('js/game.js')"></script>
 </body>
 </html>
