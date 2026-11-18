@@ -41,6 +41,9 @@ Open the game with **`?dev`** at the end of the address, like
   it looks in the doorway (turn the light on).
 * **K** tests the jumpscare, **T** speeds up time, **N** skips to 5:59 AM (to see waking up),
   **M** makes the monsters move, **L** drops Lucidity to 5%.
+* **V** shows a *dream lie*: a fake of your monster at a door (turn that light
+  on) or on a camera. Fakes use your own monster pictures, frozen and tinted
+  violet, so there is nothing extra to draw.
 
 ## 3. The desk room (office)
 
@@ -122,6 +125,12 @@ Make one picture per camera, ideally **1600 × 900** (16:9):
 You can rename rooms, change `name:` or `label:`, or add more cameras by
 copying a line in `cameras:`. Number keys 1–9 pick cameras.
 
+Each camera can also have a **sound** you hear while you watch that room:
+`sound: "water_drip", soundVol: 0.35` (the name of one of the `sounds:`, and
+how loud, from 0 to 1). The Nursery plays the music box, the Endless Hall a
+ticking clock, the Drowned Parlor dripping water. Leave them out for a quiet
+room.
+
 Draw rooms **without** the monster in them. The game places your animated
 monster into the room by itself, using the `poses` numbers.
 
@@ -149,6 +158,10 @@ To add a new monster:
    * `poses`: where it stands in each camera picture (use art-helper mode)
    * `doorPose`: where it stands in the doorway. Keep `h` small enough that its
      whole body (horns too!) fits inside the door box. Redhorn uses `h: 0.70`.
+   * `presenceSound`: the noise it makes in the walls (Redhorn clicks). You hear
+     it louder and clearer the closer it gets to your doors, and right there
+     when you watch its room. Use the name of one of the `sounds:`, or `""` for
+     a silent monster.
    * `jumpscareFrames` (optional): special close-up frames for its jumpscare
    * `jumpscareFocus`: which part of the picture rushes at the player
      (`y: 0.2` is near the top, where the face usually is)
@@ -175,6 +188,17 @@ The sounds marked `// optional:` in `config.js` (`clock_tick`, `type_key`,
 can be missing: the game then plays a stand-in, like a slowed-down or muffled
 copy of another sound.
 
+The long music tracks (`ambience`, `menu_music`, `morning`, `music_box`) play
+straight from their files while the game runs, so they can be big. Every other
+sound is loaded before the game starts, so keep those short (a few seconds).
+
+**Sound captions.** In Settings, *Sound captions* shows every scary sound as
+words on the side of the screen it came from ("‹ breathing", "footsteps,
+close ›"), with a red glow at that edge. It is on by default on phones and
+tablets. The words live in `captions:` in `config.js`. If you give a monster
+its own scary sound, add a caption line for it too, so players who can't hear
+it still know what happened.
+
 ## 8. Text and game settings
 
 * `title` and `subtitle`: the name on the menu
@@ -196,6 +220,15 @@ copy of another sound.
   `doorFree` seconds (set per night in `nights`), then costs more and more,
   up to `maxCost` times as much. `giveUpAfter` is how long a monster waits at
   a shut door before it bangs and leaves.
+* `minWarning`: the fairness promise. A monster at your door always breathes
+  first and waits at least this many seconds (2.5) before it can come in, even
+  if you give it a tiny `waitAtDoor`.
+* `lies`: below the violet line on the Lucidity bar (`below`, 60%), the dream
+  sometimes shows a **fake** monster, about every `every` seconds. A fake never
+  moves, glows see-through violet, and its breathing runs backwards. The light
+  makes it fade, a pinch clears every fake, and it can never hurt you. Turn the
+  lies on or off per night with `lies: true / false` in `nights`. The first
+  time your light finds a fake, the voice says `dreamVoice.lie`.
 
 The little glyphs under the Lucidity bar show what is draining you right now:
 a dot (just being asleep), the left door, the right door, a star (a light) and

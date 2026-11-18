@@ -61,6 +61,10 @@
     <div id="devInfo" class="hidden"></div>
   </div>
 
+  <!-- sound captions (Settings): what you hear, on the side it came from; over the cameras too -->
+  <div id="edgeL" class="edge"></div><div id="edgeR" class="edge"></div>
+  <div id="captions" aria-live="polite"><div class="capL"></div><div class="capC"></div><div class="capR"></div></div>
+
   <!-- =============== SCREENS =============== -->
   <div id="boot" class="screen">
     <div class="bootInner">
@@ -113,7 +117,12 @@
           <button data-v="full">Full</button><button data-v="low">Low</button><button data-v="off">Off</button>
         </span>
       </div>
-      <div class="dim small">“Low” and “Off” reduce screen warping, shaking and flashes.</div>
+      <div class="row">Sound captions
+        <span class="seg" id="sCap">
+          <button data-v="off">Off</button><button data-v="on">On</button>
+        </span>
+      </div>
+      <div class="dim small">“Low” and “Off” reduce screen warping, shaking and flashes.<br>Captions show every sound as words, on the side it came from.</div>
       <div class="btnRow">
         <button id="sFull" class="menuBtn">Toggle fullscreen</button>
         <button id="sReset" class="menuBtn danger">Erase save</button>
@@ -136,6 +145,8 @@
         <p>Everything drains <b>Lucidity</b>. If it hits <span class="num">0</span>%, the dream stops listening to you.</p>
         <p>A shut door is like holding your breath: cheap for a little while, then it costs more and more. Open it once it bangs.</p>
         <p>Pinching yourself gives Lucidity back, more the lower you are. But it is loud, and it draws the monster closer.</p>
+        <p>You’ll hear it before you see it: it clicks in the walls, louder the closer it gets. It always breathes at your door before it comes in.</p>
+        <p>Below the line on the Lucidity bar, the dream starts to lie. A fake never moves, glows violet, and its breathing runs backwards. The light shows the truth, and a pinch clears every lie.</p>
         <p>At <span class="num">6</span> AM the alarm rings and you wake up in your room. Turn it off, then look around: sometimes something follows you out.</p>
       </div>
       <div class="sub2">Credits</div>

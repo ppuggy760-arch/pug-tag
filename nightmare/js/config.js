@@ -63,6 +63,20 @@ window.GAME_CONFIG = {
        giveUpAfter: seconds a monster waits at a shut door before it bangs and leaves. */
   doorStrain: { rampSeconds: 10, maxCost: 3, giveUpAfter: 8 },
 
+  /* IT ALWAYS BREATHES FIRST: a monster at your door must breathe (you can
+     hear it) and wait at least this many seconds before it can come in.
+     That keeps the game fair even if you make a monster very fast. */
+  minWarning: 2.5,
+
+  /* THE DREAM LIES: when your Lucidity drops below the line on the bar, the
+     dream sometimes shows you a FAKE monster (from Night 2, see "lies" in
+     nights above). A fake never moves, glows see-through violet, and its
+     breathing runs backwards. Shine the light on it and it fades away, or
+     pinch yourself and every lie is gone. A fake can't hurt you.
+       below: the line on the Lucidity bar (60 = the lies start below 60%).
+       every: how many seconds between two lies: [shortest, longest]. */
+  lies: { below: 60, every: [35, 60] },
+
   /* ------------------------------------------------------------------
      THE DESK ROOM (the office you sit in).
      image: a WIDE picture works best (about 2400 x 900, or 8:3).
@@ -128,16 +142,19 @@ window.GAME_CONFIG = {
 
   /* ------------------------------------------------------------------
      CAMERAS. One entry per room you can watch.
-     image: the room picture (16:9 works best, e.g. 1600 x 900).
-     map:   where its button sits on the little camera map (0..1).
+     image:    the room picture (16:9 works best, e.g. 1600 x 900).
+     map:      where its button sits on the little camera map (0..1).
+     sound:    (optional) what you hear while you watch this room: the name
+               of one of the sounds at the bottom of this file.
+     soundVol: how loud that is (0 = silent, 1 = loudest).
      ------------------------------------------------------------------ */
   cameras: [
-    { id: "nursery", label: "CAM 1", name: "The Nursery",       image: "assets/rooms/cam1_nursery.png", map: { x: 0.50, y: 0.10 } },
-    { id: "hall",    label: "CAM 2", name: "The Endless Hall",  image: "assets/rooms/cam2_hall.png",    map: { x: 0.50, y: 0.33 } },
-    { id: "parlor",  label: "CAM 3", name: "Drowned Parlor",    image: "assets/rooms/cam3_parlor.png",  map: { x: 0.19, y: 0.53 } },
+    { id: "nursery", label: "CAM 1", name: "The Nursery",       image: "assets/rooms/cam1_nursery.png", map: { x: 0.50, y: 0.10 }, sound: "music_box",  soundVol: 0.25 },
+    { id: "hall",    label: "CAM 2", name: "The Endless Hall",  image: "assets/rooms/cam2_hall.png",    map: { x: 0.50, y: 0.33 }, sound: "clock_tick", soundVol: 0.3 },
+    { id: "parlor",  label: "CAM 3", name: "Drowned Parlor",    image: "assets/rooms/cam3_parlor.png",  map: { x: 0.19, y: 0.53 }, sound: "water_drip", soundVol: 0.35 },
     { id: "stairs",  label: "CAM 4", name: "Stairs to Nowhere", image: "assets/rooms/cam4_stairs.png",  map: { x: 0.81, y: 0.53 } },
-    { id: "west",    label: "CAM 5", name: "West Hall",         image: "assets/rooms/cam5_west.png",    map: { x: 0.19, y: 0.76 } },
-    { id: "east",    label: "CAM 6", name: "East Hall",         image: "assets/rooms/cam6_east.png",    map: { x: 0.81, y: 0.76 } },
+    { id: "west",    label: "CAM 5", name: "West Hall",         image: "assets/rooms/cam5_west.png",    map: { x: 0.19, y: 0.76 }, sound: "light_buzz", soundVol: 0.18 },
+    { id: "east",    label: "CAM 6", name: "East Hall",         image: "assets/rooms/cam6_east.png",    map: { x: 0.81, y: 0.76 }, sound: "light_buzz", soundVol: 0.18 },
   ],
 
   /* ------------------------------------------------------------------
@@ -174,6 +191,7 @@ window.GAME_CONFIG = {
       jumpscareFps: 14,
       jumpscareFocus: { x: 0.5, y: 0.2 },  // which part of the picture lunges at you (0.2 = near the top/face)
       jumpscareSound: "jumpscare",
+      presenceSound: "redhorn_click",    // the noise it makes in the walls: louder the closer it gets ("" = none)
       levels: [3, 6, 9, 12, 16],
       hourBoost: { 2: 1, 3: 1, 4: 2 },   // extra aggression at 2 AM, 3 AM, 4 AM
       moveEvery: 4.8,                    // seconds between move chances
@@ -242,17 +260,38 @@ window.GAME_CONFIG = {
     water_drip:    "assets/audio/water_drip.mp3",     // drips for the Drowned Parlor camera
   },
 
+  /* SOUND CAPTIONS (Settings -> Sound captions): the words shown for each
+     sound, on the side of the screen it came from. They help on phones
+     (one speaker can't tell left from right) and players who can't hear.
+     {0} is filled in by the game (the time, for the clock). If you add a new
+     scary sound for a monster, give it a caption line here too. */
+  captions: {
+    steps:         "footsteps",
+    stepsNear:     "footsteps, close",
+    breath:        "breathing",
+    breathMuffled: "breathing, muffled",
+    breathClose:   "breathing, very close",
+    bang:          "BANG",
+    far:           "a low moan, far off",
+    whisper:       "whispering",
+    chime:         "the clock chimes: {0}",
+    powerDown:     "everything goes quiet",
+    clockSlow:     "the clock is slowing down",
+    strain:        "the door groans",
+  },
+
   /* ------------------------------------------------------------------
      THE DREAM VOICE — what the voice in your head says at the start
      of each night. Use \n\n for a new paragraph.
      ------------------------------------------------------------------ */
   dreamVoice: {
     1: "Hey. Hey — can you hear me? Good. You're asleep. I know, it doesn't feel like it. That's how this place works.\n\nThis is the Desk Room. Same desk, same walls, every night, until the alarm rings at six.\n\nSomething walks the halls of this dream. It's red. It's tall. It doesn't blink.\n\nWatch it on the cameras. If it comes to your door, shut the door. Use the lights to check — it's always darker out there than it should be. Doors are like holding your breath. Don't hold them forever.\n\nEverything you do costs Lucidity: doors, lights, cameras. If your Lucidity runs out, the dream stops listening to you.\n\nIf you're slipping, pinch yourself. It helps more the deeper you've sunk. But it's loud, and it will hear you.\n\nJust make it to six. The alarm always comes. Usually.",
-    2: "You came back. Most people don't remember the first night.\n\nIt remembers you, though. It's quicker now — it's learned the way to your room.\n\nDon't waste the light. Listen for its breathing at the door.",
-    3: "The halls were longer tonight. Did you notice? The dream is building the house out of your memories.\n\nIf you hear it bang on the door, that's good. That means the door held.",
+    2: "You came back. Most people don't remember the first night.\n\nIt remembers you, though. It's quicker now — it's learned the way to your room.\n\nWhen your Lucidity drops below the line, the dream starts to lie. The real one always moves. The fake one stands still, and its breathing runs backwards. When in doubt, use the light.",
+    3: "The halls were longer tonight. Did you notice? The dream is building the house out of your memories.\n\nIt walks quietly now. Don't wait for footsteps. Listen for the breathing.\n\nIf you hear it bang on the door, that's good. That means the door held.",
     4: "Don't stare at it on the cameras for too long. I think it likes being watched.\n\nThe doors are tired. Don't make them hold their breath for nothing.\n\nI can barely hear you anymore. You're sinking deeper.",
     5: "This is the last night I can reach you.\n\nWhen the alarm rings, don't hesitate. Don't look back. Just wake up.\n\nI'll be the one ringing.",
     endless: "There is no voice here. Only the dream.",
+    lie: "Not real. The real one always moves. If its breathing runs backwards, the dream is lying.",  // the first time your light finds a fake
   },
 
   /* Credits shown in the Extras screen (see also CREDITS.md) and rolled after Night 5.

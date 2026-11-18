@@ -63,7 +63,9 @@
   /*  SAVE                                                              */
   /* ------------------------------------------------------------------ */
   const SAVE_KEY = 'until-the-alarm.save.v1';
-  const save = { night: 1, beaten: 0, vol: 85, music: 70, fx: 'full', custom: {} };
+  /* captions: Sound captions on/off (on by default on touch screens, whose one speaker can't tell left from right).
+     hints: lessons the game has already taught (it never repeats them). */
+  const save = { night: 1, beaten: 0, vol: 85, music: 70, fx: 'full', custom: {}, captions: null, hints: {} };
   function loadSave() {
     let stored = null;
     try {
@@ -76,6 +78,8 @@
     save.beaten = clamp(parseInt(save.beaten, 10) || 0, 0, NIGHTS);
     if (!['full', 'low', 'off'].includes(save.fx)) save.fx = 'full';
     if (!save.custom || typeof save.custom !== 'object') save.custom = {};
+    if (typeof save.captions !== 'boolean') save.captions = TOUCH;
+    if (!save.hints || typeof save.hints !== 'object') save.hints = {};
     applyFxSetting();
   }
   function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* ignore */ } }
@@ -90,8 +94,16 @@
   /* ------------------------------------------------------------------ */
   const Sound = {
     defs: CFG.sounds || {},
-    web: false, ctx: null, master: null, musicBus: null, sfxBus: null,
+    /* long music and ambience tracks are streamed while they play instead of being decoded up front
+       (decoding all of them took about 100 MB of memory, and the game had to wait for it) */
+    STREAM: ['ambience', 'menu_music', 'morning', 'music_box'],
+    RANDOM_START: ['ambience', 'static'], // loops that start somewhere in the middle, so they never sound the same
+    web: false, ctx: null, master: null, musicBus: null, sfxBus: null, paused: false,
     buffers: {}, pools: {}, loops: {}, missing: new Set(), loaded: 0, total: 0,
+    spare: {},       // streamed tracks downloading in the background (the first loop that plays one takes it)
+    media: {},       // a streamed loop's <audio> + its Web Audio input, kept for the next time the loop plays
+    shots: new Set(), // streamed one-shots that are playing
+    held: [],        // <audio> elements paused by the pause menu (they carry on when you resume)
 
     init() {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -107,6 +119,10 @@
       this.applyVolumes();
     },
 
+    /* is this a long track that plays straight from its file? (very old browsers decode everything) */
+    isStream(name) { return this.STREAM.indexOf(name) >= 0 && (!this.web || !!this.ctx.createMediaElementSource); },
+
+    /* short sounds are decoded (the promise waits for them); streamed tracks only start downloading */
     load(onEach) {
       const names = Object.keys(this.defs);
       this.total = names.length;
@@ -114,10 +130,16 @@
         const url = this.defs[name];
         const done = (ok) => { if (!ok) this.missing.add(name); this.loaded++; if (onEach) onEach(); };
         if (!url) { done(false); return Promise.resolve(); }
+        if (this.isStream(name)) { // a missing file reports itself later (see _el)
+          const a = this._el(name); a.load();
+          if (this.web) this.spare[name] = a; else this.pools[name] = [a];
+          done(true); return Promise.resolve();
+        }
         if (this.web) {
           return fetch(url)
             .then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
-            .then((ab) => new Promise((res, rej) => this.ctx.decodeAudioData(ab, res, rej)))
+            // (newer browsers also return a promise here: catch it too, or a broken file shows up as an error)
+            .then((ab) => new Promise((res, rej) => { const p = this.ctx.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(rej); }))
             .then((b) => { this.buffers[name] = b; done(true); })
             .catch(() => done(false));
         }
@@ -162,13 +184,16 @@
     _htmlVol(v, music) { const mv = save.vol / 100, mu = save.music / 100; return clamp(v * mv * mv * (music ? mu * mu : 1), 0, 1); },
 
     /* can this sound play? (false for missing files and optional slots that were never filled) */
-    has(name) { return !!name && !this.missing.has(name) && (this.web ? !!this.buffers[name] : !!this.defs[name]); },
+    has(name) {
+      if (!name || this.missing.has(name)) return false;
+      return this.web ? !!this.buffers[name] || (this.isStream(name) && !!this.defs[name]) : !!this.defs[name];
+    },
     /* play the first sound in the list that exists, e.g. playAny(['reality_snap', 'ui_click']) */
     playAny(names, opts) { for (const n of names) if (this.has(n)) return this.play(n, opts); return null; },
 
-    /* a backwards copy of a sound (Web Audio only; null when opened from a file) */
+    /* a backwards copy of a sound (Web Audio only; null when opened from a file or for a streamed track) */
     reversed(name) {
-      if (!this.web || !this.has(name)) return null;
+      if (!this.web || !this.has(name) || !this.buffers[name]) return null;
       const key = name + '~';
       if (!this.buffers[key]) {
         const src = this.buffers[name];
@@ -182,23 +207,45 @@
       return key;
     },
 
+    /* Web Audio: src -> (lowpass) -> (pan) -> gain -> the music or sound-effects bus */
+    _chain(src, lowpass, pan, vol, music) {
+      const c = this.ctx;
+      let node = src, f = null, p = null;
+      if (lowpass != null) { f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; node.connect(f); node = f; }
+      if (pan != null && c.createStereoPanner) { p = c.createStereoPanner(); p.pan.value = clamp(pan, -1, 1); node.connect(p); node = p; }
+      const g = c.createGain(); g.gain.value = vol;
+      node.connect(g); g.connect(music ? this.musicBus : this.sfxBus);
+      return { f, pan: p, g };
+    },
+    /* a streamed track's <audio>, wired into Web Audio (that can only be done once per element) */
+    _mediaIn(name) {
+      const el = this.spare[name] || this._el(name);
+      delete this.spare[name];
+      return { el, src: this.ctx.createMediaElementSource(el), sound: name };
+    },
+    _playEl(el) { const pr = el.play(); if (pr && pr.catch) pr.catch(() => {}); },
+
     /* one-shot sound. opts: vol, rate, pan (-1..1), lowpass (Hz), music.
        Returns a handle { stop(fade), gain, filter, src } (Web Audio) or { stop, el } (file mode), or null. */
     play(name, opts) {
       if (!this.has(name)) return null;
       const o = Object.assign({ vol: 1, rate: 1, pan: 0, lowpass: 0, music: false }, opts || {});
       if (this.web) {
-        const c = this.ctx;
-        const src = c.createBufferSource(); src.buffer = this.buffers[name]; src.playbackRate.value = o.rate;
-        const g = c.createGain(); g.gain.value = o.vol;
-        let node = src, f = null;
-        if (o.lowpass) { f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = o.lowpass; node.connect(f); node = f; }
-        if (o.pan && c.createStereoPanner) { const p = c.createStereoPanner(); p.pan.value = clamp(o.pan, -1, 1); node.connect(p); node = p; }
-        node.connect(g); g.connect(o.music ? this.musicBus : this.sfxBus);
-        src.start();
+        const c = this.ctx, buf = this.buffers[name];
+        let src, el = null;
+        if (buf) { src = c.createBufferSource(); src.buffer = buf; src.playbackRate.value = o.rate; } else { // streamed
+          el = this._el(name); el.playbackRate = o.rate; src = c.createMediaElementSource(el);
+          this.shots.add(el); el.addEventListener('ended', () => { this.shots.delete(el); src.disconnect(); }, { once: true });
+        }
+        const ch = this._chain(src, o.lowpass || null, o.pan || null, o.vol, o.music);
+        if (el) this._playEl(el); else src.start();
+        const shots = this.shots;
         return {
-          src, gain: g, filter: f,
-          stop(fade) { try { g.gain.setTargetAtTime(0, c.currentTime, (fade || 0.05) / 3); src.stop(c.currentTime + (fade || 0.05) + 0.05); } catch (e) { /* already stopped */ } },
+          src, gain: ch.g, filter: ch.f,
+          stop(fade) {
+            const f = fade || 0.05;
+            try { ch.g.gain.setTargetAtTime(0, c.currentTime, f / 3); if (el) setTimeout(() => { el.pause(); shots.delete(el); }, (f + 0.05) * 1000); else src.stop(c.currentTime + f + 0.05); } catch (e) { /* already stopped */ }
+          },
         };
       }
       const pool = this.pools[name] || (this.pools[name] = []);
@@ -208,7 +255,7 @@
       }
       try { a.currentTime = 0; } catch (e) { /* not ready */ }
       a.loop = false; a.playbackRate = o.rate; a.volume = this._htmlVol(o.vol, o.music);
-      const pr = a.play(); if (pr && pr.catch) pr.catch(() => {});
+      this._playEl(a);
       return { el: a, stop() { a.pause(); } };
     },
 
@@ -231,6 +278,9 @@
     killLoops() { for (const k in this.loops) { const L = this.loops[k]; L.target = 0; L.vol = 0; this._stopH(L); } },
     stopAll() {
       this.killLoops();
+      this.paused = false; this.held = [];
+      for (const a of this.shots) a.pause();
+      this.shots.clear();
       if (!this.web) for (const k in this.pools) for (const a of this.pools[k]) { try { a.pause(); } catch (e) { /* ignore */ } }
       else if (this.ctx) { // swap the sfx bus so every playing one-shot is cut
         try { this.sfxBus.disconnect(); } catch (e) { /* ignore */ }
@@ -239,38 +289,47 @@
     },
     _tune(L) {
       if (!L.h) return;
+      if (L.h.el) L.h.el.playbackRate = L.rate; else L.h.src.playbackRate.value = L.rate;
       if (this.web) {
-        const now = this.ctx.currentTime;
-        L.h.src.playbackRate.value = L.rate;
         if (L.h.pan) L.h.pan.pan.value = clamp(L.pan, -1, 1);
-        if (L.h.f) L.h.f.frequency.setTargetAtTime(L.lp || 20000, now, 0.1);
-      } else L.h.el.playbackRate = L.rate;
+        if (L.h.f) L.h.f.frequency.setTargetAtTime(L.lp || 20000, this.ctx.currentTime, 0.1);
+      }
     },
     _startH(L) {
       if (!this.has(L.sound)) return;
+      const random = this.RANDOM_START.indexOf(L.sound) >= 0;
       if (this.web) {
         const buf = this.buffers[L.sound];
-        const c = this.ctx;
-        const src = c.createBufferSource(); src.buffer = buf; src.loop = true; src.playbackRate.value = L.rate;
-        const g = c.createGain(); g.gain.value = 0;
-        let node = src, pan = null, f = null;
-        if (L.filt) { f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = L.lp || 20000; node.connect(f); node = f; }
-        if (c.createStereoPanner) { pan = c.createStereoPanner(); pan.pan.value = clamp(L.pan, -1, 1); node.connect(pan); node = pan; }
-        node.connect(g); g.connect(L.music ? this.musicBus : this.sfxBus);
-        src.start(0, Math.random() * Math.max(0, buf.duration - 0.1) * (L.sound === 'ambience' || L.sound === 'static' ? 1 : 0));
-        L.h = { src, g, pan, f };
+        let src, el = null;
+        if (buf) { src = this.ctx.createBufferSource(); src.buffer = buf; src.loop = true; src.playbackRate.value = L.rate; } else {
+          let M = this.media[L.key]; // streamed: the same <audio> every time this loop plays (it carries on where it stopped)
+          if (!M || M.sound !== L.sound) {
+            M = this.media[L.key] = this._mediaIn(L.sound);
+            if (random) { const el0 = M.el, seek = () => { try { el0.currentTime = Math.random() * Math.max(0, el0.duration - 0.1); } catch (e) { /* not seekable */ } };
+              if (isFinite(el0.duration)) seek(); else el0.addEventListener('loadedmetadata', seek, { once: true }); }
+          }
+          el = M.el; src = M.src; el.loop = true; el.playbackRate = L.rate;
+        }
+        const ch = this._chain(src, L.filt ? (L.lp || 20000) : null, L.pan, 0, L.music);
+        if (el) this._playEl(el); else src.start(0, random ? Math.random() * Math.max(0, buf.duration - 0.1) : 0);
+        L.h = { src, el, g: ch.g, pan: ch.pan, f: ch.f };
       } else {
         const el = this._el(L.sound); el.loop = true; el.volume = 0; el.playbackRate = L.rate;
-        const pr = el.play(); if (pr && pr.catch) pr.catch(() => {});
+        this._playEl(el);
         L.h = { el };
       }
     },
     _stopH(L) {
       if (!L.h) return;
-      try { if (this.web) L.h.src.stop(); else L.h.el.pause(); } catch (e) { /* ignore */ }
+      try {
+        if (!this.web) L.h.el.pause();
+        else if (L.h.el) { L.h.el.pause(); L.h.src.disconnect(); L.h.g.disconnect(); } // (kept, see media)
+        else L.h.src.stop();
+      } catch (e) { /* ignore */ }
       L.h = null;
     },
     update(dt) {
+      if (this.paused) return; // nothing fades or starts while the game is paused
       for (const k in this.loops) {
         const L = this.loops[k];
         const step = dt / Math.max(0.02, L.fade);
@@ -283,10 +342,22 @@
         if (L.vol <= 0.001 && L.target <= 0 && L.h) this._stopH(L);
       }
     },
+    /* the pause menu: everything holds its breath and carries on from the same spot afterwards.
+       Web Audio stops its clock; plain <audio> elements (file mode, streamed tracks) are paused one by one. */
     pauseAll(p) {
-      if (this.web && this.ctx) { if (p) this.ctx.suspend().catch(() => {}); else this.ctx.resume().catch(() => {}); return; }
-      for (const k in this.loops) { const L = this.loops[k]; if (L.h) { if (p) L.h.el.pause(); else { const pr = L.h.el.play(); if (pr && pr.catch) pr.catch(() => {}); } } }
-      if (p) for (const k in this.pools) for (const a of this.pools[k]) a.pause();
+      if (p === this.paused) return;
+      this.paused = p;
+      if (p) {
+        const els = [...this.shots];
+        for (const k in this.loops) if (this.loops[k].h && this.loops[k].h.el) els.push(this.loops[k].h.el);
+        if (!this.web) for (const k in this.pools) els.push(...this.pools[k]);
+        this.held = els.filter((a) => !a.paused && !a.ended);
+        for (const a of this.held) a.pause();
+      } else {
+        for (const a of this.held) this._playEl(a);
+        this.held = [];
+      }
+      if (this.web && this.ctx) { if (p) this.ctx.suspend().catch(() => {}); else this.ctx.resume().catch(() => {}); }
     },
   };
 
@@ -297,9 +368,14 @@
   const configWarnings = [];
   function warnCfg(msg) { configWarnings.push(msg); console.warn('[config.js] ' + msg); }
   const TOP_KEYS = ['title', 'subtitle', 'hourSeconds', 'lucidityDrain', 'endlessDrain', 'nights', 'endlessRules', 'pinch',
-    'doorStrain', 'office', 'cameras', 'monsters', 'sounds', 'dreamVoice', 'credits', 'bedroom', 'fallAsleep', 'morning', 'finale'];
+    'doorStrain', 'lies', 'minWarning', 'office', 'cameras', 'monsters', 'sounds', 'captions', 'dreamVoice', 'credits', 'bedroom',
+    'fallAsleep', 'morning', 'finale'];
   const MONSTER_KEYS = ['id', 'name', 'description', 'frames', 'fps', 'jumpscareFrames', 'jumpscareFps', 'jumpscareFocus',
-    'jumpscareSound', 'levels', 'hourBoost', 'moveEvery', 'waitAtDoor', 'start', 'path', 'retreat', 'poses', 'doorPose'];
+    'jumpscareSound', 'presenceSound', 'sounds', 'levels', 'hourBoost', 'moveEvery', 'waitAtDoor', 'start', 'path', 'retreat', 'poses', 'doorPose'];
+  /* a sound name used somewhere in config.js must be one of the sounds: */
+  function checkSoundName(name, where) {
+    if (name && CFG.sounds && !CFG.sounds[name]) warnCfg(`${where}: there is no sound called "${name}" in sounds.`);
+  }
   /* an unknown key is only reported when it looks like a misspelt known one */
   function checkKeys(obj, known, where) {
     for (const k in obj) {
@@ -336,6 +412,7 @@
         warnCfg(`cameras: "${c.id}" needs map: { x: …, y: … } (where its button sits on the camera map).`);
         c.map = { x: 0.5, y: 0.5 };
       }
+      checkSoundName(c.sound, `cameras: "${c.id}" sound`);
     });
     const ids = CFG.cameras.map((c) => c.id), byLower = {};
     ids.forEach((id) => { byLower[id.toLowerCase()] = id; });
@@ -378,7 +455,8 @@
         m.waitAtDoor = [4, 7];
       }
       if (m.levels != null && !Array.isArray(m.levels)) { warnCfg(`${who} levels: write one number per night, like [3, 6, 9, 12, 16].`); m.levels = null; }
-      if (m.jumpscareSound && CFG.sounds && !CFG.sounds[m.jumpscareSound]) warnCfg(`${who} jumpscareSound: there is no sound called "${m.jumpscareSound}" in sounds.`);
+      checkSoundName(m.jumpscareSound, who + ' jumpscareSound');
+      checkSoundName(m.presenceSound, who + ' presenceSound');
     });
 
     CFG.office = CFG.office || {};
@@ -432,6 +510,16 @@
     d.rampSeconds = Math.max(0.1, +d.rampSeconds || 10); d.maxCost = Math.max(1, +d.maxCost || 1);
     return d;
   }
+  /* the dream's lies: below `below` % Lucidity a fake can appear, one every `every` [min, max] seconds */
+  function liesCfg() {
+    const l = Object.assign({ below: 60, every: [35, 60] }, CFG.lies || {});
+    l.below = clamp(isFinite(+l.below) ? +l.below : 60, 0, 100);
+    l.every = Array.isArray(l.every) && l.every.length === 2 ? l.every.map((v) => Math.max(5, +v || 35)) : [35, 60];
+    return l;
+  }
+  /* seconds a monster must have been breathing at your door before it can come in (config minWarning) */
+  const minWarning = () => (CFG.minWarning != null && isFinite(+CFG.minWarning) ? Math.max(0, +CFG.minWarning) : 2.5);
+  const hourSec = () => Math.max(5, CFG.hourSeconds || 75);
 
   /* ------------------------------------------------------------------ */
   /*  ART: load pictures, or paint dreamy stand-ins when they're missing */
@@ -1100,8 +1188,8 @@
   /* ------------------------------------------------------------------ */
   /* p: how far the shutter is down (0 open, 1 shut) and v its speed; held: seconds it has been shut (it breathes
      back out three times faster while open); cost: what it drains right now; gaspT: a tired door about to give way;
-     landT / bangT: short thud and bang effects */
-  const freshDoor = () => ({ closed: false, p: 0, v: 0, landed: false, light: false, held: 0, cost: 0, gaspT: 0, landT: 0, bangT: 0 });
+     groan: how loud it groans; landT / bangT: short thud and bang effects */
+  const freshDoor = () => ({ closed: false, p: 0, v: 0, landed: false, light: false, held: 0, cost: 0, gaspT: 0, groan: 0, landT: 0, bangT: 0 });
   const freshCams = () => ({ up: false, t: 0, cur: CFG.cameras[0].id, staticAmt: 0, lost: 0, forceDown: 0 });
   const freshFlicker = () => ({ on: false, t: 0, a: 0 });
   const G = {
@@ -1114,7 +1202,7 @@
     monsters: [], inside: null, insideT: 0,
     pinchCd: 0, danger: 0, flash: 0, flashColor: '255,255,255',
     clarity: 0,                         // a pinch snaps the picture sharp for a moment
-    lies: [],                           // fakes the dream is showing right now (a pinch clears them)
+    lies: [], lieT: 0, taught: false,   // fakes the dream is showing right now (a pinch clears them), see spawnLie
     punch: null,                        // a small flinch toward a doorway when the light finds something
     trauma: 0, kick: { x: 0, y: 0 },   // camera shake (see hit)
     later: [],                          // pause-safe timers (see after)
@@ -1154,6 +1242,7 @@
       this.timer = (def.moveEvery || 5) * rand(0.8, 1.2);
       this.linger = 0; this.alerted = false; this.seen = false; this.breathT = 0;
       this.doorT = 0;     // seconds at the door it is standing at
+      this.breathed = false; // has it breathed at that door yet? (it must before it can come in)
       this.watched = 0;   // seconds you have been staring at it on a camera
       this.anim = 0; this.animSpeed = 1; this.animOffset = Math.random() * 10; // its own animation clock (it can slow down)
     }
@@ -1234,23 +1323,78 @@
   /*  THREAT SOUNDS: every footstep, breath and bang goes through cue() */
   /* ------------------------------------------------------------------ */
   const CUE = { steps: 'footsteps', breath: 'breathing', bang: 'door_bang', far: 'moan', whisper: 'whisper' };
-  const Captions = { show() { /* sound captions come in a later update */ } };
-  /* cue('breath', 'left', { monster, vol, rate, lowpass, pan, fake }). side: 'left' / 'right' / anything else = o.pan */
+  const THREAT = ['steps', 'breath', 'bang']; // the cues that light the edge of the screen on their side
+
+  /* ----- sound captions (Settings): each sound as words, in a lane on the side it came from, plus a red glow
+     at that edge of the screen for footsteps, breathing and bangs. Phone speakers can't tell left from right;
+     this can. The words come from config.js captions (a missing one uses these). Never names a room. ----- */
+  const CAPTIONS = {
+    steps: 'footsteps', stepsNear: 'footsteps, close', breath: 'breathing', breathMuffled: 'breathing, muffled',
+    breathClose: 'breathing, very close', bang: 'BANG', far: 'a low moan, far off', whisper: 'whispering',
+    chime: 'the clock chimes: {0}', powerDown: 'everything goes quiet', clockSlow: 'the clock is slowing down', strain: 'the door groans',
+  };
+  const Captions = {
+    box: $('#captions'),
+    lanes: { L: $('#captions .capL'), C: $('#captions .capC'), R: $('#captions .capR') },
+    edges: { left: $('#edgeL'), right: $('#edgeR') },
+    text(key) { const own = (CFG.captions || {})[key]; return own != null ? String(own) : CAPTIONS[key] || ''; },
+    /* key: a CAPTIONS name. pan -1..1 picks the lane. vol 0..1 sets size and brightness.
+       o: { arg (fills {0}), fake ('backwards' / 'echoing'), edge (light that side's edge), breath } */
+    show(key, pan, vol, o) {
+      o = o || {};
+      if (!save.captions || G.state !== 'night') return;
+      let text = this.text(key).replace('{0}', o.arg != null ? o.arg : '');
+      if (!text) return;
+      if (o.fake) text += ' (' + o.fake + ')'; // what the sound itself says: the dream is lying
+      const v = clamp(vol == null ? 1 : vol, 0, 1), lane = pan < -0.3 ? 'L' : pan > 0.3 ? 'R' : 'C';
+      const label = lane === 'L' ? '‹ ' + text : lane === 'R' ? text + ' ›' : text;
+      const box = this.lanes[lane], now = performance.now() / 1000; // (real time: captions are for your eyes)
+      let el = Array.prototype.find.call(box.children, (c) => c.label === label && now - c.at < 1.2);
+      if (el) { // the same sound again: "footsteps ×2"
+        el.n++; el.firstChild.textContent = label + ' ×' + el.n;
+        el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+      } else {
+        el = document.createElement('div'); el.className = 'cap'; el.label = label; el.n = 1;
+        const s = document.createElement('span'); s.textContent = label; el.appendChild(s);
+        box.appendChild(el);
+        while (box.children.length > 3) box.firstChild.remove();
+      }
+      el.at = now; el.style.setProperty('--v', v.toFixed(2));
+      if (o.edge && lane !== 'C') this.glow(lane === 'L' ? 'left' : 'right', v, o.breath);
+    },
+    /* one soft rise and fade at that edge (it never blinks, so it stays on with every Dream effects setting) */
+    glow(side, v, breath) {
+      const el = this.edges[side];
+      el.style.transition = 'none'; el.style.opacity = (0.25 + 0.5 * v).toFixed(2);
+      void el.offsetWidth; el.style.transition = ''; el.style.opacity = 0;
+      if (breath && G.cams.up) pulseCls(hudEls.you, side === 'left' ? 'breathL' : 'breathR'); // on the map: breathing at YOUR door
+    },
+    clear() {
+      this.box.classList.remove('paused');
+      for (const k in this.lanes) this.lanes[k].textContent = '';
+      for (const k in this.edges) { this.edges[k].style.transition = 'none'; this.edges[k].style.opacity = 0; }
+    },
+  };
+
+  /* every threat sound: cue('breath', 'left', { monster, vol, rate, lowpass, pan, fake, cap }).
+     side: 'left' / 'right' / anything else = o.pan. cap: which caption (default: the kind). */
   function cue(kind, side, o) {
     o = o || {};
     const own = o.monster && o.monster.def.sounds && o.monster.def.sounds[kind];
     const name = own && Sound.has(own) ? own : CUE[kind];
     const opts = { vol: o.vol == null ? 1 : o.vol, rate: o.rate || 1, pan: sidePan(side, o.pan), lowpass: o.lowpass || 0 };
+    const back = o.fake && Sound.reversed(name); // the dream lies: it plays backwards
     let h;
-    if (o.fake && Sound.web) h = Sound.play(Sound.reversed(name), opts);     // the dream lies: it plays backwards
-    else if (o.fake) {                                                       // file mode can't reverse: slow + echo
+    if (back) h = Sound.play(back, opts);
+    else if (o.fake) {                            // file mode can't reverse: slower, with an echo
       const slow = Object.assign({}, opts, { rate: opts.rate * 0.8 });
       h = Sound.play(name, slow);
       after(0.14, () => Sound.play(name, Object.assign({}, slow, { vol: slow.vol * 0.45 })));
     } else h = Sound.play(name, opts);
     G.cueLog.push({ t: G.nightT, kind, side: side || null, fake: !!o.fake, who: o.monster ? o.monster.id : null });
     if (G.cueLog.length > 40) G.cueLog.shift();
-    Captions.show(kind, opts.pan, opts.vol, o);
+    Captions.show(o.cap || kind, opts.pan, opts.vol, { fake: o.fake ? (back ? 'backwards' : 'echoing') : null,
+      edge: THREAT.indexOf(kind) >= 0, breath: kind === 'breath' });
     return h;
   }
 
@@ -1284,18 +1428,20 @@
   /* nobody is at a door or inside, and every walker is at least minDist steps away */
   function calm(minDist) { return G.monsters.every((m) => m.state === 'roam' && doorDist(m.def, m.room) >= minDist); }
 
+  /* later nights it walks quietly: footsteps play only some of the time (rule stepChance). Breathing never skips. */
+  const quietSteps = () => Math.random() < rule('stepChance', 1);
   /* a monster walks into a room (or up to a door) */
   function arrive(m, next, viewing) {
     const from = m.room;
     if (isDoor(next)) {
       const side = next.slice(5);
-      m.state = 'door'; m.door = side; m.room = null; m.seen = false; m.doorT = 0;
+      m.state = 'door'; m.door = side; m.room = null; m.seen = false; m.doorT = 0; m.breathed = false;
       m.linger = rand(m.def.waitAtDoor[0], m.def.waitAtDoor[1]);
-      m.breathT = rand(0.6, 1.6);
-      cue('steps', side, { monster: m, vol: 0.75 });
+      m.breathT = rand(0.6, 1.6); // (its first breath: it can't come in before that, see monsterMove)
+      if (quietSteps()) cue('steps', side, { monster: m, vol: 0.75, cap: 'stepsNear' });
     } else {
       m.room = camById[next] ? next : m.def.start;
-      if (doorDist(m.def, m.room) === 1) cue('steps', null, { monster: m, vol: 0.5, pan: (camById[m.room].map.x - 0.5) * 1.6, lowpass: 2400 });
+      if (doorDist(m.def, m.room) === 1) { if (quietSteps()) cue('steps', null, { monster: m, vol: 0.5, pan: (camById[m.room].map.x - 0.5) * 1.6, lowpass: 2400 }); }
       else if (Math.random() < 0.3) cue('far', null, { monster: m, vol: 0.32, lowpass: 900, rate: rand(0.85, 1.05), pan: rand(-0.5, 0.5) });
     }
     if (viewing && (viewing === from || viewing === m.room)) camDisrupt();
@@ -1341,7 +1487,8 @@
     G.luc = 100; G.usage = 1; G.powerOut = false; G.powerT = 0; G.killAt = 0;
     G.doors.left = freshDoor(); G.doors.right = freshDoor();
     G.cams = freshCams();
-    G.inside = null; G.insideT = 0; G.pinchCd = 0; G.danger = 0; G.flash = 0; G.clarity = 0; G.punch = null; G.lies = [];
+    G.inside = null; G.insideT = 0; G.pinchCd = 0; G.danger = 0; G.flash = 0; G.clarity = 0; G.punch = null;
+    G.lies = []; G.taught = false;
     G.trauma = 0; G.kick = { x: 0, y: 0 }; G.later = []; G.parts = []; G.cueLog = []; G.glide = null;
     G.settle = 0; G.hush = false; G.frozen = []; G.finale = null;
     document.querySelectorAll('.lucGain').forEach((el) => el.remove());
@@ -1356,9 +1503,10 @@
       return m;
     });
     G.grace = n === 1 && !endless ? 22 : 10;
+    G.lieT = nextLieIn();
     Sound.resume();
     Sound.stopAll();
-    hideScreens(); resetHud(); G.voice.active = false;
+    hideScreens(); resetHud(); Captions.clear(); G.voice.active = false;
     // you fall asleep in your own bedroom (the night card comes once your eyes are shut)
     G.state = 'asleep'; G.introT = 0; G.introDur = (retry ? INTRO.retry : INTRO.full).dur;
     G.cardShown = false; G.joltPlayed = false; G.tickPh = -0.16;
@@ -1462,6 +1610,7 @@
     }
     if (D.closed === closed) return;
     D.closed = closed; // the state changes at once; the shutter only shows it (see moveDoor)
+    if (closed) for (const L of G.lies) if (L.kind === 'door' && L.side === side && !L.shut) { L.shut = true; G.stats.fakeCloses++; } // it cost you Lucidity, nothing more
     if (closed) { D.v = Math.max(D.v, 1.5); D.landed = false; }
     Sound.play(closed ? 'door_close' : 'door_open', { vol: 0.85, pan: side === 'left' ? -0.7 : 0.7 });
   }
@@ -1489,6 +1638,7 @@
   }
   function switchCam(id) {
     if (!G.cams.up || !camById[id] || G.cams.cur === id) return;
+    for (const L of G.lies) if (L.kind === 'cam' && L.room === G.cams.cur) L.ttl = 0; // look away from a lie and it's gone
     G.cams.cur = id; G.cams.staticAmt = 1;
     Sound.play('cam_switch', { vol: 0.7, rate: rand(0.95, 1.05) });
     updateCamUi();
@@ -1531,6 +1681,7 @@
       arrive(m, pick(optionsFrom(m.def, m.room)), viewing);
     } else if (m.state === 'door') {
       if (m.linger > 0) return; // still waiting: a pinch alert stays saved for its next chance
+      if (!m.breathed || m.doorT < minWarning()) return; // the promise: it always breathes at your door first, and gives you time
       if (G.doors[m.door].closed) {
         bangDoor(m.door, m);
         m.state = 'roam'; m.door = null;
@@ -1567,7 +1718,7 @@
   function enterOffice(m) {
     G.inside = m; m.state = 'inside';
     G.doors.left.light = false; G.doors.right.light = false;
-    cue('breath', 'center', { monster: m, vol: 1, rate: 0.9 });
+    cue('breath', 'center', { monster: m, vol: 1, rate: 0.9, cap: 'breathClose' });
     if (G.cams.up) { G.cams.forceDown = rand(1.2, 2.6); G.insideT = 99; }
     else G.insideT = rand(0.9, 1.7);
   }
@@ -1588,17 +1739,21 @@
     }
     Sound.play('power_down', { vol: 0.95 });
     Sound.stopLoop('ambience', 0.4); Sound.stopLoop('light_buzz', 0.1); Sound.stopLoop('static', 0.1);
+    Sound.stopLoops('presence:', 0.3); Sound.stopLoops('room:', 0.3);
+    G.lies = [];
+    Captions.show('powerDown', 0, 1);
     if (G.voice.active) endVoice();
     // the controls fall away (only the clock stays); the alarm clock starts to wind down
     $('#hud').classList.add('dissolve');
     G.tickPh = -0.16; G.hush = false;
-    Captions.show('clockSlow', 0, 1);
+    after(1.6, () => Captions.show('clockSlow', 0, 0.9));
   }
 
   function jumpscare(m) {
     if (G.state !== 'night') return;
-    G.state = 'jumpscare'; G.killer = m; G.jumpT = 0; G.later = [];
+    G.state = 'jumpscare'; G.killer = m; G.jumpT = 0; G.later = []; G.lies = [];
     G.cams.up = false; G.cams.t = 0;
+    Captions.clear();
     hide($('#hud')); if (G.voice.active) endVoice();
     Sound.stopAll();
     Sound.play((m && m.def.jumpscareSound) || 'jumpscare', { vol: 1 });
@@ -1649,7 +1804,8 @@
       save.night = clamp(G.night + 1, 1, NIGHTS);
       writeSave();
     }
-    G.state = 'waking'; G.wakeT = 0; G.later = [];
+    G.state = 'waking'; G.wakeT = 0; G.later = []; G.lies = [];
+    Captions.clear();
     G.wakeClear = G.powerOut; // saved at Lucidity zero: no pillow in the way, it rings loud and clear
     G.wakePan = clockPan();
     G.hour = 6; setText(hudEls.time, 'time', fmtHour(6));
@@ -1725,6 +1881,7 @@
     if (S.bangs) bits.push('Turned it away ×' + S.bangs);
     bits.push(G.powerOut ? 'Saved by the alarm at 0% Lucidity' : 'Lucidity left ' + Math.max(0, Math.ceil(G.luc)) + '%');
     if (S.pinches) bits.push('Pinched ×' + S.pinches);
+    if (S.fakesLit) bits.push('Saw through the dream ×' + S.fakesLit);
     $('#winStats').innerHTML = numify(bits.join('  ·  '));
     $('#wNext').textContent = (G.endless || last) ? 'Back to the menu' : 'Next night';
     const title = $('#winTitle'); title.classList.remove('show');
@@ -1795,6 +1952,76 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /*  THE DREAM LIES: below the line on the Lucidity bar it shows fakes. */
+  /*  A fake always has the same tells: it never moves (one frozen       */
+  /*  frame), it is see-through violet, its breathing runs backwards,    */
+  /*  and the light never stutters on it. It never touches the real      */
+  /*  monsters, and it goes the moment real danger comes close.          */
+  /* ------------------------------------------------------------------ */
+  const LIE = { doorTtl: 9, camTtl: 25, seen: 1.1, fade: 0.35, alpha: 0.75 };
+  const LIE_VOICE = 'Not real. The real one always moves. If its breathing runs backwards, the dream is lying.';
+  /* seconds until the dream tries to lie again (sooner once you have sunk below 30%) */
+  function nextLieIn() { const e = liesCfg().every; return rand(e[0], e[1]) * (G.luc < 30 ? 0.6 : 1); }
+  /* never on top of real danger: nobody at a door or next to one, no power-out, the voice is quiet, before 5:30 */
+  function canLie() {
+    return rule('lies', false) && !G.lies.length && G.monsters.length > 0 && !G.powerOut && !G.inside && !G.voice.active
+      && G.nightT < 5.5 * hourSec() && calm(2);
+  }
+  /* kind 'door': footsteps, then backwards breathing at a door. kind 'cam': it just stands in a camera room. */
+  function spawnLie(kind) {
+    const m = pick(G.monsters);
+    const L = { kind: kind || (Math.random() < 0.6 ? 'door' : 'cam'), who: m, frame: randi(0, m.art.soft.length - 1), litT: 0, lit: false, shut: false };
+    if (L.kind === 'door') { // a side no monster is heading for
+      const sides = ['left', 'right'].filter((s) => !G.monsters.some((x) => doorSide(x.def, x.room) === s));
+      if (!sides.length && kind) return null;
+      if (sides.length) L.side = pick(sides); else L.kind = 'cam';
+    }
+    if (L.kind === 'cam') { // a room with nobody in it, and not the one on screen
+      const rooms = CFG.cameras.filter((c) => !G.monsters.some((x) => x.room === c.id) && !(G.cams.up && G.cams.cur === c.id));
+      if (!rooms.length) return null;
+      L.room = pick(rooms).id; L.ttl = LIE.camTtl;
+    } else {
+      L.ttl = LIE.doorTtl;
+      if (quietSteps()) cue('steps', L.side, { monster: m, fake: true, vol: 0.6, cap: 'stepsNear' });
+      after(rand(1.2, 2.2), () => {
+        if (G.lies.indexOf(L) < 0) return; // it's already gone
+        const shut = G.doors[L.side].closed;
+        cue('breath', L.side, { monster: m, fake: true, vol: shut ? 0.3 : 0.45, lowpass: shut ? 700 : 0, cap: shut ? 'breathMuffled' : 'breath' });
+      });
+    }
+    G.lies.push(L);
+    G.lieT = nextLieIn(); // the next one comes `every` seconds after this one has gone
+    return L;
+  }
+  /* how far a door fake has dissolved (0..1): it lets go once the light has been on it for a moment */
+  const lieFade = (L) => clamp((L.litT - LIE.seen) / LIE.fade, 0, 1);
+  function updateLies(dt, realDt) {
+    if (!rule('lies', false)) return;
+    if (G.lies.length && !calm(2)) G.lies = []; // real danger is close: every lie goes at once
+    for (const L of G.lies) {
+      L.ttl -= dt;
+      if (L.kind !== 'door') continue;
+      const D = G.doors[L.side];
+      if (!D.light || D.closed) continue;
+      L.litT += realDt;
+      if (!L.lit) { // the light found it
+        L.lit = true; G.stats.fakesLit++;
+        if (!save.hints.lie) { save.hints.lie = true; writeSave(); startVoice((CFG.dreamVoice || {}).lie || LIE_VOICE, 4); }
+      }
+    }
+    G.lies = G.lies.filter((L) => L.ttl > 0 && !(L.kind === 'door' && lieFade(L) >= 1)
+      && !(L.kind === 'cam' && G.monsters.some((x) => x.room === L.room)));
+    // Night 2 teaches it once: a fake at a door between 1:30 and 3 AM, whatever your Lucidity (until you have seen one)
+    const h = G.nightT / hourSec();
+    if (G.night === 2 && !G.endless && !save.hints.lie && !G.taught && h >= 1.5 && h < 3 && canLie() && spawnLie('door')) G.taught = true;
+    // the next lie: `every` seconds after the last one ended. If real danger is near right then, it waits for a calm moment.
+    if (!G.lies.length && (G.lieT -= dt) <= 0) {
+      if (G.luc >= liesCfg().below) G.lieT = nextLieIn(); // above the line the dream is honest
+      else if (!canLie() || !spawnLie()) G.lieT = rand(4, 8);
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
   /*  UPDATE                                                            */
   /* ------------------------------------------------------------------ */
   const keys = {};
@@ -1857,6 +2084,8 @@
       hit(0.15, side === 'left' ? 1 : -1);
     }
     const groan = D.gaspT > 0 ? 0.8 : D.cost > 1 ? 0.15 + 0.35 * strainK(D) : 0;
+    if (groan > 0 && (!D.groan || (D.gaspT > 0 && D.groan < 0.8))) Captions.show('strain', sidePan(side) * 0.8, Math.max(0.5, groan)); // it starts to groan; the gasp
+    D.groan = groan;
     Sound.loop('strain:' + side, groan, { sound: 'door_strain', pan: side === 'left' ? -0.7 : 0.7, fade: 0.4, music: false });
   }
 
@@ -1901,6 +2130,43 @@
     return lean;
   }
 
+  /* ----- what you hear: every camera room has its own sound, and each monster makes its noise in the walls ----- */
+  /* the room you are watching plays its sound (config cameras[].sound / soundVol); the others are quiet */
+  function updateRoomTones(C) {
+    const watching = C.t > 0.5 && C.lost <= 0;
+    for (const cam of CFG.cameras) {
+      if (!cam.sound) continue;
+      const vol = watching && C.cur === cam.id ? clamp(cam.soundVol != null ? +cam.soundVol || 0 : 0.3, 0, 1) : 0;
+      Sound.loop('room:' + cam.id, vol, { sound: cam.sound, fade: 0.25, music: false });
+    }
+  }
+  /* its presence sound (config presenceSound) by how many rooms it is from a door: louder and clearer as it
+     comes closer, through the walls (muffled) when far. Coarse on purpose: the breathing still warns you, and
+     the light still tells you. */
+  const PRESENCE = { vol: [0, 0.26, 0.12, 0.06, 0.03], lowpass: [0, 2200, 1100, 650, 450], farVol: 0.02, farLowpass: 400 };
+  const presenceDist = (m) => (m.state === 'roam' ? doorDist(m.def, m.room) : 0);
+  function updatePresence(C) {
+    const watching = C.up && C.t > 0.5 && C.lost <= 0;
+    let nearest = null; // file mode: only the closest monster clicks (phones limit how many sounds play at once)
+    if (!Sound.web) for (const m of G.monsters) if (m.def.presenceSound && (!nearest || presenceDist(m) < presenceDist(nearest))) nearest = m;
+    for (const m of G.monsters) {
+      if (!m.def.presenceSound) continue;
+      let vol = 0, lowpass = 20000, pan = 0;
+      if (!G.powerOut && (Sound.web || m === nearest)) {
+        if (m.state === 'inside') vol = 0.9;
+        else if (m.state === 'door') { const shut = G.doors[m.door].closed; vol = shut ? 0.22 : 0.55; lowpass = shut ? 600 : 20000; pan = sidePan(m.door); }
+        else if (watching && m.room === C.cur) vol = 0.5; // the room you are looking at: right there, clear
+        else {
+          const d = doorDist(m.def, m.room), cam = camById[m.room];
+          vol = PRESENCE.vol[d] != null ? PRESENCE.vol[d] : PRESENCE.farVol;
+          lowpass = PRESENCE.lowpass[d] || PRESENCE.farLowpass;
+          pan = cam ? (cam.map.x - 0.5) * 1.2 : 0;
+        }
+      }
+      Sound.loop('presence:' + m.id, vol, { sound: m.def.presenceSound, lowpass, pan, fade: 0.6, music: false });
+    }
+  }
+
   function updateNight(dt, realDt) {
     const C = G.cams;
     runLater(dt);
@@ -1908,12 +2174,13 @@
     G.settle = Math.max(0, G.settle - realDt); // landing in the chair after the jolt
     // clock
     G.nightT += dt;
-    const hs = Math.max(5, CFG.hourSeconds || 75);
+    const hs = hourSec();
     const hour = Math.floor(G.nightT / hs);
     if (hour >= 6) { startWaking(); return; }
     if (hour !== G.hour) {
       G.hour = hour;
       Sound.play('hour_chime', { vol: 0.55, rate: 0.9 });
+      Captions.show('chime', 0, 0.55, { arg: fmtHour(hour) });
       for (const m of G.monsters) { const b = (m.def.hourBoost || {})[hour]; if (b && m.level > 0) m.boost += b; }
     }
 
@@ -1969,13 +2236,13 @@
         m.doorT += dt;
         m.breathT -= dt;
         if (m.breathT <= 0 && !G.hush) {
-          m.breathT = rand(5, 9);
+          m.breathT = rand(5, 9); m.breathed = true;
           const D = G.doors[m.door];
-          cue('breath', m.door, { monster: m, vol: D.closed ? 0.35 : 0.6, lowpass: D.closed ? 700 : 0, rate: rand(0.9, 1.05) });
+          cue('breath', m.door, { monster: m, vol: D.closed ? 0.35 : 0.6, lowpass: D.closed ? 700 : 0, rate: rand(0.9, 1.05), cap: D.closed ? 'breathMuffled' : 'breath' });
         }
         if (G.doors[m.door].light && !m.seen && !G.powerOut) {
-          m.seen = true;
-          cue('breath', m.door, { monster: m, vol: 1 });
+          m.seen = true; m.breathed = true;
+          cue('breath', m.door, { monster: m, vol: 1, cap: 'breathClose' });
           hit(0.18);
           G.punch = { t: 0.3, side: m.door }; // you flinch toward it
         }
@@ -1989,6 +2256,8 @@
         monsterMove(m);
       }
     }
+
+    updateLies(dt, realDt);
 
     // something got in
     if (G.inside) {
@@ -2031,11 +2300,15 @@
     const lightSide = G.doors.left.light ? 'left' : G.doors.right.light ? 'right' : null;
     Sound.loop('light_buzz', lightSide && !G.powerOut ? 0.4 : 0, { fade: 0.08, music: false, pan: lightSide === 'right' ? 0.6 : -0.6 });
     Sound.loop('heartbeat', G.danger > 0.45 ? clamp((G.danger - 0.3) * 1.2, 0, 0.85) : 0, { fade: 0.6, music: false, rate: 0.9 + G.danger * 0.35 });
+    updateRoomTones(C);
+    updatePresence(C);
 
     G.whisperT -= dt;
     if (G.whisperT <= 0) {
       G.whisperT = rand(28, 70);
-      Sound.play('whisper', { vol: rand(0.18, 0.35), rate: rand(0.75, 1.1), pan: rand(-0.9, 0.9) });
+      const w = { vol: rand(0.18, 0.35), rate: rand(0.75, 1.1), pan: rand(-0.9, 0.9) };
+      Sound.play('whisper', w);
+      Captions.show('whisper', w.pan, w.vol);
     }
 
     updateHud(false);
@@ -2152,6 +2425,20 @@
     return Object.assign({}, p, { h: (p.h || 0.7) * (1 + 0.28 * k), y: (p.y != null ? p.y : 1) + 0.1 * k, x: lerp(p.x != null ? p.x : 0.5, 0.5, 0.35 * k) });
   }
 
+  /* a lie: the monster's frozen frame, its colour drained and washed violet, with a faint glowing rim (no filters).
+     fade 0..1: it dissolves, with one smear as it lets go (a door fake the light has found) */
+  function drawLie(c, L, box, pose, fade) {
+    const alpha = LIE.alpha * (1 - fade);
+    if (alpha <= 0.01) return;
+    const img = ghostOf(L.who.art.soft[L.frame]), p = Object.assign({ x: 0.5, y: 1.02, h: 0.7 }, pose);
+    const at = (dx) => ({ x: box.x + dx, y: box.y, w: box.w, h: box.h });
+    drawSprite(c, img, box, p, alpha);
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (const dx of [-2, 2]) drawSprite(c, img, at(dx), p, 0.15 * (1 - fade));
+    if (fade > 0 && save.fx !== 'off') drawSprite(c, img, at(p.flip ? -6 : 6), p, alpha * 0.6);
+    c.restore();
+  }
+
   /* where a monster stands in a lit doorway (config doorPose, or a pose that fits the whole body in) */
   function doorPoseOf(m, side) {
     return (m.def.doorPose && m.def.doorPose[side]) || { x: side === 'left' ? 0.55 : 0.45, y: 1, h: 0.7, flip: side === 'right' };
@@ -2168,6 +2455,7 @@
     if (lit) {
       const here = G.monsters.filter((m) => m.state === 'door' && m.door === side);
       for (const m of here) drawMonster(c, m, box, doorPoseOf(m, side));
+      if (!here.length) for (const L of G.lies) if (L.kind === 'door' && L.side === side) drawLie(c, L, box, doorPoseOf(L.who, side), lieFade(L));
       // the light stutters while something real stands there (slow timer; a steady dim with effects Off)
       const dim = here.length ? (save.fx === 'off' ? 0.3 : flick(G.stutter[side])) : 0;
       if (dim) { c.fillStyle = `rgba(0,0,0,${dim})`; c.fillRect(box.x, box.y, box.w, box.h); }
@@ -2249,6 +2537,8 @@
       for (const m of G.monsters) {
         if (m.state === 'roam' && m.room === cam.id) drawMonster(c, m, box, leanPose(m.def.poses && m.def.poses[cam.id], stareK(m, lim)));
       }
+      const real = G.monsters.some((m) => m.state === 'roam' && m.room === cam.id);
+      if (!real) for (const L of G.lies) if (L.kind === 'cam' && L.room === cam.id) drawLie(c, L, box, L.who.def.poses && L.who.def.poses[cam.id], 0);
     }
     if (DEV && G.devGhost) {
       const def = devMonDef();
@@ -2616,7 +2906,7 @@
   /* one-shot CSS effects (style.css has a @keyframes with the same name as each class): adding the class plays it
      from the start, and the class takes itself off when its animation ends. Hidden elements are skipped, so an
      effect never plays late when they show up again. */
-  const PULSES = ['pressed', 'deny', 'hit', 'ripple', 'bangL', 'bangR'];
+  const PULSES = ['pressed', 'deny', 'hit', 'ripple', 'bangL', 'bangR', 'breathL', 'breathR'];
   function pulseCls(el, cls) {
     if (!el.getClientRects().length) return;
     el.classList.remove(cls); if (cls !== 'pressed') el.classList.remove('pressed'); // a bigger effect replaces the press flash
@@ -2624,7 +2914,7 @@
   }
   const endPulse = (e) => {
     if (PULSES.indexOf(e.animationName) >= 0) e.target.classList.remove(e.animationName);
-    else if (e.animationName === 'gainUp') e.target.remove();
+    else if (e.animationName === 'gainUp' || e.animationName === 'capLife') e.target.remove();
   };
   document.addEventListener('animationend', endPulse);
   document.addEventListener('animationcancel', endPulse);
@@ -2650,6 +2940,10 @@
     setText(hudEls.pct, 'pct', pct + '%');
     hudEls.fill.style.width = clamp(G.luc, 0, 100) + '%';
     setCls(hudEls.pct, 'low', pct <= 15); setCls(hudEls.fill, 'low', pct <= 15);
+    // the line where the dream starts to lie (Nights 2+)
+    const lies = rule('lies', false) && !G.powerOut, below = liesCfg().below;
+    setCls(hudEls.lucBox, 'lies', lies); setCls(hudEls.lucBox, 'under', lies && G.luc < below);
+    setVar(hudEls.lucBox, 'lieAt', '--lieAt', below + '%');
     // what is draining you: the glyph lights up; a door's fills while you hold it and turns red once it costs extra
     const L = G.doors.left, R = G.doors.right, g = hudEls.glyph, on = !G.powerOut;
     setCls(g.you, 'on', on); setCls(g.light, 'on', on && (L.light || R.light)); setCls(g.cam, 'on', on && G.cams.up);
@@ -2670,13 +2964,15 @@
     setCls(hudEls.camBar, 'up', G.cams.up);
     setHtml(hudEls.camLabel, 'camLabel', G.cams.up ? '▼&nbsp;&nbsp;LOWER&nbsp;&nbsp;▼' : '▲&nbsp;&nbsp;CAMERAS&nbsp;&nbsp;▲');
     setCls(hudEls.voice, 'docked', G.cams.t > 0.5); // tuck the voice out of the camera picture
+    setCls(Captions.box, 'cams', G.cams.t > 0.5);    // captions make room for the camera map
+    setCls(Captions.box, 'voice', G.voice.active);    // … and for the docked voice
     setCls(hudEls.pinch, 'cool', G.pinchCd > 0);
     hudEls.pinchCd.style.width = G.pinchCd > 0 ? (100 * (1 - G.pinchCd / pinchCfg().cooldown)) + '%' : '0';
     const gain = pinchGain();
     setText(hudEls.pinchAmt, 'pinchAmt', '+' + gain);
     setCls(hudEls.pinch, 'big', G.luc < 30); // it pays most when you have sunk deep
     if (camsShown) {
-      const mins = Math.floor((G.nightT % (CFG.hourSeconds || 75)) / (CFG.hourSeconds || 75) * 60);
+      const mins = Math.floor((G.nightT % hourSec()) / hourSec() * 60);
       setText(hudEls.stamp, 'stamp', (G.hour === 0 ? 12 : G.hour) + ':' + String(mins).padStart(2, '0') + ' AM');
       setCls(hudEls.signal, 'hidden', !(G.cams.lost > 0));
     }
@@ -2739,8 +3035,8 @@
   let returnTo = '#menu';
   function goMenu() {
     if (G.paused) Sound.pauseAll(false); // quitting from Pause must not leave the sound switched off
-    G.state = 'menu'; G.paused = false; G.later = []; G.finale = null;
-    resetHud(); G.voice.active = false;
+    G.state = 'menu'; G.paused = false; G.later = []; G.finale = null; G.lies = [];
+    resetHud(); Captions.clear(); G.voice.active = false;
     Sound.resume();
     Sound.stopAll();
     Sound.loop('menu_music', 0.75, { fade: 2.5 });
@@ -2773,6 +3069,7 @@
     if (p === G.paused) return;
     G.paused = p;
     Sound.pauseAll(p);
+    setCls(Captions.box, 'paused', p);
     if (p) showScreen('#pause');
     else { hideScreens(); if (G.state === 'asleep' && G.cardShown) show($('#nightCard')); }
   }
@@ -2781,6 +3078,7 @@
     returnTo = from;
     $('#sVol').value = save.vol; $('#sMusic').value = save.music;
     document.querySelectorAll('#sFx button').forEach((b) => b.classList.toggle('sel', b.dataset.v === save.fx));
+    document.querySelectorAll('#sCap button').forEach((b) => b.classList.toggle('sel', (b.dataset.v === 'on') === save.captions));
     $('#sReset').textContent = 'Erase save'; $('#sReset').dataset.confirm = '';
     showScreen('#settings');
   }
@@ -2989,6 +3287,11 @@
     save.fx = b.dataset.v; writeSave(); applyFxSetting();
     document.querySelectorAll('#sFx button').forEach((x) => x.classList.toggle('sel', x === b));
   }));
+  document.querySelectorAll('#sCap button').forEach((b) => b.addEventListener('click', () => {
+    save.captions = b.dataset.v === 'on'; writeSave();
+    if (!save.captions) Captions.clear();
+    document.querySelectorAll('#sCap button').forEach((x) => x.classList.toggle('sel', x === b));
+  }));
 
   function backFromSub() {
     if (returnTo === '#pause' && G.state === 'night') { showScreen('#pause'); returnTo = '#menu'; return; }
@@ -3013,19 +3316,20 @@
     const warn = configWarnings.length ? '\n\nCONFIG.JS WARNINGS:\n' + configWarnings.map((w) => '• ' + w).join('\n') : '';
     const html = escapeHtml(`ART HELPER (dev mode)   monster: ${def ? def.name : '-'}  (Tab: next monster)\n` +
       `T: time x${G.timeScale}  N: skip to 5:59  K: test jumpscare  M: move now\n` +
-      `Z/X: put monster at left/right door  L: lucidity 5%  G: ghost placer (${G.devGhost ? 'ON' : 'off'})\n` +
+      `Z/X: put monster at left/right door  L: lucidity 5%  V: show a dream lie  G: ghost placer (${G.devGhost ? 'ON' : 'off'})\n` +
       (G.devGhost ? 'Ghost placer: open cameras, CLICK where its feet go, scroll wheel / +/- to resize, R to flip\n' : '') +
-      `night ${G.night}  t ${G.nightT.toFixed(1)}s  luc ${G.luc.toFixed(1)}  usage ${G.usage.toFixed(2)}  doors held ${G.doors.left.held.toFixed(0)}/${G.doors.right.held.toFixed(0)}s  danger ${G.danger.toFixed(2)}\n${ms}`) + pose + escapeHtml(warn);
+      `night ${G.night}  t ${G.nightT.toFixed(1)}s  luc ${G.luc.toFixed(1)}  usage ${G.usage.toFixed(2)}  doors held ${G.doors.left.held.toFixed(0)}/${G.doors.right.held.toFixed(0)}s  danger ${G.danger.toFixed(2)}${G.lies.length ? '  lie: ' + G.lies.map((l) => l.kind + ' ' + (l.side || l.room)).join(', ') : ''}\n${ms}`) + pose + escapeHtml(warn);
     if (el._last !== html) { el._last = html; el.innerHTML = html; }
   }
   function devKey(k) {
     const m = devMon();
     if (k === 'tab' && CFG.monsters.length) { G.devMon = (G.devMon + 1) % CFG.monsters.length; G.devPose = null; hudEls.dev._last = ''; }
     if (k === 't') G.timeScale = G.timeScale === 1 ? 10 : G.timeScale === 10 ? 40 : 1;
-    if (k === 'n') G.nightT = 6 * (CFG.hourSeconds || 75) - 2;
+    if (k === 'n') G.nightT = 6 * hourSec() - 2;
     if (k === 'k' && m) jumpscare(m);
     if (k === 'm') for (const mm of G.monsters) monsterMove(mm, true);
     if (k === 'l') G.luc = 5;
+    if (k === 'v' && G.monsters.length) { G.lies = []; spawnLie(); } // (it goes again at once if a monster is near a door)
     if ((k === 'z' || k === 'x') && m) { m.state = 'door'; m.door = k === 'z' ? 'left' : 'right'; m.room = null; m.linger = 999; m.seen = false; }
     if (k === 'g') { G.devGhost = !G.devGhost; G.grace = G.devGhost ? 1e9 : 0; }
     if (G.devGhost && (k === '+' || k === '=')) devScale(1.05);
@@ -3125,6 +3429,7 @@
     setDoor, setLight, toggleCams, switchCam, pinch, enterOffice, layout,
     after, cue, hit, rule, fxMul, doorDist, doorSide, calm, arrive, stepToward, spawnParts,
     noise, pinchGain, pinchCfg, strainCfg, bangDoor, pulseCls,
+    Captions, spawnLie, canLie, liesCfg, minWarning, writeSave, save,
     tinted, ghostOf, drawEyelids, numify, configWarnings,
   };
   requestAnimationFrame((t) => { last = t; requestAnimationFrame(frame); });
