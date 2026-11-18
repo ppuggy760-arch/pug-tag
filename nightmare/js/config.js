@@ -77,6 +77,15 @@ window.GAME_CONFIG = {
        every: how many seconds between two lies: [shortest, longest]. */
   lies: { below: 60, every: [35, 60] },
 
+  /* THE DREAM DIRECTOR: small "wrong" things that happen in the dream
+     (the lamp breathes, a lit doorway shows another room, whispering in the
+     ceiling, the room stretches wider). Each one comes after a moment of
+     silence, and never while a monster is close to your doors.
+       enabled:      false = none of them (CAM 7 still comes).
+       quietMinutes: in-game minutes of quiet at the start of the night (50 = 12:50 AM).
+       minGap, maxGap: seconds between two of them (fewer when the night is calm). */
+  director: { enabled: true, quietMinutes: 50, minGap: 40, maxGap: 90 },
+
   /* ------------------------------------------------------------------
      THE DESK ROOM (the office you sit in).
      image: a WIDE picture works best (about 2400 x 900, or 8:3).
@@ -93,16 +102,21 @@ window.GAME_CONFIG = {
       left:  { x: 0.030, y: 0.178, w: 0.150, h: 0.700, darkImage: "", litImage: "", closedImage: "" },
       right: { x: 0.820, y: 0.178, w: 0.150, h: 0.700, darkImage: "", litImage: "", closedImage: "" },
     },
-    /* When you draw your own desk room, you can tell the game where two
+    /* When you draw your own desk room, you can tell the game where three
        things are in it (use ?dev and click on them to read the numbers).
        Take away the // at the start of the line to switch it on.
-         clock:  the alarm clock on the desk. x, y = its middle, r = how big it is
-                 (a fraction of the picture height). At 6 AM it rings there.
-         window: the window box (x, y, w, h, like the doors). When your
-                 Lucidity runs out, something comes and stands in it.
-       Leave them out if your room has no clock or no window. */
+         clock:  the alarm clock on the desk. x, y = the middle of its face,
+                 r = how big the face is (a fraction of the picture height).
+                 Draw the clock WITHOUT hands: the game draws hands that show
+                 the night's real time. At 6 AM it rings there.
+         window: the window box (x, y, w, h, like the doors). Shadows walk
+                 past it, and when your Lucidity runs out, something comes
+                 and stands in it.
+         lamp:   the middle of your desk lamp's light. Sometimes it breathes.
+       Leave them out if your room has no clock, window or lamp. */
     // clock:  { x: 0.604, y: 0.651, r: 0.029 },
     // window: { x: 0.233, y: 0.178, w: 0.104, h: 0.300 },
+    // lamp:   { x: 0.396, y: 0.567 },
   },
 
   /* ------------------------------------------------------------------
@@ -148,6 +162,14 @@ window.GAME_CONFIG = {
                of one of the sounds at the bottom of this file.
      soundVol: how loud that is (0 = silent, 1 = loudest).
      ------------------------------------------------------------------ */
+  /* CAM 7, "YOUR ROOM": once a night (from Night 3, see youCam in nights) a
+     camera that isn't on the map appears. It films YOU from behind...
+       image: (optional) your desk room seen from behind and above, with an
+              EMPTY chair (1600 x 900). Until you draw it, the game makes one.
+       seat:  where the back of your head goes in that picture (x, y = the
+              middle of your head, size: 1 = normal). */
+  youCam: { image: "assets/rooms/cam7_you.png", seat: { x: 0.5, y: 0.5, size: 1 } },
+
   cameras: [
     { id: "nursery", label: "CAM 1", name: "The Nursery",       image: "assets/rooms/cam1_nursery.png", map: { x: 0.50, y: 0.10 }, sound: "music_box",  soundVol: 0.25 },
     { id: "hall",    label: "CAM 2", name: "The Endless Hall",  image: "assets/rooms/cam2_hall.png",    map: { x: 0.50, y: 0.33 }, sound: "clock_tick", soundVol: 0.3 },
@@ -278,6 +300,10 @@ window.GAME_CONFIG = {
     powerDown:     "everything goes quiet",
     clockSlow:     "the clock is slowing down",
     strain:        "the door groans",
+    whisperAbove:  "whispering, right above you",
+    ticking:       "the clock ticks louder",
+    nearRing:      "a muffled ring… almost",
+    alarm:         "the alarm rings!",
   },
 
   /* ------------------------------------------------------------------
@@ -292,6 +318,7 @@ window.GAME_CONFIG = {
     5: "This is the last night I can reach you.\n\nWhen the alarm rings, don't hesitate. Don't look back. Just wake up.\n\nI'll be the one ringing.",
     endless: "There is no voice here. Only the dream.",
     lie: "Not real. The real one always moves. If its breathing runs backwards, the dream is lying.",  // the first time your light finds a fake
+    falseDawn: "Not yet.",  // Night 5: the alarm rings too early... and stops
   },
 
   /* Credits shown in the Extras screen (see also CREDITS.md) and rolled after Night 5.

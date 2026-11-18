@@ -110,6 +110,7 @@
   <div id="settings" class="screen hidden">
     <div class="panel">
       <div class="title small">Settings</div>
+      <div class="setRows">
       <label class="row">Master volume <input id="sVol" type="range" min="0" max="100"></label>
       <label class="row"><span class="nowrap">Music &amp; ambience</span> <input id="sMusic" type="range" min="0" max="100"></label>
       <div class="row">Dream effects
@@ -122,12 +123,18 @@
           <button data-v="off">Off</button><button data-v="on">On</button>
         </span>
       </div>
-      <div class="dim small">“Low” and “Off” reduce screen warping, shaking and flashes.<br>Captions show every sound as words, on the side it came from.</div>
+      <div class="row">Scares
+        <span class="seg" id="sScare">
+          <button data-v="normal">Normal</button><button data-v="gentle">Gentle</button>
+        </span>
+      </div>
+      </div>
+      <div class="dim small">“Low” and “Off” reduce screen warping, shaking and flashes.<br>Captions show every sound as words, on the side it came from.<br>Gentle: quieter, softer jumpscares for younger dreamers. Difficulty stays the same.</div>
       <div class="btnRow">
         <button id="sFull" class="menuBtn">Toggle fullscreen</button>
         <button id="sReset" class="menuBtn danger">Erase save</button>
+        <button id="sBack" class="menuBtn">Back</button>
       </div>
-      <button id="sBack" class="menuBtn">Back</button>
     </div>
   </div>
 

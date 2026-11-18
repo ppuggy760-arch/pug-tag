@@ -44,6 +44,8 @@ Open the game with **`?dev`** at the end of the address, like
 * **V** shows a *dream lie*: a fake of your monster at a door (turn that light
   on) or on a camera. Fakes use your own monster pictures, frozen and tinted
   violet, so there is nothing extra to draw.
+* **Y** opens the cameras and shows **CAM 7** (see section 5) right away, on
+  any night: click it, look at another camera, then click CAM 7 again.
 
 ## 3. The desk room (office)
 
@@ -71,18 +73,25 @@ Make each one the same shape as the door box. You don't need to draw a
 cracked or damaged door: when a door is held shut too long, the game draws
 cracks over your `closedImage` and makes it shudder by itself.
 
-Two more spots you can mark in your desk room (also under `office` in
+Three more spots you can mark in your desk room (also under `office` in
 `config.js`; take away the `//` in front of the line to switch them on):
 
-* `clock: { x, y, r }`: the alarm clock on your desk. `x` and `y` are its
-  middle and `r` is how big it is (a fraction of the picture height). At 6 AM
-  the alarm rings right there, and the sound comes from that side.
-* `window: { x, y, w, h }`: the window box, like a door box. When your
-  Lucidity runs out, something comes and stands in it.
+* `clock: { x, y, r }`: the alarm clock on your desk. `x` and `y` are the
+  middle of its face and `r` is how big the face is (a fraction of the picture
+  height). **Draw the clock without hands**: the game draws hands that show the
+  night's real time, from 12 to 6 (when your Lucidity is very low they jump
+  ahead now and then, because clocks can't be trusted in dreams). At 6 AM the
+  alarm rings right there, and the sound comes from that side.
+* `window: { x, y, w, h }`: the window box, like a door box. When the monster
+  reaches a hall next to your doors, its dark shadow walks past the window.
+  When your Lucidity runs out, something comes and stands in it.
+* `lamp: { x, y }`: the middle of your desk lamp's light. Now and then the
+  lamp slowly "breathes" there (a warm glow that swells and sinks).
 
 Click on them in art-helper mode to read the numbers. If your room has no
-clock or no window, leave them out: the game then skips those effects instead
-of drawing them in the wrong place.
+clock, window or lamp, leave them out: the game then skips those effects
+instead of drawing them in the wrong place. (The lamp also flickers and dims
+by itself when something is near your doors; that works on any picture.)
 
 ## 4. Your bedroom (the real world)
 
@@ -124,6 +133,20 @@ Make one picture per camera, ideally **1600 × 900** (16:9):
 
 You can rename rooms, change `name:` or `label:`, or add more cameras by
 copying a line in `cameras:`. Number keys 1–9 pick cameras.
+
+**CAM 7, "Your Room".** Once a night (from Night 3) a camera that isn't on the
+map shows up: it films *you*, from behind, sitting at your desk. Look at
+another camera, look back, and something is standing behind your chair. The
+game makes this picture from your desk room by itself, but you can draw it:
+
+| File | What it is |
+|---|---|
+| `assets/rooms/cam7_you.png` | Your desk room seen **from behind and above**, with an **empty chair**, 1600 × 900. |
+
+The game draws the back of your head on it. In `config.js`, `youCam.seat`
+says where: `x` and `y` are the middle of your head in that picture, and
+`size` makes it bigger or smaller (1 = normal). On the last night the chair
+stays empty.
 
 Each camera can also have a **sound** you hear while you watch that room:
 `sound: "water_drip", soundVol: 0.35` (the name of one of the `sounds:`, and
@@ -199,6 +222,12 @@ tablets. The words live in `captions:` in `config.js`. If you give a monster
 its own scary sound, add a caption line for it too, so players who can't hear
 it still know what happened.
 
+**Scares.** Also in Settings: *Scares: Normal / Gentle*. Gentle makes the
+jumpscare quieter and softer (it fades in instead of lunging, after a whole
+second of darkness) for younger players. The nights stay just as hard. Every
+jumpscare uses your monster's own pictures (`jumpscareFrames`, or its normal
+frames) and its `jumpscareFocus`, so a new monster needs nothing extra.
+
 ## 8. Text and game settings
 
 * `title` and `subtitle`: the name on the menu
@@ -223,6 +252,15 @@ it still know what happened.
 * `minWarning`: the fairness promise. A monster at your door always breathes
   first and waits at least this many seconds (2.5) before it can come in, even
   if you give it a tiny `waitAtDoor`.
+* `director`: the *dream director* gives each night a shape. After a quiet
+  start (`quietMinutes`, 50 = 12:50 AM) small "wrong" things happen every
+  `minGap`–`maxGap` seconds: the lamp breathes, a lit doorway shows a
+  different room of the house, someone whispers in the ceiling, the room
+  stretches wider. Each comes after a moment of silence, and never while a
+  monster is close to your doors. `enabled: false` switches them off. From
+  5:30 AM the clock shows the minutes and ticks louder, and on Night 5 the
+  alarm rings once too early (`falseDawn` in `nights`; the voice then says
+  `dreamVoice.falseDawn`). It is a trick: it never hurts you.
 * `lies`: below the violet line on the Lucidity bar (`below`, 60%), the dream
   sometimes shows a **fake** monster, about every `every` seconds. A fake never
   moves, glows see-through violet, and its breathing runs backwards. The light
