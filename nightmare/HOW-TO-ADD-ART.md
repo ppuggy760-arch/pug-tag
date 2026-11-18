@@ -204,7 +204,8 @@ change its path in `sounds:` in `config.js`.
 `alarm` is the hero sound: it rings inside the dream at 6 AM (muffled at
 first, as if through a pillow) and then in your room until you turn it off.
 `clock_tick` ticks while you fall asleep, and slows down and stops when your
-Lucidity runs out.
+Lucidity runs out. `type_key` clacks softly while the dream voice types (and
+while the death screen writes what happened).
 
 The sounds marked `// optional:` in `config.js` (`clock_tick`, `type_key`,
 `reality_snap`, `redhorn_click`, `door_strain`, `hypnic_jolt`, `water_drip`)
@@ -232,7 +233,9 @@ frames) and its `jumpscareFocus`, so a new monster needs nothing extra.
 
 * `title` and `subtitle`: the name on the menu
 * `fallAsleep`: what you count in your head while you fall asleep (one line per night)
-* `dreamVoice`: what the voice says at the start of each night
+* `dreamVoice`: what the voice says at the start of each night (see
+  **The dream voice** below)
+* `tutorial`: the first-night lesson (see **The first-night lesson** below)
 * `finale`: after Night 5, the voice says `line`, then the credits roll. They
   start with the **first line of `credits`**, which is you: change `"You!"` to
   your name if you like. `thanks` is the very last line.
@@ -272,3 +275,77 @@ The little glyphs under the Lucidity bar show what is draining you right now:
 a dot (just being asleep), the left door, the right door, a star (a light) and
 a screen (the cameras). A door glyph fills up while you hold that door and
 turns red once it costs extra.
+
+### The dream voice
+
+The voice speaks in **beats**: one or two short sentences at a time. Write
+each night's words between two `` ` `` marks, and leave an **empty line** to
+start the next beat:
+
+```js
+2: `You came back. Most people don't remember the first night.
+
+    It remembers you. It's quicker now.`,
+```
+
+Each beat types itself out (with a quiet typewriter clack), stays long enough
+to read, then the next one comes. Players can click the box (or press Enter)
+to hurry it, and *skip* ends it. Everything the voice said that night is in the
+pause menu under *What the voice said*.
+
+Two tricks you can use anywhere in the words:
+
+* `{wrong|right}`: the voice types the **wrong** words in a red, dripping
+  hand, stops, rubs them out and writes the **right** ones. For example
+  `It's {behind you|tall}.` types "behind you", deletes it, and writes "tall".
+  Use it once or twice a night: it is creepiest when it is rare.
+* `{A}`: shows a key to press, drawn like the keys on the buttons. On phones
+  and tablets it is left out (they have no keyboard).
+
+`after` makes the voice come back **once more**, about 20 seconds after it
+went quiet: `after: { 5: "Wake up." }` (leave a night out for nothing).
+`lie` is what it says the first time your light finds a fake, and `falseDawn`
+what it says when Night 5's early alarm stops.
+
+### The first-night lesson
+
+The very first Night 1 is a lesson: the voice says one step at a time and
+**waits until the player has done it**. The clock waits too ("the clock
+waits for you"), the monster sleeps, and only what the player uses costs a
+little Lucidity. A dashed ring goes around the button to press (or arrows
+point to the edge of the room when they should look around). After 15 seconds
+the ring pulses; after 25 seconds the step moves on by itself, so nobody gets
+stuck. *skip lesson* ends it at once (the normal Night 1 voice plays instead).
+It only comes once; Extras → *Replay the first-night lesson* plays it again
+as a practice dream that never changes your progress.
+
+Each step in `tutorial:` is `{ say: "…", wait: "…" }`:
+
+| `wait:` | the player has to… |
+|---|---|
+| `"lookLeft"` / `"lookRight"` | look all the way to that side of the room |
+| `"light"` | turn on a light |
+| `"cams"` | open the cameras |
+| `"cam:west"` | look at that camera (use the camera's `id`) |
+| `"door"` | shut a door (then watch the Lucidity box for a moment) |
+| `"doorOpen"` | open the doors again |
+| `"pinch"` | pinch themselves |
+| `"time:4"` | nothing: the step stays 4 seconds after it is written |
+
+An optional `point:` says what the ring goes around: `"leftLight"`,
+`"rightLight"`, `"leftDoor"`, `"rightDoor"`, `"cameras"`, `"pinch"`,
+`"lucidity"`, `"clock"`, `"left"`, `"right"` (arrows at that edge) or
+`"none"`. Without it the game picks from `wait`. If you rename or remove the
+West Hall camera, change the `cam:` step too (a step waiting for a camera that
+doesn't exist is skipped, and `?dev` tells you).
+
+### When you get caught
+
+The death screen types out the last moments ("3:12 AM: breathing at the LEFT
+door", "3:12: you never checked the LEFT light", "3:13: it came in through the
+open LEFT door") and gives the one tip that would have saved you. If your
+Lucidity ran out, a little bar shows where it went (doors, cameras, light,
+just being asleep). After three deaths on the same night, *Dream lighter
+(this night only)* appears: the night drains a bit slower, the monster is a
+bit sleepier and its footsteps are easier to hear. Waking up from that night
+resets the count.

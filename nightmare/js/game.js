@@ -65,8 +65,9 @@
   const SAVE_KEY = 'until-the-alarm.save.v1';
   /* captions: Sound captions on/off (on by default on touch screens, whose one speaker can't tell left from right).
      scare: 'normal' or 'gentle' (softer, quieter jumpscares for younger dreamers; the nights are just as hard).
-     hints: lessons the game has already taught (it never repeats them). */
-  const save = { night: 1, beaten: 0, vol: 85, music: 70, fx: 'full', custom: {}, captions: null, scare: 'normal', hints: {} };
+     hints: lessons the game has already taught (it never repeats them). tutorialDone: the first-night lesson is
+     over (finished or skipped). deaths: deaths per night since you last woke up from it ("Dream lighter" after 3). */
+  const save = { night: 1, beaten: 0, vol: 85, music: 70, fx: 'full', custom: {}, captions: null, scare: 'normal', hints: {}, tutorialDone: null, deaths: {} };
   function loadSave() {
     let stored = null;
     try {
@@ -82,6 +83,8 @@
     if (typeof save.captions !== 'boolean') save.captions = TOUCH;
     if (save.scare !== 'gentle') save.scare = 'normal';
     if (!save.hints || typeof save.hints !== 'object') save.hints = {};
+    if (typeof save.tutorialDone !== 'boolean') save.tutorialDone = save.beaten > 0; // (an older save that already beat a night skips it)
+    if (!save.deaths || typeof save.deaths !== 'object') save.deaths = {};
     applyFxSetting();
   }
   function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* ignore */ } }
@@ -372,7 +375,10 @@
   function warnCfg(msg) { configWarnings.push(msg); console.warn('[config.js] ' + msg); }
   const TOP_KEYS = ['title', 'subtitle', 'hourSeconds', 'lucidityDrain', 'endlessDrain', 'nights', 'endlessRules', 'pinch',
     'doorStrain', 'lies', 'minWarning', 'office', 'cameras', 'monsters', 'sounds', 'captions', 'dreamVoice', 'credits', 'bedroom',
-    'fallAsleep', 'morning', 'finale', 'director', 'youCam'];
+    'fallAsleep', 'morning', 'finale', 'director', 'youCam', 'tutorial'];
+  /* the words a first-night lesson step can wait for (plus cam:<id> and time:N), and what its ring can go around */
+  const LESSON_WAITS = ['lookLeft', 'lookRight', 'light', 'cams', 'door', 'doorOpen', 'pinch'];
+  const LESSON_POINTS = ['left', 'right', 'leftLight', 'rightLight', 'leftDoor', 'rightDoor', 'cameras', 'pinch', 'lucidity', 'clock', 'none'];
   const MONSTER_KEYS = ['id', 'name', 'description', 'frames', 'fps', 'jumpscareFrames', 'jumpscareFps', 'jumpscareFocus',
     'jumpscareSound', 'presenceSound', 'sounds', 'levels', 'hourBoost', 'moveEvery', 'waitAtDoor', 'start', 'path', 'retreat', 'poses', 'doorPose'];
   /* a sound name used somewhere in config.js must be one of the sounds: */
@@ -473,6 +479,26 @@
     }
     if (CFG.nights != null && !Array.isArray(CFG.nights)) { warnCfg('nights: this should be a list of 5 { … } blocks.'); CFG.nights = null; }
     for (const k in (CFG.sounds || {})) if (typeof CFG.sounds[k] !== 'string') warnCfg(`sounds.${k}: write the file path in quotes, like "assets/audio/${k}.mp3".`);
+    checkTutorial(ids);
+  }
+  /* the first-night lesson's steps: a wait or point word the game doesn't know is reported (did you mean …?) */
+  function checkTutorial(ids) {
+    if (CFG.tutorial == null) return;
+    if (!Array.isArray(CFG.tutorial)) { warnCfg('tutorial: this should be a list of { say: …, wait: … } steps. Using the built-in lesson.'); CFG.tutorial = null; return; }
+    CFG.tutorial = onlyBlocks(CFG.tutorial, 'tutorial');
+    CFG.tutorial.forEach((st, i) => {
+      const where = `tutorial step ${i + 1}`, w = st.wait == null ? 'time:4' : String(st.wait);
+      if (!st.say) warnCfg(`${where} has no say: "…" (what the voice says). The game skips it.`);
+      if (/^cam:/.test(w)) { if (ids.indexOf(w.slice(4)) < 0) warnCfg(`${where} waits for camera "${w.slice(4)}", but there is no camera with that id. The game skips this step.`); }
+      else if (!/^time:\d+(\.\d+)?$/.test(w) && LESSON_WAITS.indexOf(w) < 0) {
+        const g = didYouMean(w, LESSON_WAITS);
+        warnCfg(`${where}: wait "${w}" isn't something the lesson knows` + (g ? `. Did you mean "${g}"?` : `. Try one of: ${LESSON_WAITS.join(', ')}, cam:<camera id>, time:4.`));
+      }
+      if (st.point != null && !/^cam:/.test(st.point) && LESSON_POINTS.indexOf(st.point) < 0) {
+        const g = didYouMean(st.point, LESSON_POINTS);
+        warnCfg(`${where}: point "${st.point}" isn't something the ring can go around` + (g ? `. Did you mean "${g}"?` : `. Try one of: ${LESSON_POINTS.join(', ')}.`));
+      }
+    });
   }
   checkConfig();
 
@@ -1234,7 +1260,12 @@
     hush: false,                        // Lucidity zero: the clock has stopped and every sound is gone
     // waking up (states 'waking' -> 'morning' -> 'win'): wakeT counts from 6 AM
     wakeT: 0, wakeView: 'office', wakeClear: false, wakePan: 0, frozen: [], winWait: 0, slapT: 0, finale: null,
-    voice: { text: '', shown: 0, active: false, hold: 0 },
+    voice: { active: false, beats: [], typing: false, stay: false }, // the dream voice (see startVoice)
+    // the first-night lesson (see LESSON): the step it is on; did: what you have done since that step began
+    lesson: null, did: {}, practice: false,
+    // the death recap (see die): spend = where your Lucidity went; litAt = when each doorway was last lit;
+    // lighter = "Dream lighter" (after three deaths on one night); recap = the lines typing on the death screen
+    spend: {}, litAt: {}, powerAt: 0, lighter: false, recap: null,
     motes: [], devGhost: false, devPose: null, devPoseLabel: '', devMon: 0,
   };
 
@@ -1395,6 +1426,13 @@
     },
   };
 
+  /* the night's story, for the death screen: every threat sound (see cue) and what you did about it.
+     { t, kind, side, who, … } — kinds: steps / breath / bang / far / whisper (sounds; fake = a lie), reach (it got
+     to a door), door, light, pinch, lunge, gasp, in (it came in). Only the last LOG_MAX are kept. */
+  const LOG_MAX = 80;
+  function logStory(e) { e.t = G.nightT; G.cueLog.push(e); if (G.cueLog.length > LOG_MAX) G.cueLog.shift(); }
+  const atDoor = (side) => G.monsters.find((m) => m.state === 'door' && m.door === side) || null;
+
   /* every threat sound: cue('breath', 'left', { monster, vol, rate, lowpass, pan, fake, cap }).
      side: 'left' / 'right' / anything else = o.pan. cap: which caption (default: the kind). */
   function cue(kind, side, o) {
@@ -1410,8 +1448,7 @@
       h = Sound.play(name, slow);
       after(0.14, () => Sound.play(name, Object.assign({}, slow, { vol: slow.vol * 0.45 })));
     } else h = Sound.play(name, opts);
-    G.cueLog.push({ t: G.nightT, kind, side: side || null, fake: !!o.fake, who: o.monster ? o.monster.id : null });
-    if (G.cueLog.length > 40) G.cueLog.shift();
+    logStory({ kind, side: side || null, fake: !!o.fake, who: o.monster ? o.monster.id : null, cap: o.cap || kind });
     Captions.show(o.cap || kind, opts.pan, opts.vol, { fake: o.fake ? (back ? 'backwards' : 'echoing') : null,
       edge: THREAT.indexOf(kind) >= 0, breath: kind === 'breath' });
     return h;
@@ -1448,7 +1485,7 @@
   function calm(minDist) { return G.monsters.every((m) => m.state === 'roam' && doorDist(m.def, m.room) >= minDist); }
 
   /* later nights it walks quietly: footsteps play only some of the time (rule stepChance). Breathing never skips. */
-  const quietSteps = () => Math.random() < rule('stepChance', 1);
+  const quietSteps = () => Math.random() < rule('stepChance', 1) + (G.lighter ? LIGHTER.steps : 0);
   /* a monster walks into a room (or up to a door) */
   function arrive(m, next, viewing) {
     const from = m.room;
@@ -1457,6 +1494,7 @@
       m.state = 'door'; m.door = side; m.room = null; m.seen = false; m.doorT = 0; m.breathed = false;
       m.linger = rand(m.def.waitAtDoor[0], m.def.waitAtDoor[1]);
       m.breathT = rand(0.6, 1.6); // (its first breath: it can't come in before that, see monsterMove)
+      logStory({ kind: 'reach', side, who: m.id });
       if (quietSteps()) cue('steps', side, { monster: m, vol: 0.75, cap: 'stepsNear' });
     } else {
       m.room = camById[next] ? next : m.def.start;
@@ -1503,9 +1541,14 @@
   };
   const JOLT_LEAD = 0.6; // hypnic_jolt.mp3 falls for .6 s before its thud, so it starts that early
 
-  /* n: night number. endless: the Endless Dream. retry: "Dream again" (the short way to fall asleep) */
-  function startNight(n, endless, retry) {
+  /* "Dream lighter" (offered after three deaths on the same night): a fifth less drain, a sleepier monster, more footsteps */
+  const LIGHTER = { deaths: 3, drain: 0.8, levels: 3, steps: 0.3 };
+  /* n: night number. endless: the Endless Dream. retry: "Dream again" (the short way to fall asleep).
+     mode: { practice: the lesson from Extras (progress is never touched), lighter: "Dream lighter" } */
+  function startNight(n, endless, retry, mode) {
+    mode = mode || {};
     G.night = n; G.endless = !!endless; G.retry = !!retry;
+    G.practice = !!mode.practice && !endless; G.lighter = !!mode.lighter && !endless && !G.practice;
     G.nightT = 0; G.hour = 0; G.timeScale = 1; G.paused = false;
     G.luc = 100; G.usage = 1; G.powerOut = false; G.powerT = 0; G.killAt = 0;
     G.doors.left = freshDoor(); G.doors.right = freshDoor();
@@ -1516,6 +1559,8 @@
     G.settle = 0; G.hush = false; G.frozen = []; G.finale = null;
     document.querySelectorAll('.lucGain').forEach((el) => el.remove());
     G.stats = { bangs: 0, pinches: 0, fakesLit: 0, fakeCloses: 0, minLuc: 100, lunges: 0 };
+    G.spend = { base: 0, doors: 0, lights: 0, cams: 0 }; G.litAt = { left: -1e9, right: -1e9 }; G.powerAt = 0;
+    resetLesson(); voiceLog.length = 0;
     G.whisperT = rand(18, 40); G.killer = null; G.jumpT = 0; G.preScare = 0; G.scare = null;
     G.roomP = 0; G.lampDim = 0; G.windowPass = null; G.clockSpin = 0; G.clockSkew = 0; G.tickShown = false;
     resetDirector(true);
@@ -1526,6 +1571,7 @@
       const m = new Monster(def);
       if (endless) m.level = clamp(save.custom[def.id] != null ? save.custom[def.id] : 10, 0, 20);
       else m.level = (def.levels || [])[n - 1] != null ? def.levels[n - 1] : (def.levels || [5]).slice(-1)[0];
+      if (G.lighter && m.level > 0) m.level = Math.max(1, m.level - LIGHTER.levels); // (sleepier, but still awake)
       return m;
     });
     G.grace = n === 1 && !endless ? 22 : 10;
@@ -1537,7 +1583,7 @@
     G.state = 'asleep'; G.introT = 0; G.introDur = (retry ? INTRO.retry : INTRO.full).dur;
     G.cardShown = false; G.joltPlayed = false; G.tickPh = -0.16;
     setHtml($('#cardNight'), null, numify(endless ? 'Endless Dream' : 'Night ' + n));
-    setHtml($('#cardTime'), null, numify('12:00 AM'));
+    setHtml($('#cardTime'), null, numify('12:00 AM' + (G.practice ? ' · a practice dream' : G.lighter ? ' · a lighter dream' : '')));
     $('#nightCard').classList.remove('fade');
     if (!retry) Sound.play('breathing', { vol: 0.25, lowpass: 600, rate: 0.8 }); // your own sleepy breath
   }
@@ -1591,7 +1637,8 @@
     show(hud);
     updateHud(true);
     const voice = CFG.dreamVoice || {};
-    startVoice(G.endless ? voice.endless : voice[G.night]);
+    if (wantLesson(G.night, G.endless, G.retry)) startLesson();
+    else startVoice(G.endless ? voice.endless : voice[G.night], { then: G.endless ? null : (voice.after || {})[G.night] });
     after(0.5, () => hide(card));
     after(1.6, () => hud.classList.remove('enter')); // (or the voice box would fade in that slowly every time it comes back)
   }
@@ -1605,27 +1652,276 @@
     else if (Math.floor(G.tickPh) !== before) Sound.play('ui_click', { vol: vol * 0.6, rate: 0.42 * rate + (before % 2 ? 0.06 : 0) });
   }
 
-  /* hold: seconds the finished text stays before it fades */
-  function startVoice(text, hold) { // (a voice later in the night fades in quickly: #voiceBox voiceIn)
-    const box = $('#voiceBox');
-    if (!text) { hide(box); G.voice.active = false; return; }
-    G.voice = { text, shown: 0, active: true, hold: 0, holdFor: hold || 7 };
-    $('#voiceText').textContent = '';
-    show(box); box.style.opacity = 1;
+  /* ----- THE DREAM VOICE speaks in beats: a blank line in config.js starts the next one. Each beat types itself
+     out with a typewriter's clack, stays long enough to read, then the next one comes. A click on the box (or
+     Enter) finishes the typing or goes on; "skip" ends it. Two tricks inside the text:
+       {wrong|right}  it types the wrong words in a red, dripping hand, stops, rubs them out and writes the right ones
+       {A}            a key to press, shown like the keys on the buttons (left out on touch screens) ----- */
+  const VOICE = { cps: 38, delCps: 70, wrongWait: 0.55, hold: 1.5, perChar: 0.05, after: 20, retry: 5 };
+  const VOICE_TOKEN = /\{([^{}|]*)\|([^{}]*)\}|\{([^{}|]+)\}/g; // {wrong|right} or {KEY}
+  const freshVoice = () => ({ active: false, beats: [], bi: 0, ops: [], oi: 0, acc: 0, segs: [], final: [], typing: false, hold: 0, holdFor: 0, n: 0 });
+  /* the night's beats, for the pause screen ("What the voice said") */
+  const voiceLog = [];
+
+  /* one beat -> what the typewriter does (ops), the text it ends with (final) and what the pause screen shows (log).
+     A segment is { s, cls }: cls 'txt' (plain), 'bad' (the dream's words), 'key' (a key hint). */
+  function compileBeat(text) {
+    const ops = [], final = [], log = [];
+    const add = (list, s, cls) => { const l = list[list.length - 1]; if (l && l.cls === cls && cls !== 'key') l.s += s; else if (s) list.push({ s, cls }); };
+    const plain = (s) => { if (!s) return; ops.push({ k: 'type', s, cls: 'txt', i: 0 }); add(final, s, 'txt'); add(log, s, 'txt'); };
+    if (TOUCH) text = text.replace(/\s*\{[^{}|]+\}/g, ''); // no keyboard: no key hints
+    let at = 0, mm;
+    VOICE_TOKEN.lastIndex = 0;
+    while ((mm = VOICE_TOKEN.exec(text))) {
+      plain(text.slice(at, mm.index)); at = VOICE_TOKEN.lastIndex;
+      if (mm[3] != null) { ops.push({ k: 'key', s: mm[3].trim() }); add(final, mm[3].trim(), 'key'); add(log, mm[3].trim(), 'key'); continue; }
+      const wrong = mm[1], right = mm[2];
+      if (wrong) {
+        ops.push({ k: 'type', s: wrong, cls: 'bad', i: 0 }, { k: 'wait', t: VOICE.wrongWait }, { k: 'del', n: wrong.length, i: 0 });
+        add(log, wrong, 'bad');
+      }
+      plain(right);
+    }
+    plain(text.slice(at));
+    return { ops, final, log, len: final.reduce((a, g) => a + g.s.length, 0) };
   }
-  /* the dream voice types itself out, waits, then fades */
+  const segHtml = (g) => g.cls === 'bad' ? '<span class="intrude">' + escapeHtml(g.s) + '</span>' : g.cls === 'key' ? '<kbd>' + escapeHtml(g.s) + '</kbd>' : escapeHtml(g.s);
+
+  /* text: the words (beats split by blank lines). o: { hold: seconds the LAST beat stays (default: long enough to read),
+     stay: the last beat stays until something else ends it (the lesson), then: words that come back later (dreamVoice.after) }.
+     A plain number for o still means hold. */
+  function startVoice(text, o) {
+    o = typeof o === 'number' ? { hold: o } : (o || {});
+    const box = hudEls.voice;
+    const beats = String(text || '').split(/\n\s*\n/).map((s) => s.trim().replace(/\s*\n\s*/g, ' ')).filter(Boolean); // (one line break inside a beat is a space)
+    if (!beats.length) { hide(box); G.voice.active = false; return; }
+    G.voice = Object.assign(freshVoice(), { active: true, beats, lastHold: o.hold, stay: !!o.stay, then: o.then || null });
+    beginBeat(0);
+    show(box); box.style.transition = ''; box.style.opacity = 1;
+  }
+  function beginBeat(i) {
+    const v = G.voice, c = compileBeat(v.beats[i]);
+    Object.assign(v, { bi: i, ops: c.ops, final: c.final, len: c.len, oi: 0, acc: 0, segs: [], typing: true, hold: 0, n: 0 });
+    voiceLog.push(c.log);
+    drawVoice();
+  }
+  /* the typewriter: it works through the ops on a time budget (typing, waiting, rubbing out) */
   function updateVoice(dt) {
     const v = G.voice;
-    if (v.shown < v.text.length) {
-      v.shown = Math.min(v.text.length, v.shown + dt * 34);
-      $('#voiceText').innerHTML = '<span>' + escapeHtml(v.text.slice(0, Math.floor(v.shown))) + '<span class="caret">▌</span></span>'; // one line box: the caret stays at the end
-    } else if ((v.hold += dt) > v.holdFor) endVoice();
+    if (!v.typing) {
+      if (v.stay && v.bi === v.beats.length - 1) return; // the lesson decides when this one is over
+      if ((v.hold += dt) >= v.holdFor) nextBeat();
+      return;
+    }
+    v.acc += dt;
+    let clack = 0, changed = false;
+    while (v.typing) {
+      const op = v.ops[v.oi];
+      if (!op) { finishBeat(); changed = true; break; }
+      if (op.k === 'wait') { const use = Math.min(v.acc, op.t); op.t -= use; v.acc -= use; if (op.t > 0) break; v.oi++; continue; }
+      const cost = 1 / (op.k === 'del' ? VOICE.delCps : VOICE.cps);
+      if (v.acc < cost) break;
+      v.acc -= cost; changed = true;
+      if (op.k === 'del') { popChar(v.segs); clack = 0.7; if (++op.i >= op.n) v.oi++; }
+      else if (op.k === 'key') { v.segs.push({ s: op.s, cls: 'key' }); v.oi++; clack = clack || 1; }
+      else {
+        const l = v.segs[v.segs.length - 1], ch = op.s[op.i++];
+        if (l && l.cls === op.cls) l.s += ch; else v.segs.push({ s: ch, cls: op.cls });
+        if (++v.n % 2 === 0) clack = clack || 1; // every second letter clacks
+        if (op.i >= op.s.length) v.oi++;
+      }
+    }
+    if (clack) Sound.play('type_key', { vol: 0.12, rate: clack < 1 ? 0.7 : rand(0.9, 1.15) }); // (silent without type_key.mp3)
+    if (changed) drawVoice();
+  }
+  function popChar(segs) {
+    const l = segs[segs.length - 1];
+    if (!l) return;
+    l.s = l.s.slice(0, -1);
+    if (!l.s) segs.pop();
+  }
+  /* the beat is fully written (the wrong words already gone); it stays long enough to read */
+  function finishBeat() {
+    const v = G.voice;
+    v.typing = false; v.segs = v.final.map((g) => Object.assign({}, g)); v.hold = 0;
+    v.holdFor = v.bi === v.beats.length - 1 && v.lastHold ? v.lastHold : VOICE.hold + VOICE.perChar * v.len;
+  }
+  function nextBeat() { if (G.voice.bi + 1 < G.voice.beats.length) beginBeat(G.voice.bi + 1); else if (!G.voice.stay) endVoice(); }
+  /* a click on the voice box, or Enter: finish the typing, or go on to the next beat */
+  function voiceAdvance() {
+    const v = G.voice;
+    if (!v.active) return;
+    if (v.typing) { finishBeat(); drawVoice(); } else nextBeat();
+  }
+  function drawVoice() {
+    const v = G.voice, caret = v.typing || !v.stay ? '<span class="caret">▌</span>' : '';
+    $('#voiceText').innerHTML = '<span>' + v.segs.map(segHtml).join('') + caret + '</span>'; // one inline run: the caret follows the last letter
   }
   function endVoice() {
-    G.voice.active = false;
-    const box = $('#voiceBox');
+    const v = G.voice;
+    if (v.active && v.then && G.state === 'night' && !G.powerOut) { const t = v.then; after(VOICE.after, () => voiceAfter(t)); }
+    v.active = false;
+    const box = hudEls.voice;
     box.style.transition = 'opacity .8s'; box.style.opacity = 0;
-    setTimeout(() => { if (!G.voice.active) { hide(box); box.style.transition = ''; } }, 850);
+    setTimeout(() => { if (!G.voice.active) { hide(box); box.style.transition = ''; } }, 850); // (only hides the faded box)
+  }
+  /* config dreamVoice.after: a while after the night's voice has gone quiet, it speaks once more */
+  function voiceAfter(text) {
+    if (G.state !== 'night' || G.powerOut) return;
+    if (G.voice.active || G.lesson || G.fd) { after(VOICE.retry, () => voiceAfter(text)); return; } // not over someone else
+    startVoice(text);
+  }
+  /* the pause screen's "What the voice said" */
+  function fillVoiceLog() {
+    const box = $('#pVoice');
+    setCls(box, 'hidden', !voiceLog.length);
+    $('#pVoiceLog').innerHTML = voiceLog.map((parts) => '<p>' + parts.map((g) => g.cls === 'bad' ? '<s>' + escapeHtml(g.s) + '</s>' : segHtml(g)).join('') + '</p>').join('');
+  }
+
+  /* ----- THE FIRST-NIGHT LESSON (Night 1, until you have finished or skipped it once; Extras can replay it).
+     The voice says one step at a time and waits until you have done it. The clock waits too, the monster sleeps,
+     and only what you use costs Lucidity. A dashed ring shows what to press. After 15 s the ring pulses;
+     after 25 s the lesson moves on by itself. config.js "tutorial" can change the steps. ----- */
+  const LESSON = [
+    { say: 'Look to your left.', wait: 'lookLeft' },
+    { say: 'That doorway. Turn on the light. {A}', wait: 'light' },
+    { say: 'Now the other side.', wait: 'lookRight' },
+    { say: 'Open the cameras. {SPACE}', wait: 'cams' },
+    { say: 'Find the West Hall. It is right outside your left door.', wait: 'cam:west' },
+    { say: 'Close the cameras. Shut a door and watch your Lucidity. {Q}', wait: 'door' },
+    { say: 'Doors are like holding your breath. Open it again.', wait: 'doorOpen' },
+    { say: 'If you\'re slipping, pinch yourself. But it hears you. {F}', wait: 'time:4', point: 'pinch' },
+    { say: 'Make it to six. Listen for breathing at the doors.', wait: 'time:4', point: 'clock' },
+  ];
+  /* read: seconds a written step stays before it can move on; watch: seconds you watch your Lucidity with a door shut;
+     hint / auto: the ring pulses / the step moves on by itself; floor: the lesson can't take your Lucidity below this */
+  const LESSON_T = { read: 0.6, watch: 2.5, hint: 15, auto: 25, floor: 80 };
+  /* the steps from config.js (or the built-in ones), without any that can't work here (a camera that doesn't exist) */
+  function lessonSteps() {
+    const own = Array.isArray(CFG.tutorial) ? CFG.tutorial : LESSON;
+    return own.filter((s) => s && s.say && !(/^cam:/.test(s.wait || '') && !camById[s.wait.slice(4)]));
+  }
+  const wantLesson = (n, endless, retry) => n === 1 && !endless && !retry && (G.practice || !save.tutorialDone) && lessonSteps().length > 0;
+  function startLesson() {
+    G.lesson = { steps: lessonSteps(), i: -1 };
+    $('#voiceSkip').textContent = 'skip lesson ▸';
+    lessonStep(0);
+  }
+  function lessonStep(i) {
+    const L = G.lesson;
+    if (i >= L.steps.length) { endLesson(false); return; }
+    Object.assign(L, { i, t: 0, read: 0, met: 0, born: G.t });
+    G.did = {};
+    startVoice(L.steps[i].say, { stay: true });
+  }
+  /* skipped: the "skip lesson" button (the usual Night 1 voice plays instead, so nobody starts with nothing) */
+  function endLesson(skipped) {
+    if (!G.lesson) return;
+    G.lesson = null; G.grace = 10;
+    save.tutorialDone = true; writeSave(); // (finished or skipped: it doesn't come back by itself)
+    hide($('#clockNote')); hideCoach();
+    $('#voiceSkip').textContent = 'skip ▸';
+    if (G.voice.active) endVoice();
+    if (skipped && !G.practice) startVoice((CFG.dreamVoice || {})[1]);
+  }
+  /* no lesson any more (a new night, the menu, a scare) */
+  function resetLesson() {
+    G.lesson = null; G.did = {};
+    hideCoach(); hide($('#clockNote'));
+    $('#voiceSkip').textContent = 'skip ▸';
+  }
+  /* has the player done what this step asks? */
+  function lessonMet(step) {
+    const w = String(step.wait || 'time:4'), max = Math.max(0, G.officeW - W), L = G.doors.left, R = G.doors.right;
+    if (w === 'lookLeft') return !G.cams.up && (max <= 0 || G.scroll <= 0.15 * max);
+    if (w === 'lookRight') return !G.cams.up && (max <= 0 || G.scroll >= 0.85 * max);
+    if (w === 'light') return G.did.light || L.light || R.light;
+    if (w === 'cams') return G.cams.up && G.cams.t >= 1;
+    if (w.indexOf('cam:') === 0) return G.cams.up && G.cams.t >= 1 && G.cams.cur === w.slice(4);
+    if (w === 'door') return G.did.door || L.closed || R.closed;
+    if (w === 'doorOpen') return !L.closed && !R.closed;
+    if (w === 'pinch') return !!G.did.pinch;
+    return true; // time:N (see lessonUpdate)
+  }
+  function lessonUpdate(realDt) {
+    const L = G.lesson, step = L.steps[L.i], w = String(step.wait || 'time:4');
+    G.grace = Math.max(G.grace, 8); // it sleeps through the lesson
+    L.t += realDt;
+    if (!G.voice.typing) L.read += realDt;
+    const need = /^time:/.test(w) ? Math.max(0, parseFloat(w.slice(5)) || 4) : LESSON_T.read;
+    L.met = lessonMet(step) ? L.met + realDt : 0;
+    const watch = w === 'door' ? LESSON_T.watch : 0; // a door shut: the ring moves to your Lucidity for a moment
+    if ((L.read >= need && L.met > watch) || L.t >= LESSON_T.auto) {
+      if (L.t < LESSON_T.auto && !/^time:/.test(w)) Sound.play('ui_click', { vol: 0.3, rate: 1.35 }); // well done
+      lessonStep(L.i + 1);
+    }
+  }
+
+  /* ----- coach marks: a dashed ring that draws itself around a button (it follows the button every frame), or
+     arrows at the edge of the screen when the thing to find is in the room itself ----- */
+  const coachEls = { svg: $('#coach'), ring: $('#coach .ring'), draw: $('#coach .draw'), wob: $('#coach .wob'), edge: $('#coachEdge'), drag: $('#coachDrag') };
+  const coach = { x: W / 2, y: H / 2, rx: 60, ry: 40, el: null, born: 0 };
+  function defaultPoint(step) {
+    const w = String(step.wait || '');
+    if (w === 'lookLeft') return 'left';
+    if (w === 'lookRight') return 'right';
+    if (w === 'light') return 'leftLight';
+    if (w === 'cams') return 'cameras';
+    if (w.indexOf('cam:') === 0) return w;
+    if (w === 'door') return G.lesson && G.lesson.met > 0 ? 'lucidity' : 'leftDoor'; // shut: now watch what it costs
+    if (w === 'doorOpen') return G.doors.right.closed && !G.doors.left.closed ? 'rightDoor' : 'leftDoor';
+    if (w === 'pinch') return 'pinch';
+    return 'none';
+  }
+  /* what to point at right now: { el } (a button), { edge: 'left' / 'right' } or null. Anything hidden behind the
+     cameras points at the camera bar instead ("close the cameras first"). */
+  function coachTarget(step) {
+    const p = String(step.point || defaultPoint(step)), camsUp = G.cams.t > 0.5;
+    if (p === 'none') return null;
+    if (p === 'left' || p === 'right') return camsUp ? { el: hudEls.camBar } : { edge: p };
+    let el;
+    if (p.indexOf('cam:') === 0) el = camsUp ? document.querySelector('#camMap .camBtn[data-cam="' + p.slice(4).replace(/["\\]/g, '') + '"]') : hudEls.camBar;
+    else el = { leftLight: hudEls.lLight, rightLight: hudEls.rLight, leftDoor: hudEls.lDoor, rightDoor: hudEls.rDoor,
+      cameras: hudEls.camBar, pinch: hudEls.pinch, lucidity: hudEls.lucBox, clock: $('#clockBox') }[p];
+    if (!el || !el.getClientRects().length) return camsUp ? { el: hudEls.camBar } : null;
+    return { el };
+  }
+  function hideCoach() { hide(coachEls.svg); hide(coachEls.edge); hide(coachEls.drag); coach.el = null; }
+  function updateCoach(dt) {
+    const L = G.lesson;
+    const tgt = L && G.state === 'night' && !G.paused ? coachTarget(L.steps[L.i]) : null;
+    const urgent = !!L && L.t >= LESSON_T.hint, k = fxMul();
+    // arrows at the edge (and on touch screens a finger showing which way to drag the room)
+    const edge = tgt && tgt.edge;
+    setCls(coachEls.edge, 'hidden', !edge); setCls(coachEls.drag, 'hidden', !edge || !TOUCH);
+    if (edge) {
+      setCls(coachEls.edge, 'right', edge === 'right'); setCls(coachEls.drag, 'right', edge === 'right');
+      setCls(coachEls.edge, 'urgent', urgent);
+      coachEls.edge.querySelector('b').textContent = edge === 'left' ? '‹ ‹ ‹' : '› › ›';
+      coachEls.edge.querySelector('span').textContent = TOUCH ? 'look ' + edge : edge === 'left' ? 'mouse here, or ←' : 'mouse here, or →';
+      coachEls.drag.querySelector('span').textContent = edge === 'left' ? 'drag the room →' : '← drag the room'; // (the room follows your finger)
+    }
+    if (!tgt || !tgt.el) { hide(coachEls.svg); coach.el = null; return; }
+    // the ring: glides to its button, draws itself in, wobbles a little, pulses once the step has waited a while
+    const r = tgt.el.getBoundingClientRect();
+    const x = (r.left + r.width / 2 - stageX) / stageScale, y = (r.top + r.height / 2 - stageY) / stageScale;
+    const rx = Math.max(40, r.width / stageScale / 2 + 22), ry = Math.max(30, r.height / stageScale / 2 + 18);
+    if (coach.el !== tgt.el) { // a new target: it jumps there (a new step) and draws itself in again
+      if (!coach.el || coachEls.svg.classList.contains('hidden')) Object.assign(coach, { x, y, rx, ry });
+      coach.el = tgt.el; coach.born = G.t;
+    }
+    const f = 1 - Math.exp(-14 * dt);
+    coach.x = lerp(coach.x, x, f); coach.y = lerp(coach.y, y, f); coach.rx = lerp(coach.rx, rx, f); coach.ry = lerp(coach.ry, ry, f);
+    const pulse = urgent ? 0.5 + 0.5 * Math.sin(G.t * Math.PI * 2 * 0.8) : 0; // .8 Hz: a slow breath, never a flicker
+    const grow = 1 + 0.07 * pulse * k;
+    const a = coach.rx * grow, b = coach.ry * grow;
+    const per = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))); // (Ramanujan's ellipse perimeter)
+    const drawn = save.fx === 'off' ? 1 : ease(clamp((G.t - coach.born) / 0.6, 0, 1));
+    for (const e of [coachEls.ring, coachEls.draw]) { e.setAttribute('cx', coach.x.toFixed(1)); e.setAttribute('cy', coach.y.toFixed(1)); e.setAttribute('rx', a.toFixed(1)); e.setAttribute('ry', b.toFixed(1)); }
+    coachEls.draw.setAttribute('stroke-dasharray', (per * drawn).toFixed(1) + ' ' + (per + 10).toFixed(1));
+    coachEls.wob.setAttribute('transform', `rotate(${(1.5 * Math.sin(G.t * 2.2) * k).toFixed(2)} ${coach.x.toFixed(1)} ${coach.y.toFixed(1)})`);
+    setCls(coachEls.svg, 'urgent', urgent);
+    show(coachEls.svg);
   }
 
   function setDoor(side, closed) {
@@ -1638,6 +1934,9 @@
     }
     if (D.closed === closed) return;
     D.closed = closed; // the state changes at once; the shutter only shows it (see moveDoor)
+    G.did[closed ? 'door' : 'doorOpen'] = true;
+    const there = atDoor(side);
+    logStory({ kind: 'door', side, closed, there: there ? there.id : null });
     if (closed) for (const L of G.lies) if (L.kind === 'door' && L.side === side && !L.shut) { L.shut = true; G.stats.fakeCloses++; } // it cost you Lucidity, nothing more
     if (closed) { D.v = Math.max(D.v, 1.5); D.landed = false; }
     Sound.play(closed ? 'door_close' : 'door_open', { vol: 0.85, pan: side === 'left' ? -0.7 : 0.7 });
@@ -1647,7 +1946,12 @@
     const other = side === 'left' ? 'right' : 'left';
     if (on) G.doors[other].light = false;
     G.doors[side].light = on;
-    if (on) G.glide = side; // turn the view toward that doorway so you can see what the light shows
+    if (on) {
+      G.glide = side; // turn the view toward that doorway so you can see what the light shows
+      G.did.light = true;
+      const there = atDoor(side);
+      logStory({ kind: 'light', side, there: there ? there.id : null });
+    }
     Sound.play('ui_click', { vol: 0.35, rate: on ? 1 : 0.8, pan: side === 'left' ? -0.6 : 0.6 });
   }
   function toggleCams(force) {
@@ -1656,6 +1960,7 @@
     if (want && (G.powerOut || G.inside)) return; // can't hide in the cameras once it's in the room
     if (want === G.cams.up) return;
     G.cams.up = want;
+    if (want) G.did.cams = true;
     if (want) {
       G.doors.left.light = false; G.doors.right.light = false;
       G.cams.staticAmt = 1;
@@ -1668,7 +1973,7 @@
     if (!G.cams.up || !camById[id] || G.cams.cur === id) return;
     for (const L of G.lies) if (L.kind === 'cam' && L.room === G.cams.cur) L.ttl = 0; // look away from a lie and it's gone
     youCamSwitch(G.cams.cur, id);
-    G.cams.cur = id; G.cams.staticAmt = 1;
+    G.cams.cur = id; G.cams.staticAmt = 1; G.did.cam = id;
     Sound.play('cam_switch', { vol: 0.7, rate: rand(0.95, 1.05) });
     updateCamUi();
   }
@@ -1684,6 +1989,9 @@
     G.luc = Math.min(100, G.luc + gain);
     G.pinchCd = pinchCfg().cooldown;
     showGain(gain);
+    const open = G.monsters.find((m) => m.state === 'door' && !G.doors[m.door].closed); // (breathing at an open door: a bad moment)
+    logStory({ kind: 'pinch', side: open ? open.door : null, who: open ? open.id : null });
+    G.did.pinch = true;
     noise('pinch', rule('pinchRadius', 2)); // it's loud, and it hears you
     G.flash = save.fx === 'off' ? 0.1 : 0.3; G.flashColor = '230,220,255';
     if (Director.active && Director.active.id !== 'youCam') endEvent(); // the room snaps back to normal
@@ -1746,6 +2054,7 @@
   }
 
   function enterOffice(m) {
+    logStory({ kind: 'in', side: m.door, who: m.id, doorOpen: !!m.door && !G.doors[m.door].closed, camsUp: G.cams.up, lastLit: m.door ? G.litAt[m.door] : null });
     G.inside = m; m.state = 'inside';
     G.doors.left.light = false; G.doors.right.light = false;
     cue('breath', 'center', { monster: m, vol: 1, rate: 0.9, cap: 'breathClose' });
@@ -1757,7 +2066,7 @@
 
   function powerOutStart() {
     resetDirector(false);
-    G.powerOut = true; G.powerT = 0; G.luc = 0;
+    G.powerOut = true; G.powerT = 0; G.luc = 0; G.powerAt = G.nightT;
     for (const s of ['left', 'right']) {
       if (G.doors[s].closed) Sound.play('door_open', { vol: 0.8, pan: s === 'left' ? -0.7 : 0.7 });
       G.doors[s].closed = false; G.doors[s].light = false;
@@ -1804,6 +2113,7 @@
     const soft = gentle();
     resetDirector(false);
     G.state = 'jumpscare'; G.killer = m; G.jumpT = 0; G.later = []; G.lies = [];
+    resetLesson();
     G.cams.up = false; G.cams.t = 0;
     Captions.clear();
     hide($('#hud')); if (G.voice.active) endVoice();
@@ -1820,18 +2130,137 @@
     G.state = 'dead';
     Sound.stopAll();
     Sound.loop('static', 0.35, { fade: 0.05, music: false });
-    setTimeout(() => Sound.stopLoop('static', 1.5), 900);
-    const tips = [
-      'Check the light before you shut a door. A door held shut too long drains Lucidity fast.',
-      'Footsteps nearby mean it is in the West or East Hall.',
-      'Breathing at the door? Shut it. Now.',
-      'A pinch helps most when you are low, but it is loud. Never pinch with breathing at an open door.',
-      'If it bangs on the door, the door held. Open it again to save Lucidity.',
-      'The cameras cost Lucidity too. Don’t stare.',
-    ];
-    $('#deadTip').innerHTML = numify(G.powerOut ? 'Your Lucidity ran out. Spend it more carefully.' : pick(tips));
+    setTimeout(() => Sound.stopLoop('static', 1.5), 900); // (the night is over: a plain timer is fine here)
+    const story = !G.endless && !G.practice;
+    if (story) { save.deaths[G.night] = (save.deaths[G.night] || 0) + 1; writeSave(); } // (waking up clears it)
+    const r = G.powerOut ? lucidityRecap() : caughtRecap();
     $('#deadTitle').textContent = G.killer ? (G.killer.def.name.toUpperCase() + ' FOUND YOU') : 'IT FOUND YOU';
+    showRecap(r);
+    setCls($('#dLighter'), 'hidden', !story || G.lighter || save.deaths[G.night] < LIGHTER.deaths);
     showScreen('#dead');
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  WHAT HAPPENED: the death screen types out the moment you missed  */
+  /*  (from the night's story, see logStory) and gives the tip for      */
+  /*  exactly that. A Lucidity death shows where your Lucidity went.    */
+  /* ------------------------------------------------------------------ */
+  const RECAP = { cps: 25, wait: 0.9 }; // wait: the title lands first, then the words come
+  const TIPS = {
+    cams: 'When you hear breathing, drop the cameras and check your doors.',
+    pinch: 'Never pinch with breathing at an open door.',
+    opened: 'It was still out there when you opened the door. Wait for the BANG, then open it.',
+    stare: 'You stared at it. It likes that.',
+    gasp: 'Your door ran out of breath and opened by itself. Let your doors rest when nothing is there.',
+    light: 'It always breathes before it comes in. Check that light.',
+    saw: 'Your light found it. Shut that door right away!',
+    other: 'It always breathes before it comes in. Listen for it, then check the light.',
+    // a Lucidity death: the tip for whatever cost you the most
+    doors: 'Doors are like holding your breath. Open them again once it bangs, or once the breathing stops.',
+    camsSpend: 'The cameras cost Lucidity too. Take a look, then put them down.',
+    lights: 'Every light costs Lucidity. Flick it on to check, then off again.',
+    base: 'Just being asleep costs Lucidity. Pinch yourself when you are low, but never with breathing at an open door.',
+  };
+  /* "3:12 AM" for a moment of the night (short: "3:12") */
+  function fmtClock(t, short) {
+    const hs = hourSec(), h = clamp(Math.floor(t / hs), 0, 5), m = Math.floor((t % hs) / hs * 60);
+    return (h === 0 ? 12 : h) + ':' + String(m).padStart(2, '0') + (short ? '' : ' AM');
+  }
+  /* one moment of the story, in words */
+  function storyLine(e) {
+    const S = e.side ? String(e.side).toUpperCase() : '';
+    switch (e.kind) {
+      case 'reach': return `it reached the ${S} door without a sound`;
+      case 'steps': return e.side === 'left' || e.side === 'right' ? `footsteps, close, on the ${S}` : 'footsteps in the halls';
+      case 'breath': return e.cap === 'breathMuffled' ? `breathing behind the shut ${S} door` : `breathing at the ${S} door`;
+      case 'bang': return `BANG on the ${S} door. It held`;
+      case 'door': return e.closed ? `you shut the ${S} door` : `you opened the ${S} door` + (e.there ? ' while it was still there' : '');
+      case 'light': return e.there ? `your light found it in the ${S} doorway` : `you checked the ${S} light`;
+      case 'pinch': return e.who ? `you pinched yourself while it breathed at the open ${S} door` : 'you pinched yourself';
+      case 'lunge': return 'you stared at it on the cameras, and it stepped closer';
+      case 'gasp': return `the ${S} door ran out of breath and opened by itself`;
+      case 'in': return e.doorOpen ? `it came in through the open ${S} door` + (e.camsUp ? ' while you watched the cameras' : '') : 'it came in';
+      default: return e.kind;
+    }
+  }
+  /* it got you: its last visit to your door, in up to three lines, and what to do differently */
+  function caughtRecap() {
+    const log = G.cueLog.filter((e) => !e.fake), K = G.killer && G.killer.id;
+    let inAt = -1;
+    for (let i = log.length - 1; i >= 0; i--) if (log[i].kind === 'in' && (!K || log[i].who === K)) { inAt = i; break; }
+    if (inAt < 0) { // (no visit on record: only the last things it did)
+      const last = log.filter((e) => e.who === K && e.kind !== 'far' && e.kind !== 'whisper').slice(-3);
+      return { lines: last.map((e) => ({ t: e.t, s: storyLine(e) })), tip: TIPS.other };
+    }
+    const IN = log[inAt], side = IN.side;
+    let reach = inAt;
+    while (reach > 0 && !(log[reach].kind === 'reach' && log[reach].who === IN.who)) reach--;
+    const reachT = log[reach].kind === 'reach' ? log[reach].t : IN.t;
+    const visit = log.slice(reach, inAt + 1);
+    const warn = visit.find((e) => (e.kind === 'steps' || e.kind === 'breath') && e.who === IN.who) || log[reach];
+    const opened = visit.find((e) => e.kind === 'door' && e.side === side && !e.closed && e.there === IN.who);
+    const pinched = visit.find((e) => e.kind === 'pinch' && e.who === IN.who);
+    const found = visit.find((e) => e.kind === 'light' && e.side === side && e.there === IN.who);
+    const before = log.slice(0, reach + 1).filter((e) => IN.t - e.t < 40);
+    const lunge = before.filter((e) => e.who === IN.who && (e.kind === 'lunge' || e.kind === 'reach')).slice(-2).find((e) => e.kind === 'lunge');
+    const gasp = log.slice(0, inAt).find((e) => e.kind === 'gasp' && e.side === side && IN.t - e.t < 30);
+    const neverLit = !(IN.lastLit >= reachT); // its whole visit, that doorway stayed dark
+    const breaths = visit.filter((e) => e.kind === 'breath' && e.who === IN.who);
+    const askT = (breaths[breaths.length - 1] || warn).t; // when you should have looked
+    const key = opened || pinched || (neverLit ? { t: askT, s: `you never checked the ${String(side).toUpperCase()} light` } : null)
+      || found || gasp || (IN.camsUp ? { t: askT, s: 'you were watching the cameras' } : null);
+    const lines = [warn, key, IN].filter((e, i, a) => e && a.indexOf(e) === i).map((e) => ({ t: e.t, s: e.s || storyLine(e) }));
+    const tip = IN.camsUp ? TIPS.cams : pinched ? TIPS.pinch : opened ? TIPS.opened : lunge ? TIPS.stare
+      : gasp ? TIPS.gasp : neverLit ? TIPS.light : found ? TIPS.saw : TIPS.other;
+    return { lines, tip };
+  }
+  /* your Lucidity ran out: when, where it went (doors / cameras / light / just being asleep), and a tip for the biggest */
+  function lucidityRecap() {
+    const S = G.spend, parts = [['doors', 'doors', S.doors], ['cams', 'cameras', S.cams], ['lights', 'light', S.lights], ['base', 'just being asleep', S.base]];
+    const total = parts.reduce((a, p) => a + p[2], 0) || 1;
+    const spend = parts.map(([k, label, v]) => ({ k, label, pct: Math.round(100 * v / total) }));
+    const top = parts.reduce((a, p) => (p[2] > a[2] ? p : a), parts[3])[0];
+    return { lines: [{ s: `Your Lucidity ran out at ${fmtClock(G.powerAt)}.` }], tip: TIPS[top === 'cams' ? 'camsSpend' : top], spend };
+  }
+  /* the lines type themselves out (a click shows them all); the tip and the bar come after */
+  function showRecap(r) {
+    const lines = r.lines.map((l, i) => (l.t != null ? fmtClock(l.t, i > 0) + ': ' : '') + l.s);
+    G.recap = { lines, shown: 0, total: lines.reduce((a, l) => a + l.length, 0), n: 0, done: false, wait: RECAP.wait };
+    $('#deadRecap').innerHTML = lines.map(() => '<div><span class="on"></span><span class="rest"></span></div>').join('');
+    drawRecap();
+    $('#deadTip').innerHTML = numify(r.tip);
+    const sp = $('#deadSpend');
+    setCls(sp, 'hidden', !r.spend);
+    if (r.spend) {
+      sp.querySelector('.bar').innerHTML = r.spend.filter((p) => p.pct > 0).map((p) => `<i class="${p.k}" style="width:${p.pct}%"></i>`).join('');
+      sp.querySelector('.legend').innerHTML = r.spend.filter((p) => p.pct > 0).map((p) => `<span class="${p.k}"><b></b>${escapeHtml(p.label)} ${numify(p.pct + '%')}</span>`).join('');
+    }
+    for (const el of [$('#deadTip'), sp]) el.classList.remove('show');
+    if (!G.recap.total) finishRecap();
+  }
+  /* every line keeps its full width from the start (the untyped rest is invisible), so nothing jumps around */
+  function drawRecap() {
+    const R = G.recap;
+    let left = Math.floor(R.shown);
+    $('#deadRecap').querySelectorAll('div').forEach((d, i) => {
+      const l = R.lines[i], k = clamp(left, 0, l.length); left -= l.length;
+      d.firstChild.innerHTML = numify(l.slice(0, k)); d.lastChild.textContent = l.slice(k);
+    });
+  }
+  function updateDead(dt) {
+    const R = G.recap;
+    if (!R || R.done || (R.wait -= dt) > 0) return;
+    const before = Math.floor(R.shown);
+    R.shown = Math.min(R.total, R.shown + dt * RECAP.cps);
+    const now = Math.floor(R.shown);
+    if (now !== before) { drawRecap(); if ((R.n += now - before) % 2 === 0) Sound.play('type_key', { vol: 0.1, rate: rand(0.85, 1.05) }); }
+    if (R.shown >= R.total) finishRecap();
+  }
+  function finishRecap() {
+    const R = G.recap;
+    if (!R || R.done) return;
+    R.done = true; R.shown = R.total; drawRecap();
+    for (const el of [$('#deadTip'), $('#deadSpend')]) el.classList.add('show');
   }
 
   /* ------------------------------------------------------------------ */
@@ -1855,9 +2284,10 @@
   function clockPan() { const k = clockOnScreen(); return k ? clamp((k.x / W - 0.5) * 1.2, -1, 1) : 0; }
 
   function startWaking() {
-    if (!G.endless) { // progress is saved the moment the alarm rings
+    if (!G.endless && !G.practice) { // progress is saved the moment the alarm rings (a practice dream never touches it)
       save.beaten = Math.max(save.beaten, G.night);
       save.night = clamp(G.night + 1, 1, NIGHTS);
+      delete save.deaths[G.night]; // ("Dream lighter" waits for three new deaths)
       writeSave();
     }
     resetDirector(false);
@@ -1925,22 +2355,23 @@
     Sound.stopLoop('wake', 0.05);
     Sound.play('door_close', { vol: 0.5, rate: 1.6 }); // the clunk of the button
     Sound.loop('morning', 0.8, { fade: 3, music: true }); // birds
-    if (!G.endless && G.night >= NIGHTS) startFinale(); else showWinPanel();
+    if (!G.endless && !G.practice && G.night >= NIGHTS) startFinale(); else showWinPanel();
   }
 
   /* "You woke up", what happened tonight, and the buttons (they wait a moment, so a fast second tap can't press one) */
   function showWinPanel() {
-    const last = !G.endless && G.night >= NIGHTS, S = G.stats;
+    const last = !G.endless && !G.practice && G.night >= NIGHTS, S = G.stats;
     $('#winSub').innerHTML = numify(G.endless ? 'The endless dream let you go… this time.'
-      : last ? 'All five nights. The alarm rang, and this time you heard it.'
-        : 'Night ' + G.night + ' survived. But you’ll fall asleep again tonight.');
+      : G.practice ? 'Practice is over. The real nights are waiting.'
+        : last ? 'All five nights. The alarm rang, and this time you heard it.'
+          : 'Night ' + G.night + ' survived. But you’ll fall asleep again tonight.');
     const bits = [];
     if (S.bangs) bits.push('Turned it away ×' + S.bangs);
     bits.push(G.powerOut ? 'Saved by the alarm at 0% Lucidity' : 'Lucidity left ' + Math.max(0, Math.ceil(G.luc)) + '%');
     if (S.pinches) bits.push('Pinched ×' + S.pinches);
     if (S.fakesLit) bits.push('Saw through the dream ×' + S.fakesLit);
     $('#winStats').innerHTML = numify(bits.join('  ·  '));
-    $('#wNext').textContent = (G.endless || last) ? 'Back to the menu' : 'Next night';
+    $('#wNext').textContent = (G.endless || G.practice || last) ? 'Back to the menu' : 'Next night';
     const title = $('#winTitle'); title.classList.remove('show');
     showScreen('#win');
     $('#win').classList.add('wait'); G.winWait = 0.9;
@@ -2005,6 +2436,7 @@
     if (G.state === 'waking') { enterMorning(); return true; }
     if (G.state === 'morning') { if (G.wakeT >= WAKE.open + WAKE.listen) slapAlarm(); return true; }
     if (G.state === 'win' && G.finale) { endFinale(); return true; }
+    if (G.state === 'dead' && G.recap && !G.recap.done) { finishRecap(); return true; } // a click shows the whole recap
     return false;
   }
 
@@ -2327,6 +2759,8 @@
     if (G.state === 'night' && !G.paused) updateNight(dt * G.timeScale, dt);
     if (G.state === 'waking' || G.state === 'morning') updateWaking(dt);
     if (G.state === 'win') updateWin(dt);
+    if (G.state === 'dead') updateDead(dt);
+    if (G.lesson) updateCoach(dt);
     if (G.voice.active && !G.paused && (G.state === 'night' || G.state === 'win')) updateVoice(dt);
     if (G.state === 'jumpscare') {
       G.jumpT += dt;
@@ -2358,6 +2792,7 @@
       if (behind || !D.closed || G.powerOut) D.gaspT = 0;           // it held on after all, or you opened it
       else if ((D.gaspT -= dt) <= 0) {
         D.gaspT = 0; D.closed = false; D.held = 0;
+        logStory({ kind: 'gasp', side });
         Sound.play('door_open', { vol: 0.9, rate: 0.7, pan: side === 'left' ? -0.7 : 0.7 });
       }
     } else if (gasp && D.closed && !behind && D.held > gasp && !G.powerOut) {
@@ -2399,6 +2834,7 @@
       m.watched = on ? m.watched + dt : Math.max(0, m.watched - dt * 2);
       if (on && lim && m.watched >= lim && m.level > 0 && !G.inside && !G.powerOut && !G.freeze && G.grace <= 0) {
         m.watched = 0; // it lunges one room closer (the camera it was on cuts out)
+        logStory({ kind: 'lunge', who: m.id }); // (before the step, so the story reads in order)
         stepToward(m);
         m.timer = m.def.moveEvery || 5;
         G.stats.lunges++;
@@ -2485,8 +2921,9 @@
     runLater(dt);
     if (G.state !== 'night') return; // a timer ended the night
     G.settle = Math.max(0, G.settle - realDt); // landing in the chair after the jolt
-    // clock
-    G.nightT += dt;
+    if (G.lesson) lessonUpdate(realDt);
+    // clock (it waits while the first-night lesson runs)
+    if (!G.lesson) G.nightT += dt;
     const hs = hourSec();
     const hour = Math.floor(G.nightT / hs);
     if (hour >= 6) { startWaking(); return; }
@@ -2531,14 +2968,21 @@
     C.lost = Math.max(0, C.lost - realDt);
     const lean = updateStare(dt);
 
-    // lucidity
+    // lucidity: what each thing costs goes into G.spend (the death screen shows where it went)
     if (!G.powerOut) {
-      G.usage = 1 + G.doors.left.cost + G.doors.right.cost
-        + ((G.doors.left.light || G.doors.right.light) ? 1 : 0) + (C.up ? 1 : 0);
-      if (!G.freeze) G.luc -= rule('drain', 0.12) * G.usage * dt; // (the False Dawn holds it still)
+      const L = G.doors.left, R = G.doors.right;
+      const parts = { base: 1, doors: L.cost + R.cost, lights: (L.light || R.light) ? 1 : 0, cams: C.up ? 1 : 0 };
+      G.usage = parts.base + parts.doors + parts.lights + parts.cams;
+      if (!G.freeze) { // (the False Dawn holds it still)
+        if (G.lesson) parts.base = 0; // the lesson: the clock waits, so just being asleep costs nothing; what you use still does
+        const before = G.luc, rate = rule('drain', 0.12) * (G.lighter ? LIGHTER.drain : 1) * dt;
+        for (const k in parts) { const d = rate * parts[k]; G.spend[k] += d; G.luc -= d; }
+        if (G.lesson) G.luc = Math.max(G.luc, Math.min(before, LESSON_T.floor));
+      }
       G.stats.minLuc = Math.min(G.stats.minLuc, Math.max(0, G.luc));
       if (G.luc <= 0) powerOutStart();
     }
+    for (const s of ['left', 'right']) if (G.doors[s].light) G.litAt[s] = G.nightT; // (the death screen: did you check?)
 
     // monsters
     if (G.grace > 0) G.grace -= dt;
@@ -2624,7 +3068,7 @@
     updateRoomTones(C);
     updatePresence(C);
 
-    G.whisperT -= dt;
+    if (!G.lesson) G.whisperT -= dt; // (not in the middle of the lesson)
     if (G.whisperT <= 0) {
       G.whisperT = rand(28, 70);
       const w = { vol: rand(0.18, 0.35), rate: rand(0.75, 1.1), pan: rand(-0.9, 0.9) };
@@ -3440,6 +3884,8 @@
     setCls(hudEls.camBar, 'up', G.cams.up);
     setHtml(hudEls.camLabel, 'camLabel', G.cams.up ? '▼&nbsp;&nbsp;LOWER&nbsp;&nbsp;▼' : '▲&nbsp;&nbsp;CAMERAS&nbsp;&nbsp;▲');
     setCls(hudEls.voice, 'docked', G.cams.t > 0.5); // tuck the voice out of the camera picture
+    setCls(hudEls.voice, 'lesson', !!G.lesson);
+    setCls($('#clockNote'), 'hidden', !G.lesson || G.cams.t > 0.5); // (the camera's name goes there)
     setCls(Captions.box, 'cams', G.cams.t > 0.5);    // captions make room for the camera map
     setCls(Captions.box, 'voice', G.voice.active);    // … and for the docked voice
     setCls(hudEls.pinch, 'cool', G.pinchCd > 0);
@@ -3516,6 +3962,7 @@
   function goMenu() {
     if (G.paused) Sound.pauseAll(false); // quitting from Pause must not leave the sound switched off
     G.state = 'menu'; G.paused = false; G.later = []; G.finale = null; G.lies = [];
+    resetLesson(); G.recap = null;
     resetHud(); Captions.clear(); G.voice.active = false;
     Sound.resume();
     Sound.stopAll();
@@ -3550,7 +3997,7 @@
     G.paused = p;
     Sound.pauseAll(p);
     setCls(Captions.box, 'paused', p);
-    if (p) showScreen('#pause');
+    if (p) { fillVoiceLog(); $('#pVoice').open = false; showScreen('#pause'); }
     else { hideScreens(); if (G.state === 'asleep' && G.cardShown) show($('#nightCard')); }
   }
 
@@ -3698,6 +4145,7 @@
     if (DEV && playing && k === 'Tab') { e.preventDefault(); devKey('tab'); return; }
     if (scene && k !== 'Tab' && k.length && !/^(Shift|Control|Alt|Meta|CapsLock|Fn)$/.test(k)) { skipInput(); return; } // any key skips ahead
     if (!playing) return;
+    if (k === 'Enter') { e.preventDefault(); voiceAdvance(); return; } // the voice: finish typing, or go on
     const lk = k.toLowerCase();
     if (!G.powerOut) pressFx(KEY_BTN[lk === ' ' || k === 'ArrowUp' || k === 'ArrowDown' ? 's' : lk]); // (the buttons are falling away at Lucidity zero)
     if (lk === 'q') setDoor('left', !G.doors.left.closed);
@@ -3728,7 +4176,9 @@
   bindHud('#btnRLight', () => setLight('right', !G.doors.right.light));
   bindHud('#camBar', () => toggleCams(null));
   bindHud('#pinchBtn', () => pinch());
-  bindHud('#voiceSkip', () => endVoice());
+  bindHud('#voiceSkip', () => { if (G.lesson) endLesson(true); else endVoice(); });
+  // a click on the voice box finishes the typing or goes on (it never starts a drag of the room)
+  hudEls.voice.addEventListener('pointerdown', (e) => { if (e.target.closest('button')) return; e.stopPropagation(); voiceAdvance(); });
   bindHud('#pauseBtn', () => pauseGame(true));
 
   bind('#mContinue', () => startNight(save.night, false));
@@ -3747,9 +4197,11 @@
   bind('#xBack', () => backFromSub());
   bind('#cBack', () => backFromSub());
   bind('#cGo', () => { if (endlessUnlocked()) startNight(NIGHTS, true); });
-  bind('#dRetry', () => startNight(G.night, G.endless, true)); // the short way to fall asleep
+  bind('#dRetry', () => startNight(G.night, G.endless, true, { practice: G.practice, lighter: G.lighter })); // the short way to fall asleep
+  bind('#dLighter', () => startNight(G.night, false, true, { lighter: true }));
+  bind('#xLesson', () => startNight(1, false, false, { practice: true })); // Night 1 with the lesson, progress untouched
   bind('#dMenu', () => goMenu());
-  bind('#wNext', () => { if (G.endless || G.night >= NIGHTS) goMenu(); else startNight(G.night + 1, false); });
+  bind('#wNext', () => { if (G.endless || G.practice || G.night >= NIGHTS) goMenu(); else startNight(G.night + 1, false); });
   bind('#wMenu', () => goMenu());
   bind('#sFull', () => {
     const d = document, el = d.documentElement;
@@ -3759,7 +4211,7 @@
   bind('#sReset', () => {
     const b = $('#sReset');
     if (!b.dataset.confirm) { b.dataset.confirm = '1'; b.textContent = `Really erase? ${TAP === 'tap' ? 'Tap' : 'Click'} again`; return; }
-    save.night = 1; save.beaten = 0; save.custom = {}; writeSave();
+    save.night = 1; save.beaten = 0; save.custom = {}; save.tutorialDone = false; save.deaths = {}; save.hints = {}; writeSave();
     b.textContent = 'Save erased'; b.dataset.confirm = '';
   });
   $('#sVol').addEventListener('input', (e) => { save.vol = parseInt(e.target.value, 10); Sound.applyVolumes(); writeSave(); });
@@ -3810,7 +4262,7 @@
     const m = devMon();
     if (k === 'tab' && CFG.monsters.length) { G.devMon = (G.devMon + 1) % CFG.monsters.length; G.devPose = null; hudEls.dev._last = ''; }
     if (k === 't') G.timeScale = G.timeScale === 1 ? 10 : G.timeScale === 10 ? 40 : 1;
-    if (k === 'n') G.nightT = 6 * hourSec() - 2;
+    if (k === 'n') { endLesson(false); G.nightT = 6 * hourSec() - 2; }
     if (k === 'k' && m) jumpscare(m);
     if (k === 'm') for (const mm of G.monsters) monsterMove(mm, true);
     if (k === 'l') G.luc = 5;
@@ -3919,6 +4371,9 @@
     tinted, ghostOf, drawEyelids, numify, configWarnings, render,
     Director, DREAM_EVENTS, directorUpdate, startEvent, endEvent, safe, tension, startFalseDawn, startYouCam, endYouCam,
     startPreScare, splitTints, drawJumpscare, updateRoom, startWindowPass, nightMin,
+    startVoice, endVoice, voiceAdvance, compileBeat, voiceLog, fillVoiceLog, VOICE,
+    startLesson, endLesson, lessonStep, lessonSteps, lessonMet, coachTarget, coach, LESSON, LESSON_T,
+    die, caughtRecap, lucidityRecap, finishRecap, fmtClock, storyLine, logStory, TIPS, LIGHTER,
   };
   requestAnimationFrame((t) => { last = t; requestAnimationFrame(frame); });
   boot();

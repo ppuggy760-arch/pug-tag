@@ -308,18 +308,101 @@ window.GAME_CONFIG = {
 
   /* ------------------------------------------------------------------
      THE DREAM VOICE — what the voice in your head says at the start
-     of each night. Use \n\n for a new paragraph.
+     of each night. Each night's words go between two ` marks.
+     It speaks in BEATS: an empty line starts the next beat.
+     Keep each beat short: one or two sentences.
+     Two tricks you can use anywhere in the words:
+       {wrong|right}  the voice types "wrong" in a red, dripping hand,
+                      stops, rubs it out and writes "right" instead.
+                      Example: It's {behind you|tall}.
+       {A}            shows a key to press, like the keys on the buttons
+                      (it is left out on phones and tablets).
      ------------------------------------------------------------------ */
   dreamVoice: {
-    1: "Hey. Hey — can you hear me? Good. You're asleep. I know, it doesn't feel like it. That's how this place works.\n\nThis is the Desk Room. Same desk, same walls, every night, until the alarm rings at six.\n\nSomething walks the halls of this dream. It's red. It's tall. It doesn't blink.\n\nWatch it on the cameras. If it comes to your door, shut the door. Use the lights to check — it's always darker out there than it should be. Doors are like holding your breath. Don't hold them forever.\n\nEverything you do costs Lucidity: doors, lights, cameras. If your Lucidity runs out, the dream stops listening to you.\n\nIf you're slipping, pinch yourself. It helps more the deeper you've sunk. But it's loud, and it will hear you.\n\nJust make it to six. The alarm always comes. Usually.",
-    2: "You came back. Most people don't remember the first night.\n\nIt remembers you, though. It's quicker now — it's learned the way to your room.\n\nWhen your Lucidity drops below the line, the dream starts to lie. The real one always moves. The fake one stands still, and its breathing runs backwards. When in doubt, use the light.",
-    3: "The halls were longer tonight. Did you notice? The dream is building the house out of your memories.\n\nIt walks quietly now. Don't wait for footsteps. Listen for the breathing.\n\nIf you hear it bang on the door, that's good. That means the door held.",
-    4: "Don't stare at it on the cameras for too long. I think it likes being watched.\n\nThe doors are tired. Don't make them hold their breath for nothing.\n\nI can barely hear you anymore. You're sinking deeper.",
-    5: "This is the last night I can reach you.\n\nWhen the alarm rings, don't hesitate. Don't look back. Just wake up.\n\nI'll be the one ringing.",
+    1: `Hey. Can you hear me? You're asleep. It never feels like it.
+
+        Something walks this dream. It's red. It's {behind you|tall}. It doesn't blink.
+
+        It always breathes at your door first. Light the doorway. If it's there, shut the door.
+
+        Doors are like holding your breath. Don't hold them forever.
+
+        Slipping? Pinch yourself. But it's loud, and it will hear you.
+
+        Make it to six. The alarm always comes. Usually.`,
+
+    2: `You came back. Most people don't remember the first night.
+
+        It remembers you. It's quicker now.
+
+        See the line on your Lucidity? Below it, the dream starts to lie.
+
+        The real one always moves. A fake stands still, glows violet, and breathes backwards.
+
+        When in doubt, use the light. Or pinch yourself: lies hate that.`,
+
+    3: `The halls were longer tonight. {I counted the doors.|Did you notice?}
+
+        It walks quietly now. Don't wait for footsteps. Listen for the breathing.
+
+        If it bangs on the door, good. The door held. Now let it breathe.
+
+        There are six cameras. If you ever find a seventh, don't look twice.`,
+
+    4: `Don't stare at it on the cameras. It likes being watched.
+
+        The doors are tired. Don't make them hold their breath for nothing.
+
+        I can barely hear you anymore. {Someone else can.|You're sinking deeper.}`,
+
+    5: `This is the last night I can reach you.
+
+        The dream knows it's losing you. It will try anything. Even the alarm.
+
+        When the real one rings, don't look back. Just wake up.
+
+        I'll be the one ringing.`,
+
     endless: "There is no voice here. Only the dream.",
-    lie: "Not real. The real one always moves. If its breathing runs backwards, the dream is lying.",  // the first time your light finds a fake
+    lie: `Not real.
+
+          The real one always moves. If its breathing runs backwards, the dream is lying.`,  // the first time your light finds a fake
     falseDawn: "Not yet.",  // Night 5: the alarm rings too early... and stops
+    /* after: the voice comes back ONE more time, about 20 seconds after it
+       went quiet (one line per night; leave a night out for nothing). */
+    after: { 5: "Wake up." },
   },
+
+  /* ------------------------------------------------------------------
+     THE FIRST-NIGHT LESSON: on Night 1 (the very first time, and from
+     Extras -> "Replay the first-night lesson") the voice teaches one
+     step at a time and WAITS until the player has done it. The clock
+     waits too, and the monster sleeps. A dashed ring shows what to press.
+       say:   what the voice says ({A} = a key, like in dreamVoice)
+       wait:  what the player has to do before the next step:
+              "lookLeft" / "lookRight"   look all the way to that side
+              "light"                    turn on a light
+              "cams"                     open the cameras
+              "cam:west"                 look at that camera (use its id)
+              "door" / "doorOpen"        shut a door / open it again
+              "pinch"                    pinch yourself
+              "time:4"                   just wait 4 seconds
+       point: (optional) what the ring goes around: "leftLight",
+              "rightLight", "leftDoor", "rightDoor", "cameras", "pinch",
+              "lucidity", "clock", "left", "right" or "none".
+     After 25 seconds a step moves on by itself, so nobody gets stuck.
+     ------------------------------------------------------------------ */
+  tutorial: [
+    { say: "Look to your left.", wait: "lookLeft" },
+    { say: "That doorway. Turn on the light. {A}", wait: "light" },
+    { say: "Now the other side.", wait: "lookRight" },
+    { say: "Open the cameras. {SPACE}", wait: "cams" },
+    { say: "Find the West Hall. It is right outside your left door.", wait: "cam:west" },
+    { say: "Close the cameras. Shut a door and watch your Lucidity. {Q}", wait: "door" },
+    { say: "Doors are like holding your breath. Open it again.", wait: "doorOpen" },
+    { say: "If you're slipping, pinch yourself. But it hears you. {F}", wait: "time:4", point: "pinch" },
+    { say: "Make it to six. Listen for breathing at the doors.", wait: "time:4", point: "clock" },
+  ],
 
   /* Credits shown in the Extras screen (see also CREDITS.md) and rolled after Night 5.
      The first line is YOU: change "You!" to your name if you like. */

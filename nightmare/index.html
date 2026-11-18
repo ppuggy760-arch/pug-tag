@@ -17,6 +17,7 @@
     <div id="clockBox">
       <div id="hudNight">NIGHT <span class="num">1</span></div>
       <div id="hudTime">12 AM</div>
+      <div id="clockNote" class="hidden">the clock waits for you</div>
       <button id="pauseBtn" aria-label="Pause" title="Pause (Esc)">☾</button>
     </div>
 
@@ -57,6 +58,14 @@
         <div id="youMark">YOU</div>
       </div>
     </div>
+
+    <!-- the first-night lesson: a dashed ring around what to use next, or arrows at the edge to look around -->
+    <svg id="coach" class="hidden" viewBox="0 0 1600 900" aria-hidden="true">
+      <mask id="coachDraw" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="900"><ellipse class="draw"/></mask>
+      <g class="wob"><ellipse class="ring" mask="url(#coachDraw)"/></g>
+    </svg>
+    <div id="coachEdge" class="hidden" aria-hidden="true"><b>‹ ‹ ‹</b><span></span></div>
+    <div id="coachDrag" class="hidden" aria-hidden="true"><i></i><span>drag</span></div>
 
     <div id="devInfo" class="hidden"></div>
   </div>
@@ -104,6 +113,7 @@
       <button id="pResume" class="menuBtn">Resume</button>
       <button id="pSettings" class="menuBtn">Settings</button>
       <button id="pQuit" class="menuBtn">Wake up (quit to menu)</button>
+      <details id="pVoice" class="hidden"><summary>What the voice said</summary><div id="pVoiceLog"></div></details>
     </div>
   </div>
 
@@ -143,6 +153,7 @@
       <div class="title small">Extras</div>
       <div id="gallery"></div>
       <div class="sub2">How to play</div>
+      <button id="xLesson" class="menuBtn">▸ Replay the first-night lesson</button>
       <div class="howto">
         <p><b>Survive until the alarm rings at <span class="num">6</span> AM.</b></p>
         <p class="touchOnly">On a touch screen: drag across the room to look around, tap DOOR and LIGHT on each side, tap CAMERAS at the bottom, and tap ☾ to pause.</p>
@@ -154,6 +165,7 @@
         <p>Pinching yourself gives Lucidity back, more the lower you are. But it is loud, and it draws the monster closer.</p>
         <p>You’ll hear it before you see it: it clicks in the walls, louder the closer it gets. It always breathes at your door before it comes in.</p>
         <p>Below the line on the Lucidity bar, the dream starts to lie. A fake never moves, glows violet, and its breathing runs backwards. The light shows the truth, and a pinch clears every lie.</p>
+        <p>The dream voice speaks a little at a time: click or tap it to hurry it on. The pause menu remembers what it said.</p>
         <p>At <span class="num">6</span> AM the alarm rings and you wake up in your room. Turn it off, then look around: sometimes something follows you out.</p>
       </div>
       <div class="sub2">Credits</div>
@@ -176,9 +188,14 @@
     <div class="panel clear">
       <div id="deadTitle" class="deathTitle">IT FOUND YOU</div>
       <div id="deadSub" class="subtitle">You fell deeper.</div>
+      <div id="deadRecap" title="click to see it all"></div>
+      <div id="deadSpend" class="hidden"><div class="bar"></div><div class="legend"></div></div>
       <div id="deadTip" class="dim"></div>
-      <button id="dRetry" class="menuBtn">Dream again</button>
-      <button id="dMenu" class="menuBtn">Menu</button>
+      <div class="deadBtns">
+        <button id="dRetry" class="menuBtn">Dream again</button>
+        <button id="dLighter" class="menuBtn hidden">Dream lighter <em>(this night only)</em></button>
+        <button id="dMenu" class="menuBtn">Menu</button>
+      </div>
     </div>
   </div>
 
