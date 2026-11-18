@@ -26,6 +26,13 @@ Open the game with **`?dev`** at the end of the address, like
 
 * Green boxes show where the game thinks the **doors** are in your desk room.
   Click anywhere in the room to see that spot's `x` / `y` numbers.
+* While a room still uses stand-in art, a line at the top of the screen tells
+  you the exact file name to save your picture as.
+* If `config.js` has a typo (like a room name that doesn't exist), the helper
+  box lists it with a "did you mean …?" hint. Capital letters don't matter:
+  `"Hall"` and `"hall"` are the same room.
+* **Tab** picks which monster the helper works on (its name is shown at the
+  top of the box). G, Z, X and K then use that monster.
 * Press **G**, then open the cameras. A see-through copy of the monster appears.
   **Click where its feet should go.** Use the **mouse wheel** or **+ / −** to
   resize it and **R** to flip it. The box in the corner shows the exact line to
@@ -95,17 +102,22 @@ To add a new monster:
    * `id` and `name`
    * `frames`: the list of your pictures
    * `fps`: animation speed (Redhorn uses 4)
-   * `levels`: aggression for nights 1–5 (0 = never moves, 20 = relentless)
+   * `levels`: aggression for nights 1–5 (0 = it sleeps all night and never
+     moves, 20 = relentless). Use 0 to make a monster appear only on later nights.
    * `start`, `path` and `retreat`: which rooms it walks through. Give it a
      different route from Redhorn's, e.g. only the west side.
    * `poses`: where it stands in each camera picture (use art-helper mode)
-   * `doorPose`: where it stands in the doorway
+   * `doorPose`: where it stands in the doorway. Keep `h` small enough that its
+     whole body (horns too!) fits inside the door box. Redhorn uses `h: 0.70`.
    * `jumpscareFrames` (optional): special close-up frames for its jumpscare
    * `jumpscareFocus`: which part of the picture rushes at the player
      (`y: 0.2` is near the top, where the face usually is)
 
 > **Tip:** if your art has a white background, ask Claude to cut it out.
 > Redhorn's frames were cut out of your video that way.
+>
+> **Tip:** crop each frame close to the monster's body (not much empty space
+> around it). Then the sizes in `poses` and `doorPose` behave the way you expect.
 
 ## 6. Sounds
 
@@ -113,9 +125,18 @@ All sounds are real recordings downloaded from OpenGameArt.org under free
 licenses. See `CREDITS.md`. To swap one, put a new file in `assets/audio/` and
 change its path in `sounds:` in `config.js`.
 
+The sounds marked `// optional:` in `config.js` (`clock_tick`, `type_key`,
+`reality_snap`, `redhorn_click`, `door_strain`, `hypnic_jolt`, `water_drip`)
+can be missing: the game then plays a stand-in, like a slowed-down or muffled
+copy of another sound.
+
 ## 7. Text
 
 * `title` and `subtitle`: the name on the menu
 * `dreamVoice`: what the voice says at the start of each night
 * `hourSeconds`: how long an in-game hour lasts (default 75 seconds)
-* `lucidityDrain`: how fast Lucidity drains on each night (bigger = harder)
+* `nights`: one `{ … }` block per night. `drain` is how fast Lucidity drains
+  (bigger = harder); the other settings in each block are explained in the
+  comments right above it in `config.js`. Leave a setting out and the game uses
+  its own value. (An older `lucidityDrain: [ … ]` list still works too.)
+* `endlessRules` and `endlessDrain`: the same settings for the Endless Dream
