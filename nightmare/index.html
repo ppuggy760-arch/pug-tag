@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07050c">
+<title>Until the Alarm</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="screen" width="1600" height="900"></canvas>
+
+  <!-- =============== IN-GAME HUD =============== -->
+  <div id="hud" class="hidden">
+    <div id="clockBox">
+      <div id="hudNight">NIGHT 1</div>
+      <div id="hudTime">12 AM</div>
+    </div>
+
+    <div id="lucBox">
+      <div class="lucLabel">LUCIDITY</div>
+      <div id="lucPct">100%</div>
+      <div id="lucBar"><div id="lucFill"></div></div>
+      <div id="usage" aria-label="drain"><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+
+    <div id="voiceBox" class="hidden">
+      <div id="voiceText"></div>
+      <button id="voiceSkip" class="tiny">skip ▸</button>
+    </div>
+
+    <div id="leftPanel" class="doorPanel">
+      <button id="btnLDoor" class="hudBtn door"><span>DOOR</span><kbd>Q</kbd></button>
+      <button id="btnLLight" class="hudBtn light"><span>LIGHT</span><kbd>A</kbd></button>
+    </div>
+    <div id="rightPanel" class="doorPanel">
+      <button id="btnRDoor" class="hudBtn door"><span>DOOR</span><kbd>E</kbd></button>
+      <button id="btnRLight" class="hudBtn light"><span>LIGHT</span><kbd>D</kbd></button>
+    </div>
+
+    <button id="pinchBtn" class="hudBtn pinch"><span>PINCH</span><kbd>F</kbd><b id="pinchCd"></b></button>
+    <button id="camBar"><span>▲&nbsp;&nbsp;CAMERAS&nbsp;&nbsp;▲</span><kbd>SPACE</kbd></button>
+
+    <div id="camOverlay" class="hidden">
+      <div id="camName">CAM 1 — THE NURSERY</div>
+      <div id="camRec"><i></i>REC</div>
+      <div id="camStamp">12:00 AM</div>
+      <div id="camSignal" class="hidden">SIGNAL LOST</div>
+      <div id="camMap">
+        <svg id="camLinks" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+        <div id="youMark">YOU</div>
+      </div>
+    </div>
+
+    <div id="devInfo" class="hidden"></div>
+  </div>
+
+  <!-- =============== SCREENS =============== -->
+  <div id="boot" class="screen">
+    <div class="bootInner">
+      <div id="bootTitle" class="title">UNTIL THE ALARM</div>
+      <div id="loadBar"><div id="loadFill"></div></div>
+      <div id="bootMsg" class="dim">falling asleep…</div>
+      <button id="bootGo" class="menuBtn hidden">click to fall asleep</button>
+      <div class="dim small">headphones recommended · contains jumpscares &amp; flashing</div>
+    </div>
+  </div>
+
+  <div id="menu" class="screen hidden">
+    <div class="menuInner">
+      <div id="menuTitle" class="title glitch">UNTIL THE ALARM</div>
+      <div id="menuSub" class="subtitle">a nightmare in five dreams</div>
+      <div class="menuList">
+        <button id="mContinue" class="menuBtn">Continue <em id="mContinueN">— Night 1</em></button>
+        <button id="mNew" class="menuBtn">New Dream</button>
+        <button id="mEndless" class="menuBtn">Endless Dream</button>
+        <button id="mExtras" class="menuBtn">Extras</button>
+        <button id="mSettings" class="menuBtn">Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="nightCard" class="screen hidden">
+    <div class="cardInner">
+      <div id="cardNight" class="title">Night 1</div>
+      <div id="cardTime" class="subtitle">12:00 AM</div>
+    </div>
+  </div>
+
+  <div id="pause" class="screen hidden">
+    <div class="panel">
+      <div class="title small">Paused</div>
+      <div class="dim">the dream is holding its breath</div>
+      <button id="pResume" class="menuBtn">Resume</button>
+      <button id="pSettings" class="menuBtn">Settings</button>
+      <button id="pQuit" class="menuBtn">Wake up (quit to menu)</button>
+    </div>
+  </div>
+
+  <div id="settings" class="screen hidden">
+    <div class="panel">
+      <div class="title small">Settings</div>
+      <label class="row">Master volume <input id="sVol" type="range" min="0" max="100"></label>
+      <label class="row">Music &amp; ambience <input id="sMusic" type="range" min="0" max="100"></label>
+      <div class="row">Dream effects
+        <span class="seg" id="sFx">
+          <button data-v="full">Full</button><button data-v="low">Low</button><button data-v="off">Off</button>
+        </span>
+      </div>
+      <div class="dim small">"Low" / "Off" reduces screen warping, shaking and flashes.</div>
+      <button id="sFull" class="menuBtn">Toggle fullscreen</button>
+      <button id="sReset" class="menuBtn danger">Erase save</button>
+      <button id="sBack" class="menuBtn">Back</button>
+    </div>
+  </div>
+
+  <div id="extras" class="screen hidden">
+    <div class="panel wide">
+      <div class="title small">Extras</div>
+      <div id="gallery"></div>
+      <div class="sub2">How to play</div>
+      <div class="howto">
+        <p><b>Survive until the alarm rings at 6 AM.</b></p>
+        <p>Look around: move the mouse to the screen edges, use <kbd>←</kbd> <kbd>→</kbd>, or drag on touch screens.</p>
+        <p>Left side: <kbd>Q</kbd> door, <kbd>A</kbd> light. Right side: <kbd>E</kbd> door, <kbd>D</kbd> light.</p>
+        <p><kbd>SPACE</kbd> cameras, <kbd>1</kbd>–<kbd>9</kbd> switch camera, <kbd>F</kbd> pinch yourself, <kbd>ESC</kbd> pause.</p>
+        <p>Everything drains <b>Lucidity</b>. If it hits 0%, the dream stops listening to you.</p>
+      </div>
+      <div class="sub2">Credits</div>
+      <div id="creditList"></div>
+      <button id="xBack" class="menuBtn">Back</button>
+    </div>
+  </div>
+
+  <div id="custom" class="screen hidden">
+    <div class="panel">
+      <div class="title small">Endless Dream</div>
+      <div class="dim">Set how hungry each nightmare is (0 – 20).</div>
+      <div id="customList"></div>
+      <button id="cGo" class="menuBtn">Fall asleep</button>
+      <button id="cBack" class="menuBtn">Back</button>
+    </div>
+  </div>
+
+  <div id="dead" class="screen hidden">
+    <div class="panel clear">
+      <div id="deadTitle" class="deathTitle">IT FOUND YOU</div>
+      <div id="deadSub" class="subtitle">You will not wake up from this one.</div>
+      <div id="deadTip" class="dim"></div>
+      <button id="dRetry" class="menuBtn">Dream again</button>
+      <button id="dMenu" class="menuBtn">Menu</button>
+    </div>
+  </div>
+
+  <div id="win" class="screen hidden">
+    <div class="panel clear">
+      <div id="winClock" class="winClock"><span id="winH">5</span>&nbsp;AM</div>
+      <div id="winTitle" class="title">You woke up</div>
+      <div id="winSub" class="subtitle"></div>
+      <button id="wNext" class="menuBtn">Next night</button>
+      <button id="wMenu" class="menuBtn">Menu</button>
+    </div>
+  </div>
+
+  <div id="flash"></div>
+</div>
+<div id="rotate"><div>↻</div>Turn your phone sideways<br><small>the dream needs a wide screen</small></div>
+
+<noscript>This game needs JavaScript.</noscript>
+<script src="js/config.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
