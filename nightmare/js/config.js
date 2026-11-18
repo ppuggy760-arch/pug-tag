@@ -18,9 +18,30 @@ window.GAME_CONFIG = {
   /* How many real seconds one in-game hour lasts (12 AM -> 6 AM = 6 hours). */
   hourSeconds: 75,
 
-  /* Lucidity (your "power"). Higher drain = harder. One number per night. */
-  lucidityDrain: [0.09, 0.10, 0.11, 0.12, 0.13],
-  /* Extra drain in the Endless Dream (custom night). */
+  /* ------------------------------------------------------------------
+     THE FIVE NIGHTS. One { ... } block per night, Night 1 first.
+     Leave a setting out and the game uses its own value for it.
+       drain:       how fast Lucidity (your "power") drains. Bigger = harder.
+       stepChance:  how often you hear its footsteps (1 = always, 0.5 = half the time).
+       lies:        true = when Lucidity is low, the dream can show fake monsters.
+       pinchRadius: how many rooms away a pinch can be heard.
+       youCam:      true = the spooky "CAM 7" can appear once tonight.
+       stare:       seconds you can watch it on a camera before it steps closer (0 = never).
+       gasp:        seconds a shut door can stay shut before it gives up and opens (0 = never).
+       doorFree:    seconds a door can stay shut before it costs extra Lucidity.
+       falseDawn:   the hour a fake 6 AM happens (5.33 = 5:20 AM). Leave out for none.
+     (Old config files with lucidityDrain: [ ... ] still work.)
+     ------------------------------------------------------------------ */
+  nights: [
+    { drain: 0.09, stepChance: 1,    lies: false, pinchRadius: 1, youCam: false, stare: 0, gasp: 0,  doorFree: 14 },
+    { drain: 0.10, stepChance: 1,    lies: true,  pinchRadius: 1, youCam: false, stare: 0, gasp: 0,  doorFree: 12 },
+    { drain: 0.11, stepChance: 0.8,  lies: true,  pinchRadius: 2, youCam: true,  stare: 0, gasp: 0,  doorFree: 11 },
+    { drain: 0.12, stepChance: 0.65, lies: true,  pinchRadius: 2, youCam: true,  stare: 5, gasp: 32, doorFree: 10 },
+    { drain: 0.13, stepChance: 0.5,  lies: true,  pinchRadius: 2, youCam: true,  stare: 4, gasp: 28, doorFree: 10, falseDawn: 5.33 },
+  ],
+  /* The same settings for the Endless Dream (custom night). */
+  endlessRules: { stepChance: 0.6, lies: true, pinchRadius: 2, youCam: true, stare: 4.5, gasp: 28, doorFree: 10 },
+  /* Lucidity drain in the Endless Dream. */
   endlessDrain: 0.13,
 
   /* PINCH YOURSELF: gives back lucidity but makes noise
@@ -63,7 +84,7 @@ window.GAME_CONFIG = {
      MONSTERS. Copy a whole { ... } block to add a new one.
      frames:  your animation pictures in order (transparent PNGs).
      fps:     animation speed (frames per second).
-     levels:  how aggressive it is on nights 1-5 (0 = never moves, 20 = max).
+     levels:  how aggressive it is on nights 1-5 (0 = it sleeps all night, 20 = max).
      path:    where it can walk next from each room. "door:left" /
               "door:right" means it reaches your door.
      retreat: rooms it runs back to when it finds the door shut.
@@ -72,6 +93,8 @@ window.GAME_CONFIG = {
               (above 1 = feet below the picture), h = height of the
               monster compared to the picture height. flip: true mirrors it.
      doorPose: same idea, but inside the doorway box of your desk room.
+     Room names must match a camera id exactly (the game fixes capital
+     letters for you, and ?dev mode lists any typos it finds).
      ------------------------------------------------------------------ */
   monsters: [
     {
@@ -113,9 +136,9 @@ window.GAME_CONFIG = {
         west:    { x: 0.55, y: 1.05, h: 0.92 },
         east:    { x: 0.45, y: 1.05, h: 0.92, flip: true },
       },
-      doorPose: {
-        left:  { x: 0.55, y: 1.10, h: 1.05 },
-        right: { x: 0.45, y: 1.10, h: 1.05, flip: true },
+      doorPose: {   // small enough that both horns fit inside the doorway
+        left:  { x: 0.55, y: 1.00, h: 0.70 },
+        right: { x: 0.45, y: 1.00, h: 0.70, flip: true },
       },
     },
   ],
@@ -123,6 +146,8 @@ window.GAME_CONFIG = {
   /* ------------------------------------------------------------------
      SOUNDS (real recordings downloaded from the internet — see CREDITS.md).
      Swap any file by changing its path.
+     The ones marked "optional" can be missing: the game then uses a
+     stand-in sound (a slowed-down or muffled copy of another one).
      ------------------------------------------------------------------ */
   sounds: {
     ambience:   "assets/audio/ambience.mp3",
@@ -147,6 +172,14 @@ window.GAME_CONFIG = {
     static:     "assets/audio/static.mp3",
     ui_click:   "assets/audio/ui_click.mp3",
     hour_chime: "assets/audio/hour_chime.mp3",
+    // optional:
+    clock_tick:    "assets/audio/clock_tick.mp3",     // a wind-up clock ticking (falling asleep, the last half hour)
+    type_key:      "assets/audio/type_key.mp3",       // one typewriter key, while the dream voice types
+    reality_snap:  "assets/audio/reality_snap.mp3",   // a sharp snap when you pinch yourself
+    redhorn_click: "assets/audio/redhorn_click.mp3",  // Redhorn's clicking in the walls
+    door_strain:   "assets/audio/door_strain.mp3",    // a door groaning when it's been shut too long
+    hypnic_jolt:   "assets/audio/hypnic_jolt.mp3",    // the falling-into-the-dream thump
+    water_drip:    "assets/audio/water_drip.mp3",     // drips for the Drowned Parlor camera
   },
 
   /* ------------------------------------------------------------------
@@ -179,7 +212,7 @@ window.GAME_CONFIG = {
     { what: "Sound: Door opening", who: "yd", license: "CC0", url: "https://opengameart.org/content/platformer-sounds-terminal-interaction-door-shots-bang-and-footsteps" },
     { what: "Sound: Hallway light buzz", who: "themightyglider", license: "CC0", url: "https://opengameart.org/content/electric-buzz" },
     { what: "Sound: Power down", who: "Cough-E", license: "CC0", url: "https://opengameart.org/content/machine-shutting-down" },
-    { what: "Sound: 6 AM alarm bell", who: "qubodup", license: "CC0", url: "https://opengameart.org/content/doorbell-ring" },
+    { what: "Sound: 6 AM alarm clock", who: "rubberduck", license: "CC0", url: "https://opengameart.org/content/30-cc0-sfx-loops" },
     { what: "Sound: Morning birds", who: "isaiah658", license: "CC0", url: "https://opengameart.org/content/ambient-bird-sounds" },
     { what: "Sound: Cameras up", who: "Little Robot Sound Factory", license: "CC-BY 3.0", url: "https://opengameart.org/content/electric-sound-effects-library" },
     { what: "Sound: Cameras down", who: "Little Robot Sound Factory", license: "CC-BY 3.0", url: "https://opengameart.org/content/electric-sound-effects-library" },
@@ -187,6 +220,14 @@ window.GAME_CONFIG = {
     { what: "Sound: Camera static", who: "bretbernhoft", license: "CC0", url: "https://opengameart.org/content/frequency-static-sound-effects" },
     { what: "Sound: Menu click", who: "Kenney (Kenney Vleugels, www.kenney.nl)", license: "CC0", url: "https://opengameart.org/content/51-ui-sound-effects-buttons-switches-and-clicks" },
     { what: "Sound: Hour bell", who: "Fun Gi Development", license: "CC-BY 3.0", url: "https://opengameart.org/content/tolling-bell-sfx" },
+    { what: "Sound: Clock ticking", who: "AntumDeluge", license: "CC0", url: "https://opengameart.org/content/ticking-clock-0" },
+    { what: "Sound: Typewriter key", who: "Cassie-OrbitGames", license: "CC0", url: "https://opengameart.org/content/typewriter-sounds" },
+    { what: "Sound: Finger snap", who: "Vinrax", license: "CC0", url: "https://opengameart.org/content/snap-of-the-fingers-sounds" },
+    { what: "Sound: Redhorn's clicking", who: "spookymodem", license: "CC-BY 3.0", url: "https://opengameart.org/content/spider-chattering" },
+    { what: "Sound: Door groaning", who: "bart (Bart Kelsey)", license: "CC-BY 3.0", url: "https://opengameart.org/content/25-spooky-sound-effects" },
+    { what: "Sound: Falling into the dream (whoosh)", who: "bosslevelaudio", license: "CC0", url: "https://opengameart.org/content/wierd-whooshes" },
+    { what: "Sound: Falling into the dream (thud)", who: "NenadSimic", license: "CC0", url: "https://opengameart.org/content/muffled-distant-explosion" },
+    { what: "Sound: Water drips", who: "qubodup", license: "CC0", url: "https://opengameart.org/content/dripping-water-loop" },
     { what: "Fonts: IM Fell English & SC", who: "Igino Marini", license: "OFL 1.1" },
     { what: "Font: Special Elite", who: "Astigmatic", license: "Apache 2.0" },
     { what: "Font: VT323", who: "Peter Hull", license: "OFL 1.1" },

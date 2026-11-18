@@ -7,7 +7,9 @@
 @font-face { font-family: "Eater"; src: url(assets/fonts/Eater-Regular.ttf) format("truetype"); font-display: block; }
 
 :root {
-  --u: 16px;                 /* 1% of the stage width, set by game.js */
+  --u: 16px;                 /* 1% of the 1600px stage */
+  --scale: 1;                /* how much the stage is shrunk on screen, set by game.js layout() */
+  --blurK: 1;                /* blur strength: 1 Full, .5 Low, 0 Off (Dream effects setting) */
   --bone: #e9dfcf;
   --bone-dim: #a79b8a;
   --blood: #c4132b;
@@ -20,11 +22,17 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { width: 100%; height: 100%; overflow: hidden; background: #000; color: var(--bone);
+html, body { width: 100%; height: 100%; overflow: hidden; color: var(--bone);
   font-family: "Fell", Georgia, serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+/* the bars around the 16:9 stage: dark dream-fog instead of flat black */
+html { background: #000; }
+body { background: radial-gradient(ellipse at 50% 50%, #120a1c 0%, #07050c 55%, #000 100%); }
 
-#stage { position: absolute; left: 0; top: 0; width: 1600px; height: 900px; overflow: hidden; background: var(--ink);
-  transform-origin: 0 0; }
+/* fixed, so the unscaled stage can never make a phone's page wider than the screen */
+#stage { position: fixed; left: 0; top: 0; width: 1600px; height: 900px; overflow: hidden; background: var(--ink);
+  transform-origin: 0 0; box-shadow: 0 0 120px 30px rgba(40, 20, 70, .45), 0 0 40px rgba(120, 20, 50, .25); }
+.num { font-family: "VT323", monospace; font-size: 1.15em; letter-spacing: 0; font-style: normal; }
+.nowrap { white-space: nowrap; }
 #screen { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: auto; }
 
 .hidden { display: none !important; }
@@ -35,10 +43,18 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 /* ======================= HUD ======================= */
 #hud { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 #hud button { pointer-events: auto; }
+/* the HUD fades in when a night starts (backwards fill: afterwards inline styles like the voice fade still work) */
+#hud.enter { animation: hudIn 1.4s ease-out backwards; }
+#hud.enter #voiceBox { animation: hudIn 1s .5s ease-out backwards; }
+@keyframes hudIn { from { opacity: 0; filter: blur(calc(6px * var(--blurK))); } to { opacity: 1; filter: none; } }
 
 #clockBox { position: absolute; left: calc(var(--u)*1.6); top: calc(var(--u)*1.2); text-shadow: 0 0 .4em #000, 0 0 1em var(--dream-glow); }
 #hudNight { font-family: "Fell SC", serif; font-size: calc(var(--u)*1.6); letter-spacing: .18em; color: var(--bone-dim); }
 #hudTime { font-family: "VT323", monospace; font-size: calc(var(--u)*4.4); line-height: .95; color: var(--bone); }
+#pauseBtn { position: absolute; left: 100%; top: calc(var(--u)*.2); margin-left: calc(var(--u)*1.2);
+  width: calc(var(--u)*3.2); height: calc(var(--u)*3.2); border-radius: 50%; font-size: calc(var(--u)*1.7); line-height: 1;
+  color: var(--bone-dim); background: var(--panel); border: 1px solid var(--line); text-shadow: 0 0 .5em var(--dream-glow); }
+#pauseBtn:hover, #pauseBtn:focus-visible { color: #fff; border-color: rgba(233,223,207,.45); outline: none; }
 
 #lucBox { position: absolute; right: calc(var(--u)*1.6); top: calc(var(--u)*1.2); text-align: right; min-width: calc(var(--u)*15);
   text-shadow: 0 0 .4em #000; }
@@ -67,7 +83,8 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 .hudBtn.light.on { background: rgba(230, 200, 120, .82); color: #1b1206; border-color: #fff1c6; box-shadow: 0 0 1.6em rgba(255, 220, 140, .7); }
 .hudBtn.light.on kbd { color: #3a2b10; border-color: rgba(0,0,0,.3); }
 .hudBtn.jammed { opacity: .45; filter: grayscale(1); }
-.hudBtn.dead { opacity: .25; pointer-events: none !important; }
+.hudBtn.dead, #camBar.dead { opacity: .25; pointer-events: none !important; box-shadow: none; }
+.hudBtn:focus-visible, #camBar:focus-visible { outline: 2px solid rgba(233,223,207,.6); outline-offset: 2px; }
 
 #pinchBtn { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--u)*5.7); min-width: calc(var(--u)*9); overflow: hidden;
   font-size: calc(var(--u)*1.25); padding: calc(var(--u)*.45) calc(var(--u)*.9); }
@@ -86,6 +103,10 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
   padding: calc(var(--u)*1) calc(var(--u)*1.4) calc(var(--u)*.6); background: rgba(8, 5, 14, .7); border: 1px solid var(--line);
   border-radius: calc(var(--u)*.4); font-family: "Special Elite", monospace; font-size: calc(var(--u)*1.12); line-height: 1.45;
   color: #e6dccc; text-shadow: 0 0 .5em rgba(157,132,255,.5); pointer-events: auto; }
+/* while the cameras are up the voice tucks into the bottom-left corner, out of the picture */
+#voiceBox.docked { left: calc(var(--u)*2); top: auto; bottom: calc(var(--u)*6); transform: none; width: calc(var(--u)*30);
+  background: rgba(8, 5, 14, .45); }
+#voiceBox.docked > * { opacity: .6; }
 #voiceText { white-space: pre-wrap; max-height: calc(var(--u)*13); overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
 #voiceText span.caret { display: inline-block; width: .5em; animation: caret 1s steps(1) infinite; }
 @keyframes caret { 50% { opacity: 0; } }
@@ -95,14 +116,18 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 /* ---------- camera overlay ---------- */
 #camOverlay { position: absolute; inset: 0; pointer-events: none; font-family: "VT323", monospace; color: #e8f1e6;
   text-shadow: 0 0 6px rgba(160, 255, 200, .45), 0 0 2px #000; }
-#camName { position: absolute; left: calc(var(--u)*2.2); top: calc(var(--u)*8.4); font-size: calc(var(--u)*2.1); letter-spacing: .06em; max-width: calc(var(--u)*24); line-height: 1; }
-#camRec { position: absolute; left: calc(var(--u)*2.2); top: calc(var(--u)*11.2); font-size: calc(var(--u)*1.7); display: flex; align-items: center; gap: .35em; }
+/* camera name + REC line in one column, so a long room name pushes REC down instead of covering it */
+#camInfo { position: absolute; left: calc(var(--u)*2.2); top: calc(var(--u)*8.4); display: flex; flex-direction: column; gap: calc(var(--u)*.6); }
+#camName { font-size: calc(var(--u)*2.1); letter-spacing: .06em; max-width: calc(var(--u)*30); line-height: 1; }
+#camRecRow { display: flex; align-items: center; gap: calc(var(--u)*1.2); font-size: calc(var(--u)*1.7); }
+#camRec { display: flex; align-items: center; gap: .35em; }
 #camRec i { width: .55em; height: .55em; border-radius: 50%; background: #ff3346; box-shadow: 0 0 8px #ff3346; animation: rec 1.2s steps(1) infinite; }
 @keyframes rec { 50% { opacity: 0; } }
-#camStamp { position: absolute; left: calc(var(--u)*7.4); top: calc(var(--u)*11.2); font-size: calc(var(--u)*1.7); }
 #camSignal { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); font-size: calc(var(--u)*4.4);
-  letter-spacing: .2em; color: #fff; text-shadow: 0 0 12px #fff; animation: sig .25s steps(2) infinite; }
-@keyframes sig { 50% { opacity: .3; } }
+  letter-spacing: .2em; color: #fff; text-shadow: 0 0 12px #fff; animation: sig 1s ease-in-out infinite alternate;
+  display: flex; flex-direction: column; align-items: center; }
+#camSignal small { font-size: .38em; letter-spacing: .3em; opacity: .75; margin-top: .3em; }
+@keyframes sig { from { opacity: .45; } to { opacity: 1; } }
 #camMap { position: absolute; right: calc(var(--u)*2); bottom: calc(var(--u)*5.6); width: calc(var(--u)*26); height: calc(var(--u)*20);
   background: rgba(6, 12, 10, .62); border: 1px solid rgba(160,255,200,.3); border-radius: calc(var(--u)*.4); pointer-events: auto; }
 #camLinks { position: absolute; inset: 6%; width: 88%; height: 88%; }
@@ -115,7 +140,7 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 #youMark { position: absolute; left: 50%; top: 93%; transform: translate(-50%, -50%); font-family: "Fell SC", serif;
   font-size: calc(var(--u)*1.2); letter-spacing: .2em; color: #ffd7a0; padding: .1em .5em; border: 1px dashed rgba(255,215,160,.6); }
 
-#devInfo { position: absolute; left: calc(var(--u)*1.6); top: calc(var(--u)*11); font-family: "VT323", monospace; font-size: calc(var(--u)*1.2);
+#devInfo { position: absolute; left: calc(var(--u)*1.6); top: calc(var(--u)*14.5); font-family: "VT323", monospace; font-size: calc(var(--u)*1.2);
   color: #9cff9c; background: rgba(0,0,0,.65); padding: .5em .8em; white-space: pre; pointer-events: auto; user-select: text; -webkit-user-select: text; max-width: 46%; }
 #devInfo textarea { width: 100%; height: 5em; background: #000; color: #9cff9c; font: inherit; border: 1px solid #285; }
 
@@ -132,46 +157,52 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
   font-family: "Fell SC", serif; font-size: calc(var(--u)*2.1); letter-spacing: .14em; color: var(--bone);
   transition: color .2s, text-shadow .2s, letter-spacing .3s; position: relative; }
 .menuBtn:hover, .menuBtn:focus-visible { color: #fff; outline: none; letter-spacing: .2em; text-shadow: 0 0 .5em var(--blood-glow), 0 0 1.2em var(--blood-glow); }
-.menuBtn:hover::before { content: "❧"; position: absolute; left: -.2em; transform: translateX(-100%) scaleX(-1); color: var(--blood); }
+.menuBtn:hover::before, .menuBtn:focus-visible::before, .menuBtn:active::before { content: "❧"; position: absolute; left: -.2em; transform: translateX(-100%) scaleX(-1); color: var(--blood); }
+.menuBtn:active { color: #fff; text-shadow: 0 0 .5em var(--blood-glow), 0 0 1.2em var(--blood-glow); }
 .menuBtn em { font-family: "Fell", serif; font-style: italic; letter-spacing: .04em; color: var(--bone-dim); font-size: .8em; }
 .menuBtn.danger { color: #ff8a96; font-size: calc(var(--u)*1.5); }
-.menuBtn.locked { opacity: .35; pointer-events: none; }
+.menuBtn.locked { opacity: .35; pointer-events: none; cursor: default; }
 
 /* boot */
 #boot { background: radial-gradient(ellipse at 50% 40%, #1b1030 0%, #07050c 70%); cursor: pointer; }
 .bootInner { width: 70%; }
 #bootTitle { font-size: calc(var(--u)*5); animation: breathe 5s ease-in-out infinite; }
+.bootInner .small { line-height: 1.5; }
 #loadBar { width: 40%; height: 2px; margin: calc(var(--u)*2) auto calc(var(--u)*1); background: rgba(255,255,255,.1); overflow: hidden; }
 #loadFill { width: 0; height: 100%; background: var(--dream); box-shadow: 0 0 8px var(--dream); transition: width .2s; }
 #bootGo { font-size: calc(var(--u)*2.2); animation: breathe 3s ease-in-out infinite; }
-@keyframes breathe { 0%,100% { opacity: .65; filter: blur(.4px); } 50% { opacity: 1; filter: blur(0); } }
+@keyframes breathe { 0%,100% { opacity: .65; filter: blur(calc(.4px * var(--blurK))); } 50% { opacity: 1; filter: blur(0); } }
 
 /* menu */
 #menu { background: radial-gradient(ellipse at 30% 50%, rgba(80, 20, 40, .35) 0%, transparent 55%),
   radial-gradient(ellipse at 75% 40%, rgba(70, 50, 140, .3) 0%, transparent 60%), rgba(5, 3, 9, .55); justify-content: flex-start; }
-.menuInner { position: relative; z-index: 2; text-align: left; margin-left: 7%; max-width: 56%; }
+.menuInner { position: relative; z-index: 2; text-align: left; margin-left: 7%; max-width: 52%; }
+/* a pool of darkness behind the menu so the title never sits on the monster */
+.menuInner::before { content: ""; position: absolute; z-index: -1; left: -30%; top: -25%; width: 150%; height: 150%; pointer-events: none;
+  background: radial-gradient(ellipse at 40% 45%, rgba(5,3,10,.78) 0%, rgba(5,3,10,.45) 45%, rgba(5,3,10,0) 70%); }
 .menuInner .menuBtn { margin-left: 0; padding-left: 0; text-align: left; }
 .menuInner .menuBtn:hover::before { left: -.4em; }
 .menuList { margin-top: calc(var(--u)*3); }
-#menuTitle { font-size: calc(var(--u)*7); }
+#menuTitle { font-size: calc(var(--u)*6.2); }
 .glitch { animation: titleDrift 7s ease-in-out infinite; }
 @keyframes titleDrift { 0%,100% { transform: translate(0,0); filter: blur(0); letter-spacing: .12em; }
-  45% { transform: translate(.15em, -.05em); filter: blur(.6px); letter-spacing: .15em; }
-  50% { transform: translate(-.1em, .05em) skewX(-2deg); filter: blur(1.4px); }
+  45% { transform: translate(.15em, -.05em); filter: blur(calc(.6px * var(--blurK))); letter-spacing: .15em; }
+  50% { transform: translate(-.1em, .05em) skewX(-2deg); filter: blur(calc(1.4px * var(--blurK))); }
   55% { transform: translate(0,0); filter: blur(0); } }
-.title.flick { animation: flick .12s steps(2) 3; }
-@keyframes flick { 50% { opacity: .2; transform: translateX(4px); color: var(--blood); } }
 
 /* night card */
 #nightCard { background: #000; transition: opacity 1.2s; }
 #nightCard .title { font-size: calc(var(--u)*7.5); }
-#nightCard.fade { opacity: 0; }
+#nightCard.fade { opacity: 0; pointer-events: none; }
 .cardInner { animation: cardIn 2.4s ease-out both; }
-@keyframes cardIn { from { opacity: 0; filter: blur(14px); letter-spacing: .5em; } to { opacity: 1; filter: blur(0); } }
+@keyframes cardIn { from { opacity: 0; filter: blur(calc(14px * var(--blurK))); letter-spacing: .5em; } to { opacity: 1; filter: blur(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* panels */
 .panel { background: rgba(8, 5, 14, .86); border: 1px solid var(--line); border-radius: calc(var(--u)*.6); padding: calc(var(--u)*2.2) calc(var(--u)*3.4);
-  min-width: 40%; max-height: 92%; overflow-y: auto; box-shadow: 0 0 4em rgba(0,0,0,.9), 0 0 2em rgba(157,132,255,.12); }
+  min-width: 40%; max-height: 92%; overflow-y: auto; box-shadow: 0 0 4em rgba(0,0,0,.9), 0 0 2em rgba(157,132,255,.12);
+  touch-action: pan-y; /* the page blocks touch gestures; long panels still scroll with a finger */ }
+.panel > .dim { font-size: calc(var(--u)*1.3); }
 .panel.wide { width: 74%; text-align: left; }
 .panel.wide .menuBtn { margin: calc(var(--u)*1) auto 0; }
 .panel.clear { background: transparent; border: none; box-shadow: none; }
@@ -203,7 +234,7 @@ input[type=range] { width: 50%; accent-color: #b7a6ff; }
 #dead { background: radial-gradient(ellipse at center, rgba(60, 0, 8, .82) 0%, rgba(0,0,0,.96) 70%); }
 .deathTitle { font-family: "Eater", "Fell SC", serif; font-size: calc(var(--u)*7.2); color: var(--blood);
   text-shadow: 0 0 .3em rgba(0,0,0,.9), 0 0 .8em rgba(255, 30, 60, .6); animation: deathIn 1.4s ease-out both; }
-@keyframes deathIn { from { opacity: 0; transform: scale(1.4); filter: blur(10px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes deathIn { from { opacity: 0; transform: scale(1.4); filter: blur(calc(10px * var(--blurK))); } to { opacity: 1; transform: none; filter: none; } }
 #deadSub { margin-bottom: 1em; }
 #deadTip { font-size: calc(var(--u)*1.3); margin-bottom: 1.5em; }
 
@@ -219,20 +250,65 @@ input[type=range] { width: 50%; accent-color: #b7a6ff; }
 
 #flash { position: absolute; inset: 0; z-index: 30; pointer-events: none; background: #fff; opacity: 0; }
 
+/* ---------- Dream effects setting (html[data-fx], set by game.js) ---------- */
+[data-fx=low] { --blurK: .5; }
+[data-fx=off] { --blurK: 0; }
+[data-fx=off] .glitch, [data-fx=off] #bootTitle, [data-fx=off] #bootGo, [data-fx=off] #lucPct.low { animation: none; }
+[data-fx=off] .cardInner, [data-fx=off] .deathTitle { animation-name: fadeIn; }
+[data-fx=off] #hud.enter, [data-fx=off] #hud.enter #voiceBox { animation-name: fadeIn; }
 
-/* phones / small screens: bigger touch targets */
+.touchOnly { display: none; }
+
+
+/* ---------- touch screens: real-world sizes ----------
+   The whole stage is shrunk by --scale, so "44px / var(--scale)" ends up as 44 real pixels:
+   touch targets stay >= 44px and text >= ~14px even on a small phone. */
 @media (pointer: coarse) {
-  .hudBtn { min-width: calc(var(--u)*13); padding: calc(var(--u)*1.1) calc(var(--u)*1.3); font-size: calc(var(--u)*1.9); }
-  .hudBtn kbd, #camBar kbd { display: none; }
-  #camBar { width: calc(var(--u)*36); padding: calc(var(--u)*1.2) 0; font-size: calc(var(--u)*2); }
-  .camBtn { font-size: calc(var(--u)*1.9); }
-  #camMap { width: calc(var(--u)*34); height: calc(var(--u)*25); }
-  #pinchBtn { bottom: calc(var(--u)*7.6); font-size: calc(var(--u)*1.6); }
+  :root { --t14: calc(14px / var(--scale)); --t16: calc(16px / var(--scale)); --tap: calc(44px / var(--scale)); }
+  .touchOnly { display: block; }
+  .keysOnly, .hudBtn kbd, #camBar kbd { display: none; }
+
+  .hudBtn { min-width: calc(var(--u)*13); min-height: calc(48px / var(--scale)); padding: calc(var(--u)*1.1) calc(var(--u)*1.3);
+    font-size: max(calc(var(--u)*1.9), var(--t16)); justify-content: center; }
+  #camBar { width: calc(var(--u)*36); min-height: calc(48px / var(--scale)); padding: calc(var(--u)*1.2) 0; font-size: max(calc(var(--u)*2), var(--t16)); }
+  /* the pinch button sits just above the (taller) camera bar */
+  #pinchBtn { bottom: calc(var(--u)*2.4 + max(var(--u)*4.4, 48px / var(--scale))); font-size: max(calc(var(--u)*1.6), var(--t14)); min-height: var(--tap); }
+  #pauseBtn { width: max(calc(var(--u)*3.2), var(--tap)); height: max(calc(var(--u)*3.2), var(--tap)); font-size: max(calc(var(--u)*1.7), var(--t16)); }
+
+  .camBtn { font-size: max(calc(var(--u)*1.9), var(--t14)); min-width: calc(44px / var(--scale)); min-height: calc(44px / var(--scale));
+    display: flex; align-items: center; justify-content: center; }
+  /* tall enough that 44px buttons never overlap; it sits above the (taller) camera bar */
+  #camMap { width: calc(var(--u)*30); height: max(calc(var(--u)*25), calc(250px / var(--scale)));
+    bottom: calc(var(--u)*2.4 + max(var(--u)*4.4, 48px / var(--scale))); }
+  #camName { font-size: max(calc(var(--u)*2.1), var(--t16)); }
+  #camRecRow { font-size: max(calc(var(--u)*1.7), var(--t14)); }
+  #youMark { font-size: max(calc(var(--u)*1.2), var(--t14)); }
+  #hudNight, .lucLabel { font-size: max(calc(var(--u)*1.5), var(--t14)); }
+
+  #voiceBox { width: calc(var(--u)*56); font-size: max(calc(var(--u)*1.12), var(--t14)); }
+  #voiceText { max-height: max(calc(var(--u)*13), calc(var(--t14) * 1.45 * 5)); }
+  #voiceBox.docked { width: calc(var(--u)*40); bottom: calc(var(--u)*2.4 + max(var(--u)*4.4, 48px / var(--scale))); }
+  .tiny { font-size: max(calc(var(--u)*1.2), var(--t14)); padding: .4em .8em; min-height: var(--tap); }
+
+  .menuBtn { min-height: var(--tap); padding-block: calc(var(--u)*.8); font-size: max(calc(var(--u)*2.1), var(--t16)); }
+  .menuBtn.danger { font-size: max(calc(var(--u)*1.5), var(--t14)); }
+  .row { font-size: max(calc(var(--u)*1.6), var(--t14)); margin: calc(var(--u)*.4) 0; }
+  .panel { padding: calc(var(--u)*1.4) calc(var(--u)*3); }
+  .panel .menuBtn { margin-block: calc(var(--u)*.2); }
+  .panel > .dim { font-size: max(calc(var(--u)*1.3), var(--t14)); }
+  .btnRow { display: flex; justify-content: center; align-items: center; gap: calc(var(--u)*3); }
+  .btnRow .menuBtn { margin-inline: 0; }
+  .seg button { min-height: var(--tap); font-size: max(calc(var(--u)*1.35), var(--t14)); }
+  input[type=range] { min-height: var(--tap); }
+  .subtitle { font-size: max(calc(var(--u)*1.9), var(--t14)); }
+  .dim.small, .small { font-size: max(calc(var(--u)*1.1), var(--t14)); }
+  .howto, .gDesc, #deadTip, #creditList { font-size: max(calc(var(--u)*1.3), var(--t14)); }
+  .sub2 { font-size: max(calc(var(--u)*2), var(--t16)); }
 }
 
-/* portrait phones: ask to rotate */
+/* portrait phones (not tablets): ask to rotate */
 #rotate { display: none; }
-@media (orientation: portrait) and (pointer: coarse) {
+@media (orientation: portrait) and (pointer: coarse) and (max-width: 600px) {
   #rotate { display: flex; position: fixed; inset: 0; z-index: 100; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
     background: #07050c; color: #e9dfcf; font-family: "Fell SC", serif; font-size: 22px; letter-spacing: .1em; text-align: center; }
   #rotate div { font-size: 64px; animation: spin 2.4s ease-in-out infinite; }
