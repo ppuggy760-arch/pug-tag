@@ -1,0 +1,248 @@
+[
+ {
+  "file": "ArmChair_01",
+  "role": "model",
+  "title": "Arm Chair 01",
+  "author": "Kirill Sannikov",
+  "license": "CC0 1.0 (Poly Haven)",
+  "source": "Poly Haven",
+  "source_page": "https://polyhaven.com/a/ArmChair_01",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/ArmChair_01/ArmChair_01_1k.gltf",
+  "textures": {
+   "nor": "ArmChair_01_nor.jpg",
+   "diff": "ArmChair_01_diff.jpg",
+   "arm": "ArmChair_01_arm.jpg"
+  },
+  "primitives": [
+   {
+    "node": "ArmChair_01",
+    "material": "Armchair_01",
+    "alpha": "OPAQUE",
+    "base": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "tris": 5626
+   }
+  ],
+  "notes": "Free (CC0) vintage Victorian armchair 3D model - varnished carved wood frame, upholstered seat; gothic/classic styling ideal for interiors, period scenes, and renders."
+ },
+ {
+  "file": "alarm_clock_01",
+  "role": "model",
+  "title": "Alarm Clock 01",
+  "author": "Yann Kervran, James Ray Cock",
+  "license": "CC0 1.0 (Poly Haven)",
+  "source": "Poly Haven",
+  "source_page": "https://polyhaven.com/a/alarm_clock_01",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/2k/alarm_clock_01/alarm_clock_01_2k.gltf",
+  "textures": {
+   "nor": "alarm_clock_01_nor.jpg",
+   "diff": "alarm_clock_01_diff.jpg",
+   "arm": "alarm_clock_01_arm.jpg"
+  },
+  "primitives": [
+   {
+    "node": "alarm_clock_01",
+    "material": "alarm_clock_01",
+    "alpha": "OPAQUE",
+    "base": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "tris": 7840
+   },
+   {
+    "node": "alarm_clock_01",
+    "material": "alarm_clock_01_Glass",
+    "alpha": "BLEND",
+    "base": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "tris": 720
+   },
+   {
+    "node": "houd_hand",
+    "material": "alarm_clock_01",
+    "alpha": "OPAQUE",
+    "base": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "tris": 200
+   },
+   {
+    "node": "minute_hand",
+    "material": "alarm_clock_01",
+    "alpha": "OPAQUE",
+    "base": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "tris": 152
+   },
+   {
+    "node": "second_hand",
+    "material": "alarm_clock_01",
+    "alpha": "OPAQUE",
+    "base": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "tris": 73
+   }
+  ],
+  "notes": "Free 8K rigged model of a retro aqua twin-bell bedside alarm clock with worn metal, Roman numerals, and animatable parts."
+ },
+ {
+  "file": "old_bed_frame",
+  "role": "model",
+  "title": "Old Bed Frame",
+  "author": "Luca B",
+  "license": "CC0 1.0 (Poly Haven)",
+  "source": "Poly Haven",
+  "source_page": "https://polyhaven.com/a/old_bed_frame",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/old_bed_frame/old_bed_frame_1k.gltf",
+  "textures": {
+   "nor": "old_bed_frame_nor.jpg",
+   "diff": "old_bed_frame_diff.jpg",
+   "arm": "old_bed_frame_arm.jpg"
+  },
+  "primitives": [
+   {
+    "node": "old_bed_frame",
+    "material": "old_bed_frame",
+    "alpha": "OPAQUE",
+    "base": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "tris": 49990
+   }
+  ],
+  "notes": "Free 8K old metal bed frame with tubular rails, wire mesh base, chipped white paint and rust stains. Sturdy single-size vintage look with worn details."
+ },
+ {
+  "file": "painted_wooden_nightstand",
+  "role": "model",
+  "title": "Painted Wooden Nightstand",
+  "author": "Kirill Sannikov",
+  "license": "CC0 1.0 (Poly Haven)",
+  "source": "Poly Haven",
+  "source_page": "https://polyhaven.com/a/painted_wooden_nightstand",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/painted_wooden_nightstand/painted_wooden_nightstand_1k.gltf",
+  "textures": {
+   "nor": "painted_wooden_nightstand_nor.jpg",
+   "diff": "painted_wooden_nightstand_diff.jpg",
+   "arm": "painted_wooden_nightstand_arm.jpg"
+  },
+  "primitives": [
+   {
+    "node": "painted_wooden_nightstand",
+    "material": "painted_wooden_nightstand",
+    "alpha": "OPAQUE",
+    "base": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "tris": 180
+   },
+   {
+    "node": "painted_wooden_nightstand_drawer",
+    "material": "painted_wooden_nightstand",
+    "alpha": "OPAQUE",
+    "base": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "tris": 290
+   }
+  ],
+  "notes": "Free 4K model of a painted wooden nightstand with worn blue paint, single drawer and tapered legs - vintage, aged bedside table for authentic bedroom scenes."
+ },
+ {
+  "file": "vintage_grandfather_clock_01",
+  "role": "model",
+  "title": "Vintage Grandfather Clock 01",
+  "author": "Yann Kervran, James Ray Cock",
+  "license": "CC0 1.0 (Poly Haven)",
+  "source": "Poly Haven",
+  "source_page": "https://polyhaven.com/a/vintage_grandfather_clock_01",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/vintage_grandfather_clock_01/vintage_grandfather_clock_01_1k.gltf",
+  "textures": {
+   "nor": "vintage_grandfather_clock_01_nor.jpg",
+   "diff": "vintage_grandfather_clock_01_diff.jpg",
+   "arm": "vintage_grandfather_clock_01_arm.jpg"
+  },
+  "primitives": [
+   {
+    "node": "vintage_grandfather_clock_01_Body",
+    "material": "vintage_grandfather_clock_01",
+    "alpha": "OPAQUE",
+    "base": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "tris": 8363
+   },
+   {
+    "node": "vintage_grandfather_clock_01_Body",
+    "material": "vintage_grandfather_clock_01_glass",
+    "alpha": "BLEND",
+    "base": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "tris": 19
+   },
+   {
+    "node": "vintage_grandfather_clock_01_HourHand",
+    "material": "vintage_grandfather_clock_01",
+    "alpha": "OPAQUE",
+    "base": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "tris": 84
+   },
+   {
+    "node": "vintage_grandfather_clock_01_MinuteHand",
+    "material": "vintage_grandfather_clock_01",
+    "alpha": "OPAQUE",
+    "base": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "tris": 116
+   }
+  ],
+  "notes": "Free 8K model - ornate vintage wooden grandfather clock with antique brass dial and moonphase, fully rigged for animation; ideal for decorative or period sets."
+ }
+]

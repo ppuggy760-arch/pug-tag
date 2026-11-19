@@ -344,6 +344,9 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 
 /* boot */
 #boot { background: radial-gradient(ellipse at 50% 40%, #1b1030 0%, #07050c 70%); cursor: pointer; }
+#boot .bootBack { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 1.6s ease-out; pointer-events: none; }
+#boot .bootBack.on { opacity: 1; }
+#boot .bootInner { position: relative; }
 .bootInner { width: 70%; }
 #bootTitle { font-size: calc(var(--u)*5); animation: breathe 5s ease-in-out infinite; }
 .bootInner .small { line-height: 1.5; }
@@ -353,10 +356,11 @@ kbd { font-family: "VT323", monospace; font-size: calc(var(--u) * .95); line-hei
 @keyframes breathe { 0%,100% { opacity: .65; filter: blur(calc(.4px * var(--blurK))); } 50% { opacity: 1; filter: blur(0); } }
 
 /* menu */
-#menu { background: radial-gradient(ellipse at 30% 50%, rgba(80, 20, 40, .35) 0%, transparent 55%),
-  radial-gradient(ellipse at 75% 40%, rgba(70, 50, 140, .3) 0%, transparent 60%), rgba(5, 3, 9, .55); justify-content: flex-start; }
+/* (the hall photo behind it keeps its left side dark for the title: only a light shade here, deepest on the left) */
+#menu { background: radial-gradient(ellipse at 30% 50%, rgba(80, 20, 40, .22) 0%, transparent 50%),
+  linear-gradient(90deg, rgba(5, 3, 9, .42) 0%, rgba(5, 3, 9, .18) 45%, rgba(5, 3, 9, .06) 70%); justify-content: flex-start; }
 .menuInner { position: relative; z-index: 2; text-align: left; margin-left: 7%; max-width: 52%; }
-/* a pool of darkness behind the menu so the title never sits on the monster */
+/* a pool of darkness behind the menu so the title always reads */
 .menuInner::before { content: ""; position: absolute; z-index: -1; left: -30%; top: -25%; width: 150%; height: 150%; pointer-events: none;
   background: radial-gradient(ellipse at 40% 45%, rgba(5,3,10,.78) 0%, rgba(5,3,10,.45) 45%, rgba(5,3,10,0) 70%); }
 .menuInner .menuBtn { margin-left: 0; padding-left: 0; text-align: left; }
@@ -407,6 +411,8 @@ input[type=range] { width: 50%; accent-color: #b7a6ff; }
 .gName { font-family: "Fell SC", serif; font-size: calc(var(--u)*2); }
 .gDesc { font-style: italic; color: var(--bone-dim); font-size: calc(var(--u)*1.25); line-height: 1.4; }
 .gItem.locked .gName { color: var(--bone-dim); }
+.gItem canvas.emblem { width: calc(var(--u)*7); height: calc(var(--u)*7); flex: none; background: radial-gradient(circle, #1d1224, #0b0710); }
+.gItem.locked .gDesc { font-style: normal; }
 #creditList { font-size: calc(var(--u)*1.15); line-height: 1.55; color: var(--bone-dim); }
 #creditList div b { color: var(--bone); font-weight: normal; font-family: "Fell SC", serif; }
 #creditList a { color: #c9b8ff; }
@@ -538,6 +544,10 @@ input[type=range] { width: 50%; accent-color: #b7a6ff; }
   #pinchBtn { bottom: calc(var(--u)*2.4 + max(var(--u)*4.4, 48px / var(--scale))); font-size: max(calc(var(--u)*1.6), var(--t14)); min-height: var(--tap); }
   #usage { font-size: max(var(--u), calc(11px / var(--scale))); }
   .hudBtn .strain { height: max(3px, calc(3px / var(--scale))); }
+  /* the big DOOR button sits over the bottom of its doorway: while that doorway's light is on it goes see-through,
+     so the floor (and whatever stands on it) shows */
+  .doorPanel.lit .hudBtn.door:not(.on) { background: rgba(10, 6, 18, .22); box-shadow: 0 0 0 1px rgba(0,0,0,.35);
+    border-color: rgba(233,223,207,.38); text-shadow: 0 0 .3em #000, 0 0 .6em #000; }
   #pauseBtn { width: max(calc(var(--u)*3.2), var(--tap)); height: max(calc(var(--u)*3.2), var(--tap)); font-size: max(calc(var(--u)*1.7), var(--t16)); }
 
   .camBtn { font-size: max(calc(var(--u)*1.9), var(--t14)); min-width: calc(44px / var(--scale)); min-height: calc(44px / var(--scale));

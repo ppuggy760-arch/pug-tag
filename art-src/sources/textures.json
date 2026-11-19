@@ -1,0 +1,1402 @@
+[
+ {
+  "file": "floor_old-oak-dark.jpg",
+  "role": "floor",
+  "title": "Old Wooden Floor 02",
+  "author": "Charlotte Baglioni, Jenelle van Heerden",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/old_wooden_floor_02",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/old_wooden_floor_02/old_wooden_floor_02_diff_2k.jpg",
+  "real_size": "2.03 m x 2.03 m",
+  "tileable": true,
+  "notes": "dark worn hardwood floor, warm brown, narrow boards (~9-10 cm) with staggered joints; main living-room floor",
+  "path": "sources/textures/floor_old-oak-dark.jpg",
+  "pixels": [
+   1536,
+   1536
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 756.7
+ },
+ {
+  "file": "floor_dark-planks-grey.jpg",
+  "role": "floor",
+  "title": "Dark Wooden Planks",
+  "author": "Amal Kumar",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/dark_wooden_planks",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dark_wooden_planks/dark_wooden_planks_diff_2k.jpg",
+  "real_size": "2 m x 2 m",
+  "tileable": true,
+  "notes": "dark grey-brown worn planks (~12 cm), scuffed; good for halls/bedroom, already cool-toned",
+  "path": "sources/textures/floor_dark-planks-grey.jpg",
+  "pixels": [
+   1280,
+   1280
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 640.0
+ },
+ {
+  "file": "floor_old-worn-dark.jpg",
+  "role": "floor",
+  "title": "Old Wood Floor",
+  "author": "Guillaume Monsergent",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/old_wood_floor",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/old_wood_floor/old_wood_floor_diff_2k.jpg",
+  "real_size": "3 m x 3 m",
+  "tileable": true,
+  "notes": "dark old floorboards, worn and stained, wide 3 m tile so repeats are rare; hallway/stairs landing",
+  "path": "sources/textures/floor_old-worn-dark.jpg",
+  "pixels": [
+   1536,
+   1536
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 512.0
+ },
+ {
+  "file": "floor_worn-planks-weathered.jpg",
+  "role": "floor",
+  "title": "Worn Planks",
+  "author": "Dimitrios Savva",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/worn_planks",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/worn_planks/worn_planks_diff_2k.jpg",
+  "real_size": "1.40 m x 1.40 m",
+  "tileable": true,
+  "notes": "very weathered planks with paint remnants; attic / neglected room floor",
+  "path": "sources/textures/floor_worn-planks-weathered.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 731.4
+ },
+ {
+  "file": "floor_herringbone-parquet.jpg",
+  "role": "floor",
+  "title": "Herringbone Parquet",
+  "author": "Jenelle van Heerden, Sergej Majboroda",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/herringbone_parquet",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/herringbone_parquet/herringbone_parquet_diff_2k.jpg",
+  "real_size": "3.40 m x 3.40 m",
+  "tileable": true,
+  "notes": "herringbone parquet (blocks ~7x35 cm), honey oak; darken/desaturate for night parlor",
+  "path": "sources/textures/floor_herringbone-parquet.jpg",
+  "pixels": [
+   1536,
+   1536
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 451.8
+ },
+ {
+  "file": "floor_painted-distressed.jpg",
+  "role": "floor",
+  "title": "Distressed Painted Planks",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/distressed_painted_planks",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/distressed_painted_planks/distressed_painted_planks_diff_2k.jpg",
+  "real_size": "1.60 m x 1.60 m",
+  "tileable": true,
+  "notes": "old painted floorboards, grey-green paint worn through to wood (boards ~14 cm)",
+  "path": "sources/textures/floor_painted-distressed.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 640.0
+ },
+ {
+  "file": "floor_painted-black.jpg",
+  "role": "floor",
+  "title": "Black Painted Planks",
+  "author": "Dimitrios Savva",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/black_painted_planks",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/black_painted_planks/black_painted_planks_diff_2k.jpg",
+  "real_size": "1.60 m x 1.60 m",
+  "tileable": true,
+  "notes": "black painted boards with scuffs; good under-stairs / closet / dark hall floor",
+  "path": "sources/textures/floor_painted-black.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 640.0
+ },
+ {
+  "file": "floor_stair-treads.jpg",
+  "role": "floor",
+  "title": "Stair Planks",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/stair_planks",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stair_planks/stair_planks_diff_2k.jpg",
+  "real_size": "1.20 m x 1.20 m",
+  "tileable": true,
+  "notes": "smooth worn varnished boards; use for stair treads and risers",
+  "path": "sources/textures/floor_stair-treads.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 853.3
+ },
+ {
+  "file": "floor_dark-varnished.jpg",
+  "role": "floor",
+  "title": "Plank Flooring 04",
+  "author": "Dimitrios Savva",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/plank_flooring_04",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/plank_flooring_04/plank_flooring_04_diff_2k.jpg",
+  "real_size": "2 m x 2 m",
+  "tileable": true,
+  "notes": "dark red-brown varnished planks, wide boards; alternative bedroom floor",
+  "path": "sources/textures/floor_dark-varnished.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 512.0
+ },
+ {
+  "file": "rug_worn-carpet-dark.jpg",
+  "role": "rug",
+  "title": "Dirty Carpet",
+  "author": "Rohit Seervi",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/dirty_carpet",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dirty_carpet/dirty_carpet_diff_2k.jpg",
+  "real_size": "0.60 m x 0.60 m",
+  "tileable": true,
+  "notes": "dark dirty loop-pile carpet close-up (0.6 m tile); worn wall-to-wall carpet or runner fill",
+  "path": "sources/textures/rug_worn-carpet-dark.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 1706.7
+ },
+ {
+  "file": "plaster_aged-worn.jpg",
+  "role": "plaster",
+  "title": "Worn Plaster Wall",
+  "author": "Dimitrios Savva",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/worn_plaster_wall",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/worn_plaster_wall/worn_plaster_wall_diff_2k.jpg",
+  "real_size": "1.80 m x 1.80 m",
+  "tileable": true,
+  "notes": "blotchy aged plaster with patches of paint loss and old repairs",
+  "path": "sources/textures/plaster_aged-worn.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 568.9
+ },
+ {
+  "file": "plaster_aged-beige.jpg",
+  "role": "plaster",
+  "title": "Grey Plaster 03",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/grey_plaster_03",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grey_plaster_03/grey_plaster_03_diff_2k.jpg",
+  "real_size": "1 m x 1 m",
+  "tileable": true,
+  "notes": "warm beige aged plaster, subtle dents and stains; calm base wall",
+  "path": "sources/textures/plaster_aged-beige.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 1024.0
+ },
+ {
+  "file": "plaster_damp-stained.jpg",
+  "role": "plaster",
+  "title": "Plastered Wall 03",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/plastered_wall_03",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/plastered_wall_03/plastered_wall_03_diff_2k.jpg",
+  "real_size": "4 m x 4 m",
+  "tileable": true,
+  "notes": "grey plaster with large soft water/damp blotches (4 m tile); stained hallway walls",
+  "path": "sources/textures/plaster_damp-stained.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 256.0
+ },
+ {
+  "file": "plaster_damp-mould.jpg",
+  "role": "plaster",
+  "title": "White Plaster Rough 02",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/white_plaster_rough_02",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_plaster_rough_02/white_plaster_rough_02_diff_2k.jpg",
+  "real_size": "1 m x 1 m",
+  "tileable": true,
+  "notes": "rough plaster with green-grey mould and damp bloom; flooded parlor / cellar walls",
+  "path": "sources/textures/plaster_damp-mould.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 1024.0
+ },
+ {
+  "file": "plaster_damp-rising.jpg",
+  "role": "plaster",
+  "title": "Plaster Brick 01",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/plaster_brick_01",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/plaster_brick_01/plaster_brick_01_diff_2k.jpg",
+  "real_size": "2.70 m x 2.70 m",
+  "tileable": false,
+  "notes": "brick wall with mossy rising-damp plaster band along the bottom (not tileable vertically: bottom = floor line)",
+  "path": "sources/textures/plaster_damp-rising.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 379.3
+ },
+ {
+  "file": "plaster_damp-mossy.jpg",
+  "role": "plaster",
+  "title": "Worn Mossy Plasterwall",
+  "author": "Amal Kumar",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/worn_mossy_plasterwall",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/worn_mossy_plasterwall/worn_mossy_plasterwall_diff_2k.jpg",
+  "real_size": "1.80 m x 1.80 m",
+  "tileable": true,
+  "notes": "pale worn plaster streaked with green damp and grime",
+  "path": "sources/textures/plaster_damp-mossy.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 568.9
+ },
+ {
+  "file": "plaster_peeling-patches.jpg",
+  "role": "plaster",
+  "title": "Rough Plaster Broken",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/rough_plaster_broken",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rough_plaster_broken/rough_plaster_broken_diff_2k.jpg",
+  "real_size": "1.50 m x 1.50 m",
+  "tileable": true,
+  "notes": "ochre plaster/paint peeling off in patches showing the layer beneath",
+  "path": "sources/textures/plaster_peeling-patches.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 682.7
+ },
+ {
+  "file": "plaster_peeling-brick.jpg",
+  "role": "plaster",
+  "title": "Damaged Plaster",
+  "author": "Amal Kumar",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/damaged_plaster",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/damaged_plaster/damaged_plaster_diff_2k.jpg",
+  "real_size": "1.85 m x 1.85 m",
+  "tileable": true,
+  "notes": "plaster fallen away to expose red brick in places; ruined-room walls",
+  "path": "sources/textures/plaster_peeling-brick.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 553.5
+ },
+ {
+  "file": "plaster_peeling-red.jpg",
+  "role": "plaster",
+  "title": "Red Plaster Weathered",
+  "author": "Amal Kumar",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/red_plaster_weathered",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/red_plaster_weathered/red_plaster_weathered_diff_2k.jpg",
+  "real_size": "2 m x 2 m",
+  "tileable": true,
+  "notes": "weathered red-pink painted plaster, flaking; tint toward muted crimson",
+  "path": "sources/textures/plaster_peeling-red.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 512.0
+ },
+ {
+  "file": "plaster_ceiling-smooth.jpg",
+  "role": "plaster",
+  "title": "Plastered Wall 04",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/plastered_wall_04",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/plastered_wall_04/plastered_wall_04_diff_2k.jpg",
+  "real_size": "3.20 m x 3.20 m",
+  "tileable": true,
+  "notes": "smooth grey lime-plaster look with soft mottling (3.2 m tile); primary ceiling surface (and calm upper walls)",
+  "path": "sources/textures/plaster_ceiling-smooth.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 320.0
+ },
+ {
+  "file": "plaster_ceiling-textured.jpg",
+  "role": "plaster",
+  "title": "Ceiling Interior",
+  "author": "Dimitrios Savva",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/ceiling_interior",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/ceiling_interior/ceiling_interior_diff_2k.jpg",
+  "real_size": "2 m x 2 m",
+  "tileable": true,
+  "notes": "painted ceiling plaster with a rippled skim texture under old paint; alternative ceiling",
+  "path": "sources/textures/plaster_ceiling-textured.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 512.0
+ },
+ {
+  "file": "panel_wainscot-raised.jpg",
+  "role": "panel",
+  "title": "Wooden Panels",
+  "author": "Dimitrios Savva",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/wooden_panels",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wooden_panels/wooden_panels_diff_2k.jpg",
+  "real_size": "2.10 m x 2.10 m",
+  "tileable": true,
+  "notes": "dark red-brown raised-panel wooden wall panelling (wainscot / doors); each panel ~45x22 cm",
+  "path": "sources/textures/panel_wainscot-raised.jpg",
+  "pixels": [
+   1280,
+   1280
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 609.5
+ },
+ {
+  "file": "panel_coffered-dark.jpg",
+  "role": "panel",
+  "title": "Dark Paneled Wood",
+  "author": "Dimitrios Savva",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/dark_paneled_wood",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dark_paneled_wood/dark_paneled_wood_diff_2k.jpg",
+  "real_size": "1.40 m x 1.40 m",
+  "tileable": true,
+  "notes": "small square dark wooden panels (coffered); library wall, door panels or ceiling coffers",
+  "path": "sources/textures/panel_coffered-dark.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 731.4
+ },
+ {
+  "file": "panel_beadboard-painted.jpg",
+  "role": "panel",
+  "title": "White Planks Clean",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/white_planks_clean",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_planks_clean/white_planks_clean_diff_2k.jpg",
+  "real_size": "1.80 m x 1.80 m",
+  "tileable": true,
+  "notes": "painted vertical tongue-and-groove boards (beadboard) for painted wainscot; tint to the palette",
+  "path": "sources/textures/panel_beadboard-painted.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 568.9
+ },
+ {
+  "file": "wood_dark-varnished.jpg",
+  "role": "wood",
+  "title": "Dark Wood",
+  "author": "Dario Barresi, Dimitrios Savva, Rico Cilliers",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/dark_wood",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dark_wood/dark_wood_diff_2k.jpg",
+  "real_size": "2 m x 2 m",
+  "tileable": true,
+  "notes": "dark varnished hardwood grain (veneer); furniture tops, desk, wardrobe",
+  "path": "sources/textures/wood_dark-varnished.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 512.0
+ },
+ {
+  "file": "wood_lacquered-cherry.jpg",
+  "role": "wood",
+  "title": "Lacquered Cherry Wood",
+  "author": "Jenelle van Heerden, Rico Cilliers",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/lacquered_cherry_wood",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/lacquered_cherry_wood/lacquered_cherry_wood_diff_2k.jpg",
+  "real_size": "1 m x 1 m",
+  "tileable": true,
+  "notes": "very dark lacquered cherry; polished antique furniture",
+  "path": "sources/textures/wood_lacquered-cherry.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 1024.0
+ },
+ {
+  "file": "wood_worn-table.jpg",
+  "role": "wood",
+  "title": "Wood Table Worn",
+  "author": "Dimitrios Savva, Rico Cilliers",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/wood_table_worn",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wood_table_worn/wood_table_worn_diff_2k.jpg",
+  "real_size": "0.55 m x 0.55 m",
+  "tileable": true,
+  "notes": "worn varnished table top with rubbed edges and scratches (0.55 m tile)",
+  "path": "sources/textures/wood_worn-table.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 1861.8
+ },
+ {
+  "file": "wood_painted-door-teal.jpg",
+  "role": "wood",
+  "title": "Wood Peeling Paint Weathered",
+  "author": "Rob Tuytel, Dimitrios Savva",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/wood_peeling_paint_weathered",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wood_peeling_paint_weathered/wood_peeling_paint_weathered_diff_2k.jpg",
+  "real_size": "0.76 m x 0.76 m",
+  "tileable": true,
+  "notes": "dark teal paint peeling off grey wood; painted old door",
+  "path": "sources/textures/wood_painted-door-teal.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 1347.4
+ },
+ {
+  "file": "wood_painted-green.jpg",
+  "role": "wood",
+  "title": "Green Rough Planks",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/green_rough_planks",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/green_rough_planks/green_rough_planks_diff_2k.jpg",
+  "real_size": "1.50 m x 1.50 m",
+  "tileable": true,
+  "notes": "horizontal planks with flaking pale green paint; painted door/shutter alternative",
+  "path": "sources/textures/wood_painted-green.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 682.7
+ },
+ {
+  "file": "wood_pine-door.jpg",
+  "role": "wood",
+  "title": "Rough Pine Door",
+  "author": "Dimitrios Savva",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/rough_pine_door",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rough_pine_door/rough_pine_door_diff_2k.jpg",
+  "real_size": "2 m x 2 m",
+  "tileable": false,
+  "notes": "ledged pine door boards with cross battens, dark stain; cellar/attic door",
+  "path": "sources/textures/wood_pine-door.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 512.0
+ },
+ {
+  "file": "wood_rough-grain.jpg",
+  "role": "wood",
+  "title": "Rough Wood",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/rough_wood",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rough_wood/rough_wood_diff_2k.jpg",
+  "real_size": "0.50 m x 0.50 m",
+  "tileable": true,
+  "notes": "grey weathered rough wood grain with cracks (0.5 m tile)",
+  "path": "sources/textures/wood_rough-grain.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 2048.0
+ },
+ {
+  "file": "wood_fine-grain-old.jpg",
+  "role": "wood",
+  "title": "Fine Grained Wood",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/fine_grained_wood",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/fine_grained_wood/fine_grained_wood_col_2k.jpg",
+  "real_size": "0.60 m x 0.60 m",
+  "tileable": true,
+  "notes": "dark brown old wood with fine grain and grime",
+  "path": "sources/textures/wood_fine-grain-old.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 1706.7
+ },
+ {
+  "file": "fabric_velvet-red.jpg",
+  "role": "fabric",
+  "title": "Velour Velvet",
+  "author": "colormass, Rico Cilliers",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/velour_velvet",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/velour_velvet/velour_velvet_diff_2k.jpg",
+  "real_size": "0.28 m x 0.27 m",
+  "tileable": true,
+  "notes": "red velour/velvet (very saturated: desaturate to muted crimson); curtains, armchair",
+  "path": "sources/textures/fabric_velvet-red.jpg",
+  "pixels": [
+   1024,
+   986
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 3657.1
+ },
+ {
+  "file": "fabric_damask-red.jpg",
+  "role": "fabric",
+  "title": "Quatrefoil Jacquard Fabric",
+  "author": "colormass, Rico Cilliers",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/quatrefoil_jacquard_fabric",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/quatrefoil_jacquard_fabric/quatrefoil_jacquard_fabric_diff_2k.jpg",
+  "real_size": "0.28 m x 0.28 m",
+  "tileable": true,
+  "notes": "deep red jacquard with subtle quatrefoil damask figure; heavy curtains or upholstery",
+  "path": "sources/textures/fabric_damask-red.jpg",
+  "pixels": [
+   1011,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 3610.7
+ },
+ {
+  "file": "fabric_bookcloth-red.jpg",
+  "role": "fabric",
+  "title": "Book Pattern (col2)",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/book_pattern",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/book_pattern/book_pattern_col2_2k.jpg",
+  "real_size": "0.30 m x 0.30 m",
+  "tileable": true,
+  "notes": "dark red woven book cloth (linen weave); curtain or bedspread alternative",
+  "path": "sources/textures/fabric_bookcloth-red.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 3413.3
+ },
+ {
+  "file": "fabric_linen-check.jpg",
+  "role": "fabric",
+  "title": "Fabric Pattern 05 (col_02)",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/fabric_pattern_05",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/fabric_pattern_05/fabric_pattern_05_col_02_2k.jpg",
+  "real_size": "0.50 m x 0.50 m",
+  "tileable": true,
+  "notes": "old unbleached linen with faint red window-pane check; bedsheet / pillow",
+  "path": "sources/textures/fabric_linen-check.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 2048.0
+ },
+ {
+  "file": "fabric_quilt-gingham.jpg",
+  "role": "fabric",
+  "title": "Fabric Pattern 07 (col_1)",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/fabric_pattern_07",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/fabric_pattern_07/fabric_pattern_07_col_1_2k.jpg",
+  "real_size": "0.40 m x 0.40 m",
+  "tileable": true,
+  "notes": "red and cream woven gingham; quilt patches or tablecloth",
+  "path": "sources/textures/fabric_quilt-gingham.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 2560.0
+ },
+ {
+  "file": "fabric_leather-brown.jpg",
+  "role": "fabric",
+  "title": "Brown Leather",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/brown_leather",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brown_leather/brown_leather_albedo_2k.jpg",
+  "real_size": "0.40 m x 0.40 m",
+  "tileable": true,
+  "notes": "brown upholstery leather; armchair / book spines",
+  "path": "sources/textures/fabric_leather-brown.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 2560.0
+ },
+ {
+  "file": "metal_rusty-iron.jpg",
+  "role": "metal",
+  "title": "Rust Coarse 01",
+  "author": "Dimitrios Savva, Rico Cilliers",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/rust_coarse_01",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rust_coarse_01/rust_coarse_01_diff_2k.jpg",
+  "real_size": "2.20 m x 2.20 m",
+  "tileable": true,
+  "notes": "dark coarse rust on old iron; radiator, fire grate, hinges",
+  "path": "sources/textures/metal_rusty-iron.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 465.5
+ },
+ {
+  "file": "metal_rusty-painted.jpg",
+  "role": "metal",
+  "title": "Rusty Metal 02",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/rusty_metal_02",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rusty_metal_02/rusty_metal_02_diff_2k.jpg",
+  "real_size": "1 m x 1 m",
+  "tileable": true,
+  "notes": "pale painted metal with rust blooms; bed frame / pipes",
+  "path": "sources/textures/metal_rusty-painted.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 1024.0
+ },
+ {
+  "file": "tile_worn-ceramic.jpg",
+  "role": "tile",
+  "title": "Worn Tile Floor",
+  "author": "Dimitrios Savva",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/worn_tile_floor",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/worn_tile_floor/worn_tile_floor_diff_2k.jpg",
+  "real_size": "2 m x 2 m",
+  "tileable": true,
+  "notes": "grimy worn square ceramic tiles (~45 cm); kitchen/bathroom/cellar floor",
+  "path": "sources/textures/tile_worn-ceramic.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 512.0
+ },
+ {
+  "file": "tile_quarry-dotted.jpg",
+  "role": "tile",
+  "title": "Patterned Terracotta Tiling",
+  "author": "Amal Kumar",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/patterned_terracotta_tiling",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/patterned_terracotta_tiling/patterned_terracotta_tiling_diff_2k.jpg",
+  "real_size": "2.15 m x 2.15 m",
+  "tileable": true,
+  "notes": "terracotta quarry tiles with small black square insets (Victorian hall floor style)",
+  "path": "sources/textures/tile_quarry-dotted.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 476.3
+ },
+ {
+  "file": "tile_mosaic-pattern.jpg",
+  "role": "tile",
+  "title": "Square Tiles 02",
+  "author": "Charlotte Baglioni",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/square_tiles_02",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/square_tiles_02/square_tiles_02_diff_2k.jpg",
+  "real_size": "2.40 m x 2.40 m",
+  "tileable": true,
+  "notes": "dark patterned mosaic of small square tiles with red accents; best Victorian geometric-floor stand-in",
+  "path": "sources/textures/tile_mosaic-pattern.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 426.7
+ },
+ {
+  "file": "tile_marble-checker.jpg",
+  "role": "tile",
+  "title": "Floor Tiles 06",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/floor_tiles_06",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/floor_tiles_06/floor_tiles_06_diff_2k.jpg",
+  "real_size": "3 m x 3 m",
+  "tileable": true,
+  "notes": "worn checkerboard of light and dark marble squares (~37 cm); entrance hall",
+  "path": "sources/textures/tile_marble-checker.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 341.3
+ },
+ {
+  "file": "brick_old-red.jpg",
+  "role": "brick",
+  "title": "Brick Wall 001",
+  "author": "Rob Tuytel, Dimitrios Savva",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/brick_wall_001",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brick_wall_001/brick_wall_001_diffuse_2k.jpg",
+  "real_size": "3 m x 3 m",
+  "tileable": true,
+  "notes": "old dark red and black brick wall; chimney breast, cellar, exterior",
+  "path": "sources/textures/brick_old-red.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 341.3
+ },
+ {
+  "file": "brick_worn-pale.jpg",
+  "role": "brick",
+  "title": "Worn Brick Wall",
+  "author": "Amal Kumar",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/worn_brick_wall",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/worn_brick_wall/worn_brick_wall_diff_2k.jpg",
+  "real_size": "2 m x 2 m",
+  "tileable": true,
+  "notes": "pale whitewashed worn brick; cellar / back kitchen",
+  "path": "sources/textures/brick_worn-pale.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 512.0
+ },
+ {
+  "file": "misc_wallpaper-damask.jpg",
+  "role": "misc",
+  "title": "Floral Jacquard",
+  "author": "colormass, Rico Cilliers",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/floral_jacquard",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/floral_jacquard/floral_jacquard_diff_2k.jpg",
+  "real_size": "0.25 m x 0.38 m",
+  "tileable": true,
+  "notes": "charcoal damask jacquard: reads as Victorian damask wallpaper when scaled so one repeat is ~55 cm",
+  "path": "sources/textures/misc_wallpaper-damask.jpg",
+  "pixels": [
+   675,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 2700.0
+ },
+ {
+  "file": "misc_wallpaper-decrepit.jpg",
+  "role": "misc",
+  "title": "Decrepit Wallpaper",
+  "author": "Rob Tuytel",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/decrepit_wallpaper",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_diff_2k.jpg",
+  "real_size": "2.50 m x 2.50 m",
+  "tileable": true,
+  "notes": "plain old wallpaper, stained and peeling in streaks (2.5 m tile); overlay over patterned papers for age",
+  "path": "sources/textures/misc_wallpaper-decrepit.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 409.6
+ },
+ {
+  "file": "panel_wainscot-raised_ao.jpg",
+  "role": "panel",
+  "title": "Wooden Panels (AO map)",
+  "author": "Dimitrios Savva",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/wooden_panels",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wooden_panels/wooden_panels_ao_1k.jpg",
+  "real_size": "2.10 m x 2.10 m",
+  "tileable": true,
+  "notes": "ambient-occlusion map matching panel_wainscot-raised (same UVs/size ratio): multiply over the colour to give the raised panels depth under scene light",
+  "path": "sources/textures/panel_wainscot-raised_ao.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 487.6
+ },
+ {
+  "file": "panel_coffered-dark_ao.jpg",
+  "role": "panel",
+  "title": "Dark Paneled Wood (AO map)",
+  "author": "Dimitrios Savva",
+  "license": "CC0 1.0",
+  "source_page": "https://polyhaven.com/a/dark_paneled_wood",
+  "download_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/dark_paneled_wood/dark_paneled_wood_ao_1k.jpg",
+  "real_size": "1.40 m x 1.40 m",
+  "tileable": true,
+  "notes": "ambient-occlusion map matching panel_coffered-dark: multiply for recessed-panel depth",
+  "path": "sources/textures/panel_coffered-dark_ao.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": false,
+  "px_per_m": 731.4
+ },
+ {
+  "file": "rug_spanish-medallions.jpg",
+  "role": "rug",
+  "title": "Carpet MET DP169905",
+  "author": "The Metropolitan Museum of Art",
+  "license": "CC0 1.0 (Metropolitan Museum of Art Open Access)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Carpet_MET_DP169905.jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Carpet_MET_DP169905.jpg/1920px-Carpet_MET_DP169905.jpg",
+  "real_size": "approx. 1.6 m x 1.4 m (estimated from motif scale; museum dimensions not given)",
+  "tileable": false,
+  "notes": "field of a worn 15th/16th-c. Spanish carpet: octagon medallions in red, blue, gold; museum photo cropped to the carpet only (no background / colour chart) [cropped from source: l,t,r,b = [0.15, 0.0, 1.0, 1.0]]",
+  "path": "sources/textures/rug_spanish-medallions.jpg",
+  "pixels": [
+   1280,
+   1145
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 800.0
+ },
+ {
+  "file": "rug_spanish-end-border.jpg",
+  "role": "rug",
+  "title": "Carpet MET DP169907",
+  "author": "The Metropolitan Museum of Art",
+  "license": "CC0 1.0 (Metropolitan Museum of Art Open Access)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Carpet_MET_DP169907.jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/Carpet_MET_DP169907.jpg/1920px-Carpet_MET_DP169907.jpg",
+  "real_size": "approx. 1.8 m x 1.3 m (estimated)",
+  "tileable": false,
+  "notes": "same Spanish carpet, end section with medallions, borders and pale kilim band; fringe cropped just above. Pair with rug_spanish-medallions to build a full rug [cropped from source: l,t,r,b = [0.095, 0.0, 1.0, 0.79]]",
+  "path": "sources/textures/rug_spanish-end-border.jpg",
+  "pixels": [
+   1280,
+   893
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 711.1
+ },
+ {
+  "file": "rug_star-ushak.jpg",
+  "role": "rug",
+  "title": "'Star Ushak' Carpet MET DP169931",
+  "author": "The Metropolitan Museum of Art",
+  "license": "CC0 1.0 (Metropolitan Museum of Art Open Access)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:%27Star_Ushak%27_Carpet_MET_DP169931.jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/%27Star_Ushak%27_Carpet_MET_DP169931.jpg/1920px-%27Star_Ushak%27_Carpet_MET_DP169931.jpg",
+  "real_size": "approx. 2.2 m x 0.9 m (estimated)",
+  "tileable": false,
+  "notes": "'Star Ushak' carpet, red field with dark blue star medallions and side border; crop of the lower part of the museum photo (backing cloth removed) [cropped from source: l,t,r,b = [0.0, 0.48, 0.885, 1.0]]",
+  "path": "sources/textures/rug_star-ushak.jpg",
+  "pixels": [
+   1280,
+   554
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 581.8
+ },
+ {
+  "file": "rug_lotto-lattice.jpg",
+  "role": "rug",
+  "title": "'Lotto' Carpet MET DP329233",
+  "author": "The Metropolitan Museum of Art",
+  "license": "CC0 1.0 (Metropolitan Museum of Art Open Access)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:%27Lotto%27_Carpet_MET_DP329233.jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/%27Lotto%27_Carpet_MET_DP329233.jpg/1920px-%27Lotto%27_Carpet_MET_DP329233.jpg",
+  "real_size": "approx. 1.5 m x 1.4 m (estimated; lattice repeat ~30 cm)",
+  "tileable": false,
+  "notes": "'Lotto' carpet: yellow arabesque lattice on red field plus dark border on the right; very good oriental rug / runner source [cropped from source: l,t,r,b = [0.0, 0.0, 0.78, 1.0]]",
+  "path": "sources/textures/rug_lotto-lattice.jpg",
+  "pixels": [
+   1280,
+   1230
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 853.3
+ },
+ {
+  "file": "misc_wallpaper-morris-willow.jpg",
+  "role": "misc",
+  "title": "Willow Bough MET DP306734",
+  "author": "William Morris / Morris & Co. (photo: The Metropolitan Museum of Art)",
+  "license": "CC0 1.0 (Metropolitan Museum of Art Open Access)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Willow_Bough_MET_DP306734.jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Willow_Bough_MET_DP306734.jpg/1920px-Willow_Bough_MET_DP306734.jpg",
+  "real_size": "approx. 0.50 m x 0.68 m (sample-book sheet of a 21-inch roll, estimated)",
+  "tileable": false,
+  "notes": "William Morris 'Willow Bough' (1887) wallpaper sample, printer's selvedge text cropped off; light green leaves on cream: bedroom / nursery wall [cropped from source: l,t,r,b = [0.0, 0.025, 0.935, 0.985]]",
+  "path": "sources/textures/misc_wallpaper-morris-willow.jpg",
+  "pixels": [
+   964,
+   1280
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 1928.0
+ },
+ {
+  "file": "misc_wallpaper-morris-trellis.jpg",
+  "role": "misc",
+  "title": "Trellis MET DP306738",
+  "author": "William Morris / Morris & Co. / Philip Webb (photo: The Metropolitan Museum of Art)",
+  "license": "CC0 1.0 (Metropolitan Museum of Art Open Access)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Trellis_MET_DP306738.jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Trellis_MET_DP306738.jpg/1920px-Trellis_MET_DP306738.jpg",
+  "real_size": "approx. 0.50 m x 0.68 m (estimated)",
+  "tileable": false,
+  "notes": "William Morris 'Trellis' (1862) wallpaper: roses, trellis and small birds (no creatures beyond birds); selvedge text cropped off [cropped from source: l,t,r,b = [0.02, 0.04, 0.93, 0.985]]",
+  "path": "sources/textures/misc_wallpaper-morris-trellis.jpg",
+  "pixels": [
+   981,
+   1280
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 1962.0
+ },
+ {
+  "file": "misc_wallpaper-morris-pinkrose.jpg",
+  "role": "misc",
+  "title": "Pink and Rose MET DT653",
+  "author": "William Morris / Morris & Co. (photo: The Metropolitan Museum of Art)",
+  "license": "CC0 1.0 (Metropolitan Museum of Art Open Access)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Pink_and_Rose_MET_DT653.jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/Pink_and_Rose_MET_DT653.jpg/1920px-Pink_and_Rose_MET_DT653.jpg",
+  "real_size": "approx. 0.53 m x 0.70 m (estimated)",
+  "tileable": false,
+  "notes": "William Morris 'Pink and Rose' (ca. 1890): dense flowers and stems, warm palette; parlor / dining room wall [cropped from source: l,t,r,b = [0.01, 0.01, 0.95, 0.99]]",
+  "path": "sources/textures/misc_wallpaper-morris-pinkrose.jpg",
+  "pixels": [
+   989,
+   1280
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 1866.0
+ },
+ {
+  "file": "misc_wallpaper-morris-blackthorn.jpg",
+  "role": "misc",
+  "title": "Blackthorn MET DP306737",
+  "author": "William Morris / Morris & Co. (photo: The Metropolitan Museum of Art)",
+  "license": "CC0 1.0 (Metropolitan Museum of Art Open Access)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Blackthorn_MET_DP306737.jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Blackthorn_MET_DP306737.jpg/1920px-Blackthorn_MET_DP306737.jpg",
+  "real_size": "approx. 0.50 m x 0.68 m (estimated)",
+  "tileable": false,
+  "notes": "William Morris 'Blackthorn' (1892): dark green ground with small flowers; best night-friendly wallpaper (already dark and low-key) [cropped from source: l,t,r,b = [0.005, 0.022, 0.95, 0.98]]",
+  "path": "sources/textures/misc_wallpaper-morris-blackthorn.jpg",
+  "pixels": [
+   1017,
+   1280
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 2034.0
+ },
+ {
+  "file": "misc_wallpaper-1880-gold-damask.jpg",
+  "role": "misc",
+  "title": "Sidewall, ca. 1880 (CH 85010069)",
+  "author": "Unknown designer, ca. 1880 (Cooper Hewitt, Smithsonian Design Museum)",
+  "license": "Public domain (Commons: PD; unknown designer ca. 1880, faithful photo of a 2D work = PD-Art / PD-old)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Sidewall,_ca._1880_(CH_85010069).jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Sidewall%2C_ca._1880_%28CH_85010069%29.jpg/1920px-Sidewall%2C_ca._1880_%28CH_85010069%29.jpg",
+  "real_size": "approx. 0.48 m x 0.55 m (estimated)",
+  "tileable": false,
+  "notes": "American Aesthetic-movement sidewall paper ca. 1880: black ground with dull gold overlapping foliage; dark Victorian hall wallpaper [cropped from source: l,t,r,b = [0.03, 0.035, 0.97, 0.972]]",
+  "path": "sources/textures/misc_wallpaper-1880-gold-damask.jpg",
+  "pixels": [
+   1194,
+   1280
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 2487.5
+ },
+ {
+  "file": "misc_wallpaper-1880-olive-floral.jpg",
+  "role": "misc",
+  "title": "Sidewall, ca. 1880 (CH 85010039)",
+  "author": "Unknown designer, ca. 1880 (Cooper Hewitt, Smithsonian Design Museum)",
+  "license": "Public domain (Commons: PD; unknown designer ca. 1880, faithful photo of a 2D work = PD-Art / PD-old)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Sidewall,_ca._1880_(CH_85010039).jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Sidewall%2C_ca._1880_%28CH_85010039%29.jpg/1920px-Sidewall%2C_ca._1880_%28CH_85010039%29.jpg",
+  "real_size": "approx. 0.48 m x 0.55 m (estimated)",
+  "tileable": false,
+  "notes": "Aesthetic-movement sidewall paper ca. 1880: dense olive-brown flowers and leaves on a pale straw ground; parlor / bedroom wall [cropped from source: l,t,r,b = [0.02, 0.015, 0.98, 0.972]]",
+  "path": "sources/textures/misc_wallpaper-1880-olive-floral.jpg",
+  "pixels": [
+   1201,
+   1280
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 2502.1
+ },
+ {
+  "file": "misc_wallpaper-1880-small-flowers.jpg",
+  "role": "misc",
+  "title": "Sidewall, ca. 1880 (CH 85010043)",
+  "author": "Unknown designer, ca. 1880 (Cooper Hewitt, Smithsonian Design Museum)",
+  "license": "Public domain (Commons: PD; unknown designer ca. 1880, faithful photo of a 2D work = PD-Art / PD-old)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Sidewall,_ca._1880_(CH_85010043).jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Sidewall%2C_ca._1880_%28CH_85010043%29.jpg/1920px-Sidewall%2C_ca._1880_%28CH_85010043%29.jpg",
+  "real_size": "approx. 0.48 m x 0.55 m (estimated)",
+  "tileable": false,
+  "notes": "sidewall paper ca. 1880: small pale flower clusters on an olive ground (small-scale repeat); bedroom / nursery / closet wall [cropped from source: l,t,r,b = [0.02, 0.015, 0.98, 0.985]]",
+  "path": "sources/textures/misc_wallpaper-1880-small-flowers.jpg",
+  "pixels": [
+   919,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 1914.6
+ },
+ {
+  "file": "fabric_quilt-green-wholecloth.jpg",
+  "role": "fabric",
+  "title": "Wholecloth quilt MET DP123109",
+  "author": "The Metropolitan Museum of Art",
+  "license": "CC0 1.0 (Metropolitan Museum of Art Open Access)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Wholecloth_quilt_MET_DP123109.jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Wholecloth_quilt_MET_DP123109.jpg/1920px-Wholecloth_quilt_MET_DP123109.jpg",
+  "real_size": "approx. 1.5 m x 1.3 m (estimated: corner of a full-size quilt)",
+  "tileable": false,
+  "notes": "antique green wholecloth quilt with hand-quilted feather/fan pattern (museum photo, colour chart cropped off); bedspread - desaturate toward the palette [cropped from source: l,t,r,b = [0.0, 0.135, 0.86, 1.0]]",
+  "path": "sources/textures/fabric_quilt-green-wholecloth.jpg",
+  "pixels": [
+   1018,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 678.7
+ },
+ {
+  "file": "fabric_quilt-red-wool.jpg",
+  "role": "fabric",
+  "title": "Wholecloth calamanco quilt MET DP332843",
+  "author": "The Metropolitan Museum of Art",
+  "license": "CC0 1.0 (Metropolitan Museum of Art Open Access)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Wholecloth_calamanco_quilt_MET_DP332843.jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e2/Wholecloth_calamanco_quilt_MET_DP332843.jpg/1920px-Wholecloth_calamanco_quilt_MET_DP332843.jpg",
+  "real_size": "approx. 0.6 m x 0.45 m (estimated detail view)",
+  "tileable": true,
+  "notes": "red glazed-wool (calamanco) quilt with fine quilting lines and creases; heavy bedspread, blanket or curtain [cropped from source: l,t,r,b = [0.01, 0.01, 0.99, 0.99]]",
+  "path": "sources/textures/fabric_quilt-red-wool.jpg",
+  "pixels": [
+   1024,
+   768
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 1706.7
+ },
+ {
+  "file": "fabric_velvet-damask-mono.jpg",
+  "role": "fabric",
+  "title": "Length of furnishing velvet MET 154422",
+  "author": "The Metropolitan Museum of Art",
+  "license": "CC0 1.0 (Metropolitan Museum of Art Open Access)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Length_of_furnishing_velvet_MET_154422.jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Length_of_furnishing_velvet_MET_154422.jpg/1280px-Length_of_furnishing_velvet_MET_154422.jpg",
+  "real_size": "approx. 0.55 m x 0.95 m (estimated: one loom width of furnishing velvet)",
+  "tileable": false,
+  "notes": "Genoese furnishing velvet ca. 1711, large damask (pomegranate/acanthus) pattern; black-and-white museum photo (label cropped off) - tint to crimson for curtains/upholstery or use as a wallpaper pattern mask [cropped from source: l,t,r,b = [0.05, 0.05, 0.92, 0.95]]",
+  "path": "sources/textures/fabric_velvet-damask-mono.jpg",
+  "pixels": [
+   781,
+   1280
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 1420.0
+ },
+ {
+  "file": "fabric_velvet-patterned.jpg",
+  "role": "fabric",
+  "title": "Panel of velvet MET DP169971",
+  "author": "The Metropolitan Museum of Art",
+  "license": "CC0 1.0 (Metropolitan Museum of Art Open Access)",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Panel_of_velvet_MET_DP169971.jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/Panel_of_velvet_MET_DP169971.jpg/1920px-Panel_of_velvet_MET_DP169971.jpg",
+  "real_size": "approx. 0.25 m x 0.65 m (estimated)",
+  "tileable": false,
+  "notes": "small-repeat patterned silk velvet panel (red/orange with gold figures); cushion, chair seat or trim; desaturate strongly [cropped from source: l,t,r,b = [0.16, 0.06, 0.84, 0.94]]",
+  "path": "sources/textures/fabric_velvet-patterned.jpg",
+  "pixels": [
+   414,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 1656.0
+ },
+ {
+  "file": "metal_brass-brushed.jpg",
+  "role": "metal",
+  "title": "Brushed brass paint (Apollo 11) interior",
+  "author": "NASA Smithsonian Institution",
+  "license": "CC0 1.0",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Brushed_brass_paint_(Apollo_11)_interior.png",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Brushed_brass_paint_%28Apollo_11%29_interior.png/1920px-Brushed_brass_paint_%28Apollo_11%29_interior.png",
+  "real_size": "approx. 0.5 m x 0.5 m (assumed; scan texture without stated scale)",
+  "tileable": true,
+  "notes": "brushed brass finish texture (from the Smithsonian Apollo 11 scan) with soft horizontal sheen bands; lamp base, door knob, bed knobs, clock case",
+  "path": "sources/textures/metal_brass-brushed.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 2048.0
+ },
+ {
+  "file": "water_ripples-over-wood.jpg",
+  "role": "water",
+  "title": "Submerged wood texture (Unsplash)",
+  "author": "Zugr zugr",
+  "license": "CC0 1.0",
+  "source_page": "https://commons.wikimedia.org/wiki/File:Submerged_wood_texture_(Unsplash).jpg",
+  "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Submerged_wood_texture_%28Unsplash%29.jpg/1920px-Submerged_wood_texture_%28Unsplash%29.jpg",
+  "real_size": "approx. 1.2 m x 0.7 m (estimated)",
+  "tileable": false,
+  "notes": "shallow clear water rippling over dark wood: ideal for the flooded parlor floor (blend over floor_ textures; ripple highlights catch moonlight)",
+  "path": "sources/textures/water_ripples-over-wood.jpg",
+  "pixels": [
+   1280,
+   753
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 1066.7
+ },
+ {
+  "file": "stone_marble-white-grey.jpg",
+  "role": "stone",
+  "title": "Arabescato Luna polished marble (Real Marble Textures Collection - Set 1)",
+  "author": "ShareTextures",
+  "license": "CC0 1.0",
+  "source_page": "https://opengameart.org/content/real-marble-textures-collection-set-1",
+  "download_url": "https://opengameart.org/sites/default/files/SET-1%20Free_3.zip",
+  "real_size": "approx. 1.5 m x 1.0 m slab (estimated; not stated)",
+  "tileable": false,
+  "notes": "white marble with bold grey veins; fireplace surround / mantel / washstand top",
+  "path": "sources/textures/stone_marble-white-grey.jpg",
+  "pixels": [
+   1024,
+   682
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 682.7
+ },
+ {
+  "file": "stone_marble-gold-veined.jpg",
+  "role": "stone",
+  "title": "Arabescato Oro polished marble (Real Marble Textures Collection - Set 1)",
+  "author": "ShareTextures",
+  "license": "CC0 1.0",
+  "source_page": "https://opengameart.org/content/real-marble-textures-collection-set-1",
+  "download_url": "https://opengameart.org/sites/default/files/SET-1%20Free_3.zip",
+  "real_size": "approx. 1.6 m x 1.0 m slab (estimated; not stated)",
+  "tileable": false,
+  "notes": "white marble with grey and faint gold veins; alternative fireplace / hearth stone",
+  "path": "sources/textures/stone_marble-gold-veined.jpg",
+  "pixels": [
+   1024,
+   623
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 640.0
+ },
+ {
+  "file": "paper_offwhite-grain.jpg",
+  "role": "paper",
+  "title": "Papier7 (Paper-Textures seamless pack)",
+  "author": "Leschge",
+  "license": "CC0 1.0",
+  "source_page": "https://opengameart.org/content/paper-textures-seamless",
+  "download_url": "https://opengameart.org/sites/default/files/papertextures.zip",
+  "real_size": "approx. 0.30 m x 0.30 m (estimated)",
+  "tileable": true,
+  "notes": "plain off-white paper with real fibre grain; tint/stain for aged paper, notes, letters, book pages",
+  "path": "sources/textures/paper_offwhite-grain.jpg",
+  "pixels": [
+   1024,
+   1024
+  ],
+  "attribution_required": false,
+  "real_size_estimated": true,
+  "px_per_m": 3413.3
+ }
+]

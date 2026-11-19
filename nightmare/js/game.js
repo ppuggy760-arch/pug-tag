@@ -67,8 +67,9 @@
   /* captions: Sound captions on/off (on by default on touch screens, whose one speaker can't tell left from right).
      scare: 'normal' or 'gentle' (softer, quieter jumpscares for younger dreamers; the nights are just as hard).
      hints: lessons the game has already taught (it never repeats them). tutorialDone: the first-night lesson is
-     over (finished or skipped). deaths: deaths per night since you last woke up from it ("Dream lighter" after 3). */
-  const save = { night: 1, beaten: 0, vol: 85, music: 70, fx: 'full', custom: {}, captions: null, scare: 'normal', hints: {}, tutorialDone: null, deaths: {} };
+     over (finished or skipped). deaths: deaths per night since you last woke up from it ("Dream lighter" after 3).
+     met: the monsters you have really seen in the dream (Extras keeps the others a secret: see meet). */
+  const save = { night: 1, beaten: 0, vol: 85, music: 70, fx: 'full', custom: {}, captions: null, scare: 'normal', hints: {}, tutorialDone: null, deaths: {}, met: {} };
   function loadSave() {
     let stored = null;
     try {
@@ -93,6 +94,13 @@
     if (!save.hints || typeof save.hints !== 'object') save.hints = {};
     if (typeof save.tutorialDone !== 'boolean') save.tutorialDone = save.beaten > 0; // (an older save that already beat a night skips it)
     if (!save.deaths || typeof save.deaths !== 'object') save.deaths = {};
+    if (!stored || !stored.met || typeof stored.met !== 'object' || Array.isArray(stored.met)) {
+      save.met = {};
+      // a save from before Extras kept monsters a secret, that already beat a night: it has met every monster awake on those nights
+      if (stored && save.beaten > 0) for (const m of Array.isArray(CFG.monsters) ? CFG.monsters : []) {
+        if (m && m.id != null && Array.isArray(m.levels) && m.levels.slice(0, save.beaten).some((l) => +l > 0)) save.met[m.id] = true;
+      }
+    }
     applyFxSetting();
   }
   function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* ignore */ } }
@@ -614,11 +622,31 @@
   const hourSec = () => Math.max(5, CFG.hourSeconds || 75);
 
   /* ------------------------------------------------------------------ */
-  /*  ART: load pictures, or paint dreamy stand-ins when they're missing */
+  /*  ART: load pictures, or use the stand-ins when they're missing     */
   /* ------------------------------------------------------------------ */
   const CAM_ZOOM = 1.14; // camera pictures are shown 14% bigger than the screen (see camFeedBox)
+  /* officeMissing / camMissing / bedroomMissing: YOUR picture is missing (a stand-in shows). standIn says which:
+     'photo' (the game's own picture from assets/scenes/) or 'painted' (drawn by the code), per config.js slot. */
   const Art = { office: null, officeMissing: true, doors: { left: {}, right: {} }, cams: {}, camMissing: {}, monsters: {}, noise: [], vignette: null, scan: null, dot: null,
-    bedroomNight: null, bedroomBlur: [], bedroomMorning: null, bedroomMissing: true, evidence: {}, drawing: null, youCam: null };
+    bedroomNight: null, bedroomBlur: [], bedroomMorning: null, bedroomMissing: true, evidence: {}, drawing: null, youCam: null,
+    standIn: {}, officePhoto: false, bedroomPhoto: false, youCamPhoto: false, menu: null, clock: null, youCamChair: null, evPatch: {},
+    restReady: false, bootP: null, restP: null, startRest: () => {} };
+
+  /* THE GAME'S OWN PHOTO STAND-INS (assets/scenes/): rooms put together from lots of free photos and textures
+     (wood, plaster, wallpaper, velvet, old-house photos, old paintings, the moon; see CREDITS.md and art-src/).
+     One is shown only while YOUR picture for that slot is missing: draw yours into assets/rooms/ and it wins.
+     If a photo is missing too, the game paints its old stand-in. (None of them has a monster in it.) */
+  const SCENE_DIR = 'assets/scenes/';
+  const SCENES = {
+    office: 'office.jpg',
+    door: (side, kind) => `door_${side}_${kind}.jpg`,              // kind: dark / lit / closed (360 x 630)
+    cams: { nursery: 'cam1_nursery.jpg', hall: 'cam2_hall.jpg', parlor: 'cam3_parlor.jpg', stairs: 'cam4_stairs.jpg', west: 'cam5_west.jpg', east: 'cam6_east.jpg' },
+    bedroom: 'bedroom.jpg', morning: 'bedroom_morning.jpg', youCam: 'cam7_you.jpg',
+    menu: 'menu.jpg', menuLight: 'menu_light.png', menuFog: 'menu_fog.png', paper: 'paper.jpg', clock: 'clock.png',
+    youCamChair: 'cam7_chair.png', evidence: (n) => `bedroom_ev${n}.jpg`,  // CAM 7's chair back (drawn over you); Nights 2 and 4's mornings
+  };
+  const SCENE_SEAT = { x: 0.459, y: 0.603, size: 0.47 }; // where your head goes in cam7_you.jpg (its own chair is in the picture)
+  const MENU_LIGHT_BOX = { x: 712, y: 20, w: 644, h: 880 };  // the part of menu_light.png that has any light in it (kept, the rest is dropped)
 
   /* bust: a number added to the address so the browser fetches the file again (the art helper's U key) */
   function loadImage(url, bust) {
@@ -631,77 +659,165 @@
     });
   }
 
-  /* every picture config.js asks for: Art.files = [{ slot, path, img, w, h }] (img only in ?dev, for the art checklist) */
-  async function loadArt(tick, bust) {
-    const jobs = [];
-    Art.files = [];
+  /* every picture config.js asks for: Art.files = [{ slot, path, img, w, h }] (img only in ?dev, for the art checklist).
+     Two parts, so a slow connection gets to the title screen quickly:
+       Art.bootP  the pictures the title screen and falling asleep need (all of YOUR pictures in assets/rooms, the monster
+                  frames, the menu photo, the paper and the night bedroom). The boot screen waits for these.
+       Art.restP  the rest of the game's own photos (desk room, doorways, cameras, CAM 7, the morning). They are fetched
+                  once Art.startRest() is called (boot calls it as soon as its own files are in; o.lazy false: at once)
+                  and load behind the menu; a night waits for them with your eyes shut (Art.restReady). The returned
+                  promise is the whole lot. */
+  function loadArt(tick, bust, o) {
+    o = o || {};
+    const jobs = [], restJobs = [];
+    Art.files = []; Art.standIn = {}; Art.restReady = false;
+    let go; const gate = new Promise((r) => { go = r; });
+    Art.startRest = () => go(true);
+    if (!o.lazy) go(true);
     const job = (slot, url, opt) => {
       url = url ? String(url) : '';
+      const order = jobs.length; // (the checklist lists them in config.js order, whichever loads first)
       const p = loadImage(url, bust).then((img) => {
-        if (url || !opt) Art.files.push({ slot, path: url || '', opt: !!opt, img: DEV ? img : null, w: img ? img.naturalWidth : 0, h: img ? img.naturalHeight : 0 });
+        if (url || !opt) Art.files.push({ slot, order, path: url || '', opt: !!opt, img: DEV ? img : null, w: img ? img.naturalWidth : 0, h: img ? img.naturalHeight : 0 });
         tick(); return img;
       });
       jobs.push(p); return p;
     };
+    /* one of the game's own photos (assets/scenes/), fetched only once `needed` says yes (a promise: true / false).
+       later: one of the background part's (fetched after Art.startRest(), not counted on the loading bar) */
+    const photo = (name, needed, later) => {
+      const p = Promise.all([needed, later ? gate : true]).then(([yes]) => (yes && name ? loadImage(SCENE_DIR + name, bust) : null))
+        .then((img) => { if (!later) tick(); return img; });
+      (later ? restJobs : jobs).push(p); return p;
+    };
+    const not = (p) => Promise.resolve(p).then((img) => !img);
 
-    const officeP = job('office.image', CFG.office.image);
-    const doorP = {};
+    // the title screen first (its photo also dims in behind the boot screen as soon as it is here)
+    const menuShot = { base: photo(SCENES.menu, true), light: photo(SCENES.menuLight, true), fog: photo(SCENES.menuFog, true) };
+    if (o.backdrop) menuShot.base.then((img) => { if (img) o.backdrop(img); });
+    const officeP = job('office.image', CFG.office.image), officeShot = photo(SCENES.office, not(officeP), true);
+    const doorP = {}, doorShot = {};
     for (const side of ['left', 'right']) {
       const d = CFG.office.doors[side], at = `office.doors.${side}.`;
       doorP[side] = { dark: job(at + 'darkImage', d.darkImage, true), lit: job(at + 'litImage', d.litImage, true), closed: job(at + 'closedImage', d.closedImage, true) };
+      doorShot[side] = { // (your own desk room without a darkImage shows the doorway you painted: no dark photo then)
+        dark: photo(SCENES.door(side, 'dark'), Promise.all([doorP[side].dark, officeP]).then(([a, b]) => !a && !b), true),
+        lit: photo(SCENES.door(side, 'lit'), not(doorP[side].lit), true), closed: photo(SCENES.door(side, 'closed'), not(doorP[side].closed), true),
+      };
     }
-    const camP = {};
-    for (const c of CFG.cameras) camP[c.id] = job(`camera "${c.id}"`, c.image);
+    const camP = {}, camShot = {};
+    for (const c of CFG.cameras) { camP[c.id] = job(`camera "${c.id}"`, c.image); camShot[c.id] = photo(SCENES.cams[c.id], not(camP[c.id]), true); }
     const bed = CFG.bedroom || {};
     const bedP = { image: job('bedroom.image', bed.image), morning: job('bedroom.morningImage', bed.morningImage, true) };
+    const bedShot = { night: photo(SCENES.bedroom, not(bedP.image)), morning: photo(SCENES.morning, Promise.all([bedP.image, bedP.morning]).then(([a, b]) => !a && !b), true) };
     const evP = {};
     for (const n of [2, 3, 4]) evP[n] = job(`morning.evidence ${n}`, evidenceCfg(n).image, true);
-    const youP = job('youCam.image', (CFG.youCam || {}).image, true); // CAM 7 (optional)
+    const youP = job('youCam.image', (CFG.youCam || {}).image, true), youShot = photo(SCENES.youCam, not(youP), true); // CAM 7 (optional)
+    const chairShot = photo(SCENES.youCamChair, not(youP), true);
+    // the photo bedroom's mornings after Nights 2 and 4 (the closet door ajar, a scrap of collar on the floor): pieces of
+    // bedroom_morning.jpg rendered with the evidence in them, laid over it (not with your own bedroom or evidence picture)
+    const evShot = {};
+    for (const n of [2, 4]) evShot[n] = photo(SCENES.evidence(n), Promise.all([bedP.image, bedP.morning, evP[n]]).then((a) => a.every((x) => !x)), true);
+    const paperShot = photo(SCENES.paper, true); // the sheet the crayon drawing is drawn on
+    const clockShot = photo(SCENES.clock, true); // the twin-bell alarm clock (a photo; the game draws its hands)
     const monP = {};
     for (const m of CFG.monsters) {
       const list = (key, what, opt) => Promise.all((m[key] || []).map((u, i) => job(`${m.name} ${what} ${i + 1}`, u, opt)));
       monP[m.id] = { frames: list('frames', 'frame'), jump: list('jumpscareFrames', 'jumpscare frame', true), sleep: list('sleepFrames', 'sleep frame', true) };
     }
     Art.total = jobs.length;
-    await Promise.all(jobs);
+    const standIn = (slot, img) => { Art.standIn[slot] = img ? 'photo' : 'painted'; return img; };
 
-    // monsters first (the office stand-in pins a drawing of the first monster on the wall)
-    for (const m of CFG.monsters) {
-      let frames = (await monP[m.id].frames).filter(Boolean);
-      const missing = frames.length === 0;
-      if (missing) frames = shadowFigure(m);
-      let jump = (await monP[m.id].jump).filter(Boolean);
-      if (!jump.length) jump = frames;
-      const soft = frames.map((f) => softFrame(f, 820));
-      const sleep = (await monP[m.id].sleep).filter(Boolean).map((f) => softFrame(f, 820)); // (the sleeper brain's own frames)
-      Art.monsters[m.id] = { frames, jump, soft, sleep, sil: soft.map((f) => silhouette(f, '#05030a')), missing };
-    }
+    Art.bootP = (async () => {
+      await Promise.all(jobs);
+      Art.files.sort((a, b) => a.order - b.order);
+      for (const m of CFG.monsters) {
+        let frames = (await monP[m.id].frames).filter(Boolean);
+        const missing = frames.length === 0;
+        if (missing) frames = shadowFigure(m);
+        let jump = (await monP[m.id].jump).filter(Boolean);
+        if (!jump.length) jump = frames;
+        const soft = frames.map((f) => softFrame(f, 820));
+        const sleep = (await monP[m.id].sleep).filter(Boolean).map((f) => softFrame(f, 820)); // (the sleeper brain's own frames)
+        Art.monsters[m.id] = { frames, jump, soft, sleep, sil: soft.map((f) => silhouette(f, '#05030a')), missing };
+      }
+      Art.clock = await clockShot;
+      Art.drawing = paintKidDrawing(await paperShot); Art.drawingDay = null; // the crayon drawing (desk-room wall, Night 3's morning): no monster in it
+      // your real bedroom: one picture, tinted dark blue for the night and warm for the morning.
+      // The photo stand-in has its own night and morning pictures (already lit for the night: no dark-blue tint).
+      const bedImg = await bedP.image, night = await bedShot.night;
+      Art.bedroomMissing = !bedImg; Art.bedroomPhoto = !bedImg && !!standIn('bedroom.image', night);
+      if (Art.bedroomPhoto) {
+        Art.bedroomNight = shadeCopy(night);
+        drawClockPhoto(Art.bedroomNight.getContext('2d'), 1500, TABLE_TOP - 34, 30, { h: 11, m: 59 }, NIGHT_CLOCK_LIGHT); // (the little clock on the bedside table)
+      } else Art.bedroomNight = shadeCopy(bedImg || paintBedroom('night'), 'multiply', '#1a2346', 0.75);
+      Art.bedroomBlur = TOUCH ? [] : bakeBlurs(Art.bedroomNight, [2, 4, 7, 10]); // (phones darken instead of blurring: no need to keep them)
+      for (const n of [2, 3, 4]) Art.evidence[n] = await evP[n];
+      Art.menu = menuArt(await menuShot.base, await menuShot.light, await menuShot.fog);
+      paintFx();
+    })();
 
-    Art.drawing = paintPinnedDrawing(); // the "he walks at night" drawing (desk-room wall, Night 3's morning)
-    const office = await officeP;
-    Art.officeMissing = !office;
-    if (office) Object.assign(Art, fitOffice(office));
-    else { Art.office = paintOffice(); Art.officeBand = { y0: 0, k: 1 }; }
-    for (const side of ['left', 'right']) {
-      const own = { dark: await doorP[side].dark, lit: await doorP[side].lit, closed: await doorP[side].closed };
-      // your own desk room without a darkImage: what you painted in the doorway shows (under a soft darkness, see drawDoorway)
-      Art.doors[side] = { own, dark: own.dark || (office ? null : paintDoorway(side, false)), lit: own.lit || paintDoorway(side, true), closed: own.closed || paintShutter(side) };
+    Art.restP = (async () => {
+      await Art.bootP;
+      await Promise.all(restJobs);
+      const office = await officeP, officeImg = await officeShot;
+      Art.officeMissing = !office; Art.officePhoto = !office && !!standIn('office.image', officeImg);
+      if (office) Object.assign(Art, fitOffice(office));
+      else { Art.office = Art.officePhoto ? photoOffice(officeImg) : paintOffice(); Art.officeBand = { y0: 0, k: 1 }; }
+      for (const side of ['left', 'right']) {
+        const own = { dark: await doorP[side].dark, lit: await doorP[side].lit, closed: await doorP[side].closed };
+        const shot = { dark: await doorShot[side].dark, lit: await doorShot[side].lit, closed: await doorShot[side].closed };
+        for (const k in shot) if (!own[k] && (k !== 'dark' || !office)) standIn(`office.doors.${side}.${k}Image`, shot[k]);
+        // your own desk room without a darkImage: what you painted in the doorway shows (under a soft darkness, see drawDoorway)
+        Art.doors[side] = { own, shot, dark: own.dark || (office ? null : fitDoor(side, shot.dark) || paintDoorway(side, false)),
+          lit: own.lit || fitDoor(side, shot.lit) || paintDoorway(side, true), closed: own.closed || fitDoor(side, shot.closed) || paintShutter(side) };
+      }
+      for (const c of CFG.cameras) {
+        const im = await camP[c.id], shot = im ? null : standIn(`camera "${c.id}"`, await camShot[c.id]);
+        Art.camMissing[c.id] = !im;
+        Art.cams[c.id] = im || shot ? fitPicture(im || shot, W * CAM_ZOOM, H * CAM_ZOOM) : paintRoom(c);
+      }
+      const bedImg = await bedP.image, bedMorning = await bedP.morning, morning = await bedShot.morning;
+      if (!bedImg && !bedMorning) standIn('bedroom.morningImage', morning);
+      // (no morning picture: a warmed copy of whichever bedroom the night showed)
+      Art.bedroomMorning = bedMorning ? shadeCopy(bedMorning) : !bedImg && morning ? shadeCopy(morning)
+        : shadeCopy(bedImg || (Art.bedroomPhoto ? await bedShot.night : null) || paintBedroom('morning'), 'overlay', '#ffb070', 0.25);
+      const you = await youP, youPhoto = you ? null : standIn('youCam.image', await youShot);
+      Art.youCamPhoto = !!youPhoto;
+      Art.youCam = (you || youPhoto) && fitPicture(you || youPhoto, W * CAM_ZOOM, H * CAM_ZOOM);
+      if (Art.youCamPhoto) Art.youCam = youCamWithDrawing(Art.youCam);
+      Art.youCamChair = Art.youCamPhoto ? await chairShot : null;
+      Art.evPatch = {};
+      for (const n of [2, 4]) Art.evPatch[n] = Art.bedroomPhoto && !bedMorning ? await evShot[n] : null;
+      Art.restReady = true;
+    })();
+    Art.restP.catch((err) => console.error(err));
+    return Art.restP;
+  }
+
+  /* a photo doorway at exactly its door box's size: as it is when the shapes match (the built-in desk room's boxes),
+     otherwise cut to fit (never stretched), keeping its floor at the bottom */
+  function fitDoor(side, img) {
+    if (!img) return null;
+    const { w, h } = doorPx(side), a = w / h, ia = img.width / img.height;
+    if (Math.abs(ia / a - 1) < 0.02) return img;
+    const c = makeCanvas(w, h), sw = ia > a ? img.height * a : img.width, sh = ia > a ? img.height : img.width / a;
+    c.getContext('2d').drawImage(img, (img.width - sw) / 2, img.height - sh, sw, sh, 0, 0, c.width, c.height);
+    return c;
+  }
+
+  /* the title screen's hall: the picture, its door light on its own (only the part with light in it, plus a dark copy
+     for the moments it sputters) and the low fog. null without the picture (then the old drifting fog shows) */
+  function menuArt(base, light, fog) {
+    if (!base) return null;
+    let lit = null, dim = null;
+    if (light) {
+      const B = MENU_LIGHT_BOX, k = light.width / W;
+      lit = makeCanvas(B.w, B.h);
+      lit.getContext('2d').drawImage(light, B.x * k, B.y * k, B.w * k, B.h * k, 0, 0, B.w, B.h);
+      dim = tinted(lit, '#05030a');
     }
-    for (const c of CFG.cameras) {
-      const im = await camP[c.id];
-      Art.camMissing[c.id] = !im;
-      Art.cams[c.id] = im ? fitPicture(im, W * CAM_ZOOM, H * CAM_ZOOM) : paintRoom(c);
-    }
-    // your real bedroom: one picture, tinted dark blue for the night and warm for the morning
-    const bedImg = await bedP.image, bedMorning = await bedP.morning;
-    Art.bedroomMissing = !bedImg;
-    Art.bedroomNight = shadeCopy(bedImg || paintBedroom('night'), 'multiply', '#1a2346', 0.75);
-    Art.bedroomBlur = TOUCH ? [] : bakeBlurs(Art.bedroomNight, [2, 4, 7, 10]); // (phones darken instead of blurring: no need to keep them)
-    Art.bedroomMorning = bedMorning ? shadeCopy(bedMorning) : shadeCopy(bedImg || paintBedroom('morning'), 'overlay', '#ffb070', 0.25);
-    for (const n of [2, 3, 4]) Art.evidence[n] = await evP[n];
-    const you = await youP;
-    Art.youCam = you && fitPicture(you, W * CAM_ZOOM, H * CAM_ZOOM);
-    paintFx();
+    return { base, lit, dim, fog };
   }
 
   function officeWidthFor(img) { return img.width * (H / img.height); }
@@ -937,9 +1053,8 @@
     x.save(); x.font = '54px Eater, serif'; x.fillStyle = 'rgba(160, 14, 34, .55)'; x.translate(1610, 600); x.rotate(-0.05);
     x.fillText('WAKE UP', 0, 0); x.restore();
 
-    // drawing of the monster pinned to the wall
-    x.save(); x.translate(1700 + Art.drawing.width / 2, 190 + Art.drawing.height / 2); x.rotate(0.05);
-    x.drawImage(Art.drawing, -Art.drawing.width / 2, -Art.drawing.height / 2); x.restore();
+    // the crayon drawing pinned to the wall
+    pinDrawing(x, PIN_SPOT.x, PIN_SPOT.y, null);
 
     // desk
     const dx = 860, dw = 700, dy = 620;
@@ -989,23 +1104,196 @@
     return c;
   }
 
-  /* a child's drawing of the first monster on a sheet of paper, with a red pin */
-  function paintPinnedDrawing() {
-    const pw = 190, ph = 230, c = makeCanvas(pw, ph), x = c.getContext('2d');
-    const first = CFG.monsters[0] && Art.monsters[CFG.monsters[0].id];
-    x.fillStyle = '#d9cfb8'; x.fillRect(0, 0, pw, ph);
-    if (first && first.frames[0]) {
-      x.globalAlpha = 0.85; x.filter = 'sepia(0.6) contrast(1.2)'; // baked once, never per frame
-      const f = first.frames[0], s = Math.min((pw - 20) / f.width, (ph - 40) / f.height);
-      x.drawImage(f, (pw - f.width * s) / 2, 10, f.width * s, f.height * s);
-      x.filter = 'none'; x.globalAlpha = 1;
+  /* ----- the crayon drawing: a child's drawing of the house at night under a huge moon, one window lit, the
+     front door left open and little footprints going in ("he walks at night"). It hangs on the desk-room wall and
+     turns up on your bedside table after Night 3. On purpose it has NO monster in it: you only ever see the
+     monster in the real dream. paper: the sheet (assets/scenes/paper.jpg) or null for a plain one.
+     Drawn at 380 x 460 (twice the size it hangs on the wall), the same way every time. ----- */
+  const KID_CAPTION = 'he walks at night';
+  /* a child's handwriting, one stroke list per letter: [width, strokes]. x-height 1, baseline at y 1 (tall
+     letters reach up to -0.75, g hangs down to 1.55). Letters missing here are written with a font instead. */
+  const KID_FONT = (() => {
+    const ring = (cx, cy, rx, ry, a0, a1) => { const p = []; for (let i = 0; i <= 18; i++) { const a = a0 + (a1 - a0) * i / 18; p.push([cx + Math.cos(a) * rx, cy + Math.sin(a) * ry]); } return p; };
+    const TAU = Math.PI * 2;
+    return {
+      a: [0.8, [ring(0.32, 0.56, 0.31, 0.44, -0.5, -0.5 - TAU), [[0.66, 0.06], [0.66, 1.0]]]],
+      e: [0.7, [[[0.05, 0.56], [0.64, 0.56]].concat(ring(0.34, 0.56, 0.3, 0.44, 0, -TAU + 0.85))]],
+      g: [0.76, [ring(0.31, 0.45, 0.3, 0.4, -0.5, -0.5 - TAU), [[0.65, 0.04], [0.65, 1.28], [0.55, 1.5], [0.3, 1.55], [0.07, 1.4]]]],
+      h: [0.68, [[[0.06, -0.75], [0.06, 1.0]], [[0.06, 0.52], [0.16, 0.18], [0.36, 0.04], [0.56, 0.18], [0.62, 0.48], [0.62, 1.0]]]],
+      i: [0.3, [[[0.13, 0.08], [0.13, 1.0]], [[0.12, -0.4], [0.14, -0.34]]]],
+      k: [0.66, [[[0.06, -0.75], [0.06, 1.0]], [[0.58, 0.04], [0.08, 0.6], [0.62, 1.0]]]],
+      l: [0.3, [[[0.13, -0.78], [0.13, 1.0]]]],
+      n: [0.68, [[[0.06, 0.04], [0.06, 1.0]], [[0.06, 0.5], [0.16, 0.16], [0.36, 0.04], [0.56, 0.18], [0.62, 0.48], [0.62, 1.0]]]],
+      s: [0.62, [[[0.56, 0.16], [0.38, 0.02], [0.14, 0.08], [0.08, 0.3], [0.3, 0.5], [0.54, 0.66], [0.54, 0.88], [0.32, 1.0], [0.04, 0.9]]]],
+      t: [0.6, [[[0.28, -0.58], [0.28, 0.86], [0.36, 1.0], [0.54, 0.94]], [[0.02, 0.08], [0.56, 0.04]]]],
+      w: [0.88, [[[0.02, 0.04], [0.2, 1.0], [0.42, 0.34], [0.64, 1.0], [0.84, 0.04]]]],
+      ' ': [0.46, []],
+    };
+  })();
+
+  function paintKidDrawing(paper) {
+    const pw = 380, ph = 460, c = makeCanvas(pw, ph), x = c.getContext('2d'), r = mulberry32(1313);
+    if (paper) x.drawImage(paper, 0, 0, pw, ph);
+    else { x.fillStyle = '#ddd0b0'; x.fillRect(0, 0, pw, ph); noiseFill(x, pw, ph, 0.05, 77, 2); }
+    // the crayon goes on its own layer first, then the paper's tooth shows through it (where the wax skipped)
+    const L = makeCanvas(pw, ph), l = L.getContext('2d');
+    l.lineCap = 'round'; l.lineJoin = 'round';
+    const jit = (a) => (r() - 0.5) * 2 * a;
+    const line = (pts, col, w, passes) => { // a crayon line: a few wobbly passes over the same path
+      l.strokeStyle = col;
+      for (let p = 0; p < (passes || 3); p++) {
+        l.globalAlpha = 0.55 + r() * 0.3; l.lineWidth = w * (0.65 + r() * 0.5);
+        l.beginPath();
+        pts.forEach(([px, py], i) => { const X = px + jit(1.3), Y = py + jit(1.3); if (i) l.lineTo(X, Y); else l.moveTo(X, Y); });
+        l.stroke();
+      }
+      l.globalAlpha = 1;
+    };
+    const ring = (cx, cy, rx, ry, n, wob) => { const p = []; for (let i = 0; i <= n; i++) { const a = -0.4 + i / n * (Math.PI * 2 + 0.5); p.push([cx + Math.cos(a) * (rx + jit(wob)), cy + Math.sin(a) * (ry + jit(wob))]); } return p; };
+    const poly = (pts) => { const P = new Path2D(); pts.forEach(([px, py], i) => (i ? P.lineTo(px, py) : P.moveTo(px, py))); P.closePath(); return P; };
+    // colouring in: back-and-forth strokes across the shape (clipped to it), tilted by ang
+    const fill = (shape, bx, by, bw, bh, col, w, gap, ang, alpha, rule) => {
+      l.save(); l.clip(shape, rule || 'nonzero');
+      l.strokeStyle = col; l.lineWidth = w; l.globalAlpha = alpha;
+      const R = Math.hypot(bw, bh) / 2 + 6;
+      l.translate(bx + bw / 2, by + bh / 2); l.rotate(ang);
+      l.beginPath(); l.moveTo(-R, -R);
+      for (let y = -R, k = 1; y <= R; y += gap, k++) l.lineTo((k % 2 ? R : -R) + jit(8), y + jit(gap * 0.35));
+      l.stroke(); l.restore();
+    };
+    const moon = { x: 94, y: 94, r: 56 };
+    const house = [[138, 212], [236, 128], [334, 212], [322, 212], [322, 322], [150, 322], [150, 212]];
+    // the night sky, coloured round the moon and the house (a kid leaves a gap round things)
+    const sky = new Path2D(); sky.rect(16, 16, 348, 306);
+    sky.arc(moon.x, moon.y, moon.r + 7, 0, Math.PI * 2);
+    house.forEach(([px, py], i) => (i ? sky.lineTo(px, py - 6) : sky.moveTo(px, py - 6))); sky.closePath();
+    fill(sky, 16, 16, 348, 306, '#262c66', 7, 5.5, -0.12, 0.72, 'evenodd');
+    // the huge moon
+    const M = new Path2D(); M.arc(moon.x, moon.y, moon.r, 0, Math.PI * 2);
+    fill(M, moon.x - moon.r, moon.y - moon.r, moon.r * 2, moon.r * 2, '#f3c84c', 6, 6, 0.6, 0.85);
+    line(ring(moon.x, moon.y, moon.r, moon.r, 26, 1.5), '#dc9f2a', 5);
+    for (const [sx, sy, k] of [[198, 42, 1], [262, 62, 0.8], [336, 42, 1.1], [318, 118, 0.8], [166, 150, 0.9], [36, 196, 0.8]]) { // stars
+      const q = 9 * k;
+      line([[sx - q, sy], [sx + q, sy]], '#f0d468', 4, 2); line([[sx, sy - q], [sx, sy + q]], '#f0d468', 4, 2);
+      line([[sx - q * 0.6, sy - q * 0.6], [sx + q * 0.6, sy + q * 0.6]], '#f0d468', 3, 1);
     }
-    x.fillStyle = '#2a1a10'; x.font = '20px "Special Elite", monospace'; x.textAlign = 'center';
-    x.fillText('he walks at night', pw / 2, ph - 12);
-    x.fillStyle = '#b01828'; x.beginPath(); x.arc(pw / 2, 4 + 6, 6, 0, 7); x.fill();
+    // the house: lilac walls, a crimson roof, a chimney
+    const body = poly([[150, 212], [322, 212], [322, 322], [150, 322]]), roof = poly([[138, 212], [236, 128], [334, 212]]);
+    fill(body, 150, 212, 172, 110, '#8d78b4', 6, 8, 0.3, 0.42);
+    fill(roof, 138, 128, 196, 84, '#a03238', 6, 7, -0.5, 0.8);
+    const ink = '#33222f';
+    line([[288, 172], [288, 138], [308, 138], [308, 189]], ink, 5);
+    line([[138, 212], [236, 128], [334, 212], [138, 212]], ink, 5);
+    line([[150, 212], [150, 322], [322, 322], [322, 212]], ink, 5);
+    // one window lit, one dark
+    const winLit = poly([[172, 228], [214, 228], [214, 266], [172, 266]]), winDark = poly([[258, 228], [300, 228], [300, 266], [258, 266]]);
+    fill(winLit, 172, 228, 42, 38, '#f6cf4a', 5, 5, 0.9, 0.95);
+    fill(winDark, 258, 228, 42, 38, '#141019', 5, 5, -0.9, 0.9);
+    for (const [wx, wy] of [[172, 228], [258, 228]]) {
+      line([[wx, wy], [wx + 42, wy], [wx + 42, wy + 38], [wx, wy + 38], [wx, wy]], ink, 4.5);
+      line([[wx + 21, wy], [wx + 21, wy + 38]], ink, 3.5, 2); line([[wx, wy + 19], [wx + 42, wy + 19]], ink, 3.5, 2);
+    }
+    // the front door, open: black inside, the door swung out
+    const doorHole = poly([[218, 262], [254, 262], [254, 322], [218, 322]]);
+    fill(doorHole, 218, 262, 36, 60, '#0f0a12', 5, 4, 1.2, 0.95);
+    fill(poly([[254, 262], [276, 270], [276, 318], [254, 322]]), 254, 262, 22, 60, '#7b5232', 5, 6, 0.2, 0.75);
+    line([[218, 322], [218, 262], [254, 262], [254, 322]], ink, 4.5);
+    line([[254, 262], [276, 270], [276, 318], [254, 322]], '#4a3020', 4);
+    // the grass, and a path from the door
+    const grass = new Path2D(); grass.moveTo(16, 324); for (let gx = 16; gx <= 364; gx += 12) grass.lineTo(gx, 318 + jit(4)); grass.lineTo(364, 356); grass.lineTo(16, 360); grass.closePath();
+    fill(grass, 16, 312, 348, 50, '#3f7a3c', 6, 6, -0.25, 0.7);
+    for (let gx = 22; gx < 360; gx += 15 + r() * 10) line([[gx, 326], [gx + jit(3), 312 + jit(3)]], '#2f6a30', 3, 1);
+    line([[220, 323], [194, 352], [168, 386]], '#6e5236', 4, 2); line([[252, 323], [262, 352], [276, 386]], '#6e5236', 4, 2);
+    // little dark footprints, from the edge of the paper right up to the open door
+    l.fillStyle = '#1b1421';
+    for (let i = 0; i < 9; i++) {
+      const t = i / 8, u = 1 - t, px = u * u * 26 + 2 * u * t * 140 + t * t * 236, py = u * u * 352 + 2 * u * t * 378 + t * t * 328;
+      const dx = 2 * u * (140 - 26) + 2 * t * (236 - 140), dy = 2 * u * (378 - 352) + 2 * t * (328 - 378), a = Math.atan2(dy, dx), side = i % 2 ? 1 : -1;
+      const k = 1 - 0.45 * t;
+      l.save(); l.translate(px - Math.sin(a) * 6 * side * k, py + Math.cos(a) * 6 * side * k); l.rotate(a + Math.PI / 2);
+      l.globalAlpha = 0.85; l.beginPath(); l.ellipse(0, 0, 4.2 * k, 6.5 * k, 0, 0, Math.PI * 2); l.fill(); l.restore();
+    }
+    l.globalAlpha = 1;
+    // the words, in the same crayon, a little wonky
+    const U = 21, chars = KID_CAPTION.split(''), gapU = 0.16;
+    const wide = chars.reduce((t, ch) => t + (KID_FONT[ch] ? KID_FONT[ch][0] : 0.62) + gapU, -gapU) * U;
+    let cx = (pw - wide) / 2;
+    for (const ch of chars) {
+      const g = KID_FONT[ch], cw = (g ? g[0] : 0.62) * U, base = 438 + jit(2.5), sz = U * (0.92 + r() * 0.16), rot = jit(0.07);
+      if (g) for (const st of g[1]) line(st.map(([gx, gy]) => { const X = gx * sz, Y = (gy - 1) * sz; return [cx + X * Math.cos(rot) - Y * Math.sin(rot), base + X * Math.sin(rot) + Y * Math.cos(rot)]; }), '#2a1a30', 4.2, 2);
+      else if (ch.trim()) { l.fillStyle = '#2a1a30'; l.font = Math.round(U * 1.4) + 'px Fell, serif'; l.fillText(ch, cx, base); }
+      cx += cw + gapU * U;
+    }
+    // the paper's tooth: tiny gaps in the wax
+    const T = makeCanvas(pw, ph), tx = T.getContext('2d'), id = tx.createImageData(pw, ph), d = id.data;
+    for (let i = 0; i < d.length; i += 4) { const v = r(); if (v < 0.16) { d[i + 3] = 70 + v * 600; if (v < 0.05 && i + 4 < d.length) d[i + 7] = 120; } } // (some gaps two pixels wide)
+    tx.putImageData(id, 0, 0);
+    l.globalCompositeOperation = 'destination-out'; l.drawImage(T, 0, 0); l.globalCompositeOperation = 'source-over';
+    x.globalAlpha = 0.94; x.drawImage(L, 0, 0); x.globalAlpha = 1;
+    // a soft fold across the middle, and the red pin
+    x.fillStyle = 'rgba(60,40,20,.07)'; x.fillRect(0, ph * 0.49, pw, 2); x.fillStyle = 'rgba(255,250,235,.12)'; x.fillRect(0, ph * 0.49 + 2, pw, 2);
+    x.fillStyle = 'rgba(20,10,10,.35)'; x.beginPath(); x.ellipse(pw / 2 + 5, 26, 11, 7, 0, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#a8162a'; x.beginPath(); x.arc(pw / 2, 20, 11, 0, Math.PI * 2); x.fill();
+    x.fillStyle = 'rgba(255,200,200,.55)'; x.beginPath(); x.arc(pw / 2 - 4, 16, 3.5, 0, Math.PI * 2); x.fill();
+    return c;
+  }
+  /* the drawing in the light of a wall: shade = [colour at its top, colour at its bottom], multiplied over it, plus a
+     fine grain like the photo's. Without multiply (very old browsers) it is just darkened. */
+  function shadedDrawing(shade) {
+    const d = Art.drawing, c = makeCanvas(d.width, d.height), x = c.getContext('2d'), ok = blendOk('multiply');
+    x.drawImage(d, 0, 0);
+    const g = x.createLinearGradient(0, 0, 0, c.height); g.addColorStop(0, shade[0]); g.addColorStop(1, shade[1]);
+    x.globalCompositeOperation = ok ? 'multiply' : 'source-over'; x.globalAlpha = ok ? 1 : 0.5;
+    x.fillStyle = ok ? g : '#07050c'; x.fillRect(0, 0, c.width, c.height);
+    x.globalAlpha = 1; x.globalCompositeOperation = 'source-over';
+    noiseFill(x, c.width, c.height, 0.04, 5, 1.5);
+    return c;
+  }
+  /* pin the drawing on a wall: its top-left corner at left, top (in a 2400 x 900 room), 190 x 230, a little crooked,
+     with a soft shadow. shade: the wall's light (see shadedDrawing), or null */
+  const PIN_SPOT = { x: 1700, y: 190 }; // the empty piece of wall both built-in desk rooms keep for it
+  function pinDrawing(x, left, top, shade) {
+    const d = shade ? shadedDrawing(shade) : Art.drawing, w = 190, h = 230;
+    x.save(); x.translate(left + w / 2, top + h / 2); x.rotate(0.05);
+    x.shadowColor = 'rgba(4,2,8,.65)'; x.shadowBlur = 12; x.shadowOffsetX = 5; x.shadowOffsetY = 8;
+    x.drawImage(d, -w / 2, -h / 2, w, h);
+    x.restore();
+  }
+  /* the built-in photo desk room (made at 2400 x 900), with the drawing pinned on its empty piece of wall, in the dim
+     violet light of that wall. Made once, at the size it is shown. */
+  function photoOffice(img) {
+    const c = makeCanvas(officeWidthFor(img), H), x = c.getContext('2d');
+    x.drawImage(img, 0, 0, c.width, H);
+    x.save(); x.scale(c.width / 2400, 1);
+    pinDrawing(x, PIN_SPOT.x, PIN_SPOT.y, ['rgb(66,68,94)', 'rgb(80,82,110)']);
+    x.restore();
     return c;
   }
 
+  /* CAM 7's photo shows the same desk room from behind: the drawing is pinned there too, on the same piece of wall
+     (its corners in cam7_you.jpg's 1824 x 1026 pixels, seen in perspective from the high corner; the wall's light there) */
+  const CAM7_PIN = { tl: [1559.9, 228.5], tr: [1772.7, 249.9], br: [1708.9, 471.0], bl: [1512.6, 437.4], shade: ['rgb(47,56,69)', 'rgb(57,67,80)'] };
+  function youCamWithDrawing(img) {
+    if (!Art.drawing) return img;
+    const c = makeCanvas(img.width, img.height), x = c.getContext('2d'), k = img.width / 1824, P = CAM7_PIN;
+    x.drawImage(img, 0, 0);
+    const pt = (a, b, t) => [(a[0] + (b[0] - a[0]) * t) * k, (a[1] + (b[1] - a[1]) * t) * k];
+    x.save(); // its soft shadow on the wallpaper
+    x.shadowColor = 'rgba(4,2,8,.6)'; x.shadowBlur = 10 * k; x.shadowOffsetX = 4 * k; x.shadowOffsetY = 7 * k;
+    x.fillStyle = 'rgb(40,46,56)'; x.beginPath();
+    [P.tl, P.tr, P.br, P.bl].forEach((q, i) => x[i ? 'lineTo' : 'moveTo'](q[0] * k, q[1] * k)); x.closePath(); x.fill();
+    x.restore();
+    const d = shadedDrawing(P.shade), n = 32; // drawn in thin strips, each one fitted between the left and right edges
+    for (let i = 0; i < n; i++) {
+      const t0 = i / n, t1 = (i + 1) / n, L0 = pt(P.tl, P.bl, t0), R0 = pt(P.tr, P.br, t0), L1 = pt(P.tl, P.bl, t1);
+      const sy = d.height * t0, sh = d.height / n;
+      x.save();
+      x.setTransform((R0[0] - L0[0]) / d.width, (R0[1] - L0[1]) / d.width, (L1[0] - L0[0]) / sh, (L1[1] - L0[1]) / sh, L0[0], L0[1]);
+      x.drawImage(d, 0, sy, d.width, sh + (i < n - 1 ? 0.6 : 0), 0, 0, d.width, sh + (i < n - 1 ? 0.6 : 0));
+      x.restore();
+    }
+    return c;
+  }
   /* how big a doorway is drawn in the desk room (the stand-ins are painted at exactly that size) */
   function doorPx(side) { const d = officeDoor(side); return { w: d.w * officeWidthFor(Art.office), h: d.h * H }; }
   function paintDoorway(side, lit) {
@@ -1392,7 +1680,7 @@
     parts: [],                          // particles (see spawnParts)
     cueLog: [],                         // the last 40 threat sounds (see cue)
     stats: {},
-    stutter: { left: freshFlicker(), right: freshFlicker() }, lampFlick: freshFlicker(), menuFlick: freshFlicker(),
+    stutter: { left: freshFlicker(), right: freshFlicker() }, lampFlick: freshFlicker(),
     whisperT: 20, jumpT: 0, killer: null,
     preScare: 0,                        // 0..1: the room goes dark and silent just before it gets you
     // the room notices: roomP 1 = something is at a door, .5 = next to one; the lamp dims, dust drifts, a shadow
@@ -1514,7 +1802,6 @@
     const k = fxMul();
     const p = G.state === 'night' ? G.roomP : 0; // the lamp gets nervous when something is close
     flickerStep(G.lampFlick, dt, 1.2 + 3.6 * p, 0.05 * k, (0.25 + 0.2 * p) * k);
-    flickerStep(G.menuFlick, dt, 1.8, 0.4 * k, 0.4 * k);
     for (const side of ['left', 'right']) {
       const s = G.stutter[side];
       if (G.state === 'night' && G.doors[side].light && !G.powerOut && G.monsters.some((m) => m.state === 'door' && m.door === side)) stutterStep(s, dt);
@@ -1757,7 +2044,7 @@
         if (m.state === 'roam') stepToward(m);
         else if (m.state === 'door') { m.linger = Math.min(m.linger, 0.8); m.alerted = true; }
       },
-      drawCam: (c, m, box, pose) => drawSleeper(c, m, box, pose),
+      drawCam: (c, m, box, pose, ground) => drawSleeper(c, m, box, pose, ground),
     },
     /* trickster: a walker whose footsteps near your doors come from the WRONG side. Its breathing never lies.
        Counter: trust the breathing, the light and the cameras. */
@@ -1781,10 +2068,12 @@
   }
 
   /* a sleeper on a camera: its sleepFrames (config), or its normal frame darker, with z's drifting up from its head */
-  function drawSleeper(c, m, box, pose) {
-    if (m.awake > 0) { drawMonster(c, m, box, pose); return; }
+  function drawSleeper(c, m, box, pose, ground) {
+    if (m.awake > 0) { drawMonster(c, m, box, pose, ground); return; }
+    meet(m.def);
     const A = m.art, own = A.sleep.length > 0, img = own ? A.sleep[m.frame() % A.sleep.length] : A.soft[m.frame()];
     const p = Object.assign({ x: 0.5, y: 1.02, h: 0.7 }, pose);
+    if (ground) footShadow(c, img, box, p, 1);
     drawSprite(c, img, box, p);
     if (!own) drawSprite(c, tinted(img, 'rgba(0,0,0,.4)'), box, p); // (60% brightness: a dark copy over it, made once)
     const r = spriteRect(img, box, p), k = fxMul();
@@ -1830,8 +2119,7 @@
     G.whisperT = rand(18, 40); G.killer = null; G.jumpT = 0; G.preScare = 0; G.scare = null;
     G.roomP = 0; G.lampDim = 0; G.windowPass = null; G.clockSpin = 0; G.clockSkew = 0; G.tickShown = false;
     resetDirector(true);
-    G.officeW = officeWidthFor(Art.office);
-    G.scroll = Math.max(0, (G.officeW - W) / 2);
+    roomsIn(); // (or, on a slow connection, once the rooms are in: beginNight waits for them with your eyes shut)
     if (ghostCam()) { hide(ghostCam()); delete camById._you; }
     G.monsters = CFG.monsters.map((def) => {
       const m = new Monster(def);
@@ -1852,6 +2140,13 @@
     setHtml($('#cardTime'), null, numify('12:00 AM' + (G.practice ? ' · a practice dream' : G.lighter ? ' · a lighter dream' : '')));
     $('#nightCard').classList.remove('fade');
     G.sleepBreath = retry ? null : Sound.play('breathing', { vol: 0.25, lowpass: 600, rate: 0.8 }); // your own sleepy breath
+  }
+  /* the desk room's width and the starting look (the middle of the room) */
+  function roomsIn() {
+    G.roomsLate = !Art.office;
+    if (G.roomsLate) { G.officeW = W; G.scroll = 0; return; }
+    G.officeW = officeWidthFor(Art.office);
+    G.scroll = Math.max(0, (G.officeW - W) / 2);
   }
   /* the HUD back to normal and hidden (between nights) */
   function resetHud() {
@@ -1875,7 +2170,10 @@
     clockTick(dt, 0.5, 1, 0.5);
     if (!G.cardShown && G.introT >= P.card) showNightCard(G.retry ? 0.5 : 1.2);
     if (!G.joltPlayed && G.introT >= G.introDur - JOLT_LEAD && Sound.has('hypnic_jolt')) { G.joltPlayed = true; Sound.play('hypnic_jolt', { vol: 0.9 }); }
-    if (G.introT >= G.introDur) beginNight();
+    if (G.introT >= G.introDur) {
+      if (Art.restReady) beginNight();
+      else G.introT = G.introDur; // (a slow connection: the rooms are still loading; your eyes stay shut until they are in)
+    }
   }
   /* "Night 3 · 12:00 AM" fades in behind your closed eyes */
   function showNightCard(fadeIn) {
@@ -1891,6 +2189,7 @@
   /* the hypnic jolt: you fall into the dream and land in the desk room */
   function beginNight() {
     const card = $('#nightCard'), hud = $('#hud');
+    if (G.roomsLate) roomsIn(); // (the rooms came in while you fell asleep)
     card.classList.add('fade');
     G.state = 'night'; G.settle = 1.2;
     Sound.stopLoop('clock_tick', 0.3);
@@ -2368,6 +2667,7 @@
     const soft = gentle();
     resetDirector(false);
     G.state = 'jumpscare'; G.killer = m; G.jumpT = 0; G.later = []; G.lies = [];
+    if (m) meet(m.def);
     resetLesson();
     G.cams.up = false; G.cams.t = 0;
     Captions.clear();
@@ -2661,16 +2961,17 @@
     const roll = $('#creditRoll'), list = CFG.credits || [];
     roll.innerHTML = '';
     const add = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; roll.appendChild(d); };
-    const groups = { Sound: [], Font: [] }, singles = [];
+    const groups = { Sound: [], Font: [], Picture: [] }, singles = [];
     for (const c of list) {
       if (!c || !c.who) continue;
-      const g = /^\s*(Sound|Font)/i.exec(c.what || '');
+      const g = /^\s*(Sound|Font|Picture)/i.exec(c.what || '');
       if (g) { const k = g[1][0].toUpperCase() + g[1].slice(1).toLowerCase(); if (groups[k].indexOf(c.who) < 0) groups[k].push(c.who); } else singles.push(c);
     }
     singles.forEach((c, i) => { add('cRole', c.what || ''); add(i ? 'cWho' : 'cWho cYou', c.who); }); // the first one is YOU
     add('cTitle', CFG.title || 'UNTIL THE ALARM');
     if (groups.Sound.length) { add('cRole', 'Sounds'); add('cNames', groups.Sound.join('  ·  ')); }
     if (groups.Font.length) { add('cRole', 'Fonts'); add('cNames', groups.Font.join('  ·  ')); }
+    if (groups.Picture.length) { add('cRole', 'Pictures in the rooms'); add('cNames', groups.Picture.join('  ·  ')); }
     add('cEnd', (CFG.finale || {}).thanks || 'Thank you for waking up.');
   }
   function updateWin(dt) {
@@ -3028,6 +3329,7 @@
       for (const m of G.monsters) m.anim += dt * (m.def.fps || 4) * m.animSpeed;
     }
 
+    if (G.state === 'menu' || G.state === 'boot') updateMenuScene(dt);
     if (G.state === 'asleep' && !G.paused) updateAsleep(dt);
     if (G.state === 'night' && !G.paused) updateNight(dt * G.timeScale, dt);
     if (G.state === 'waking' || G.state === 'morning') updateWaking(dt);
@@ -3365,6 +3667,32 @@
   /* ------------------------------------------------------------------ */
   const canvas = $('#screen'), ctx = canvas.getContext('2d');
   const buf = makeCanvas(W, H), bx = buf.getContext('2d');
+  /* Sharper on big and high-DPI screens: with Dream effects Full (not on phones) the picture is drawn with more
+     pixels than 1600 x 900 (the shown size x devicePixelRatio, up to 2400 x 1350), so the photos stay crisp on a
+     1080p or Retina screen. Everything is still drawn in the same 1600 x 900 coordinates (a scale on both canvases).
+     If that makes the frame rate drop, it quietly goes back to 1600 x 900 for the rest of the visit. */
+  const RES_MAX = 1.5;
+  const sharp = { res: 1, slow: 0, off: false };
+  function wantRes() {
+    if (sharp.off || TOUCH || save.fx !== 'full') return 1;
+    const r = stageScale * (window.devicePixelRatio || 1);
+    return r > 1.1 ? Math.min(RES_MAX, Math.round(r * 4) / 4) : 1;
+  }
+  function applyRes() {
+    const r = wantRes();
+    if (r === sharp.res && canvas.width === Math.round(W * r)) return;
+    sharp.res = r; sharp.slow = 0;
+    for (const [c, x] of [[canvas, ctx], [buf, bx]]) {
+      c.width = Math.round(W * r); c.height = Math.round(H * r);
+      x.setTransform(r, 0, 0, r, 0, 0);
+    }
+  }
+  /* the frame-rate guard: half a second at a time below ~40 fps, a few times running, and it gives up on it */
+  function watchRes(dt) {
+    if (sharp.res === 1 || G.paused || document.hidden || dt > 0.25) return; // (a hiccup or a tab switch is not slowness)
+    sharp.slow = dt > 1 / 40 ? sharp.slow + dt : Math.max(0, sharp.slow - dt * 0.5);
+    if (sharp.slow > 2.5) { sharp.off = true; applyRes(); }
+  }
   const bloom = makeCanvas(160, 90), blx = bloom.getContext('2d');
   let bloomN = 0; // frames since the bloom started (it is refreshed every third one)
 
@@ -3389,11 +3717,45 @@
     else c.drawImage(img, r.x, r.y, r.w, r.h);
     c.restore();
   }
-  /* a monster in a lit doorway or on a camera. At 6 AM it stops moving, stretches and melts away. */
-  function drawMonster(c, m, box, pose) {
+  /* the first time a monster's picture is really shown to you (on a camera, in a lit doorway, as one of the dream's
+     lies, or when it catches you), Extras learns its name and story (save.met) */
+  function meet(def) {
+    if (!def || save.met[def.id] || (G.state !== 'night' && G.state !== 'jumpscare' && G.state !== 'waking')) return;
+    save.met[def.id] = true; writeSave();
+  }
+  /* a monster in a lit doorway or on a camera. At 6 AM it stops moving, stretches and melts away.
+     ground: 'floor' = a soft contact shadow under its feet; 'water' = that, and its reflection in the water */
+  function drawMonster(c, m, box, pose, ground) {
     const k = G.state === 'waking' ? meltK() : 0;
     if (k >= 1) return;
-    drawSprite(c, m.art.soft[m.frame()], box, Object.assign({ x: 0.5, y: 1.02, h: 0.7 }, pose, { sy: 1 + 0.15 * k }), 1 - k);
+    meet(m.def);
+    const img = m.art.soft[m.frame()], p = Object.assign({ x: 0.5, y: 1.02, h: 0.7 }, pose, { sy: 1 + 0.15 * k });
+    if (ground) footShadow(c, img, box, p, 1 - k);
+    if (ground === 'water') reflection(c, img, box, p, 1 - k);
+    drawSprite(c, img, box, p, 1 - k);
+  }
+  /* a soft dark pool where its feet meet the floor (so it stands in the room instead of hovering over it) */
+  function footShadow(c, img, box, pose, a) {
+    const r = spriteRect(img, box, pose), cx = r.x + r.w / 2, cy = r.y + r.h - r.h * 0.025, rx = r.w * 0.27, ry = Math.max(3, rx * 0.2);
+    c.save(); c.globalAlpha = 0.42 * a; c.translate(cx, cy); c.scale(1, ry / rx);
+    const g = c.createRadialGradient(0, 0, 0, 0, 0, rx);
+    g.addColorStop(0, 'rgba(4,2,8,1)'); g.addColorStop(0.55, 'rgba(4,2,8,.55)'); g.addColorStop(1, 'rgba(4,2,8,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(0, 0, rx, 0, Math.PI * 2); c.fill();
+    c.restore();
+  }
+  /* its upside-down twin in still black water: faint, fading with depth, trembling in thin bands */
+  function reflection(c, img, box, pose, a) {
+    const r = spriteRect(img, box, pose), feet = r.y + r.h, n = 14, band = r.h * 0.6 / n, k = fxMul();
+    c.save();
+    for (let i = 0; i < n; i++) {
+      const y0 = feet + i * band, sy = img.height * (1 - (i + 1) * band / r.h), sh = img.height * band / r.h; // (rows going up the body)
+      const dx = Math.sin(G.t * 1.7 + i * 0.9) * (1 + i * 0.35) * k;
+      c.globalAlpha = 0.24 * a * (1 - i / n) ** 1.5;
+      c.save(); c.translate(r.x + r.w / 2 + dx, y0 + band / 2); c.scale(pose.flip ? -1 : 1, -1);
+      c.drawImage(img, 0, Math.max(0, sy), img.width, sh, -r.w / 2, -band / 2, r.w, band + 0.5);
+      c.restore();
+    }
+    c.restore();
   }
 
   function officeOriginX() { return G.officeW <= W ? (W - G.officeW) / 2 : -G.scroll; }
@@ -3446,6 +3808,9 @@
     glow(c, x, y, H * 0.42, 'rgba(255,186,104,A)', ((0.1 + 0.1 * Math.sin(t * 2)) * env).toFixed(3));
     c.restore();
   }
+  /* the four panes of glass in office.jpg (x, y, w, h in its 2400 x 900 pixels): around them are the sash, the cross
+     bars and the meeting rail */
+  const OFFICE_PANES = [[591, 182, 103, 109], [701, 182, 81, 109], [591, 304, 103, 112], [701, 304, 81, 112]];
   /* the shadow crossing the window (clipped to the glass, walking, never stopping) */
   function drawWindowPass(c) {
     const P = G.windowPass, w = officeSpot('window');
@@ -3454,7 +3819,12 @@
     const img = P.m.art.sil[P.m.frame()], h = r.h * 1.5, sw = h * img.width / img.height;
     const k = P.t / WINDOW_PASS, from = r.x + r.w / 2 - P.dir * (r.w + sw) / 2;
     const cx = from + P.dir * (r.w + sw) * k, feet = r.y + r.h * 1.4 - Math.abs(Math.sin(P.t * 4.5)) * 5 * fxMul(); // (a slow, heavy step)
-    c.save(); c.beginPath(); c.rect(r.x + r.w * 0.1, r.y, r.w * 0.8, r.h); c.clip(); // (inset: it passes behind curtains and frame)
+    c.save(); c.beginPath();
+    if (Art.officePhoto) { // the photo desk room: only the four panes of glass (the frame and the cross bars stay in front of it)
+      const ox = officeOriginX(), kx = G.officeW / 2400, ky = H / 900;
+      for (const [x, y, w, h] of OFFICE_PANES) c.rect(ox + x * kx, y * ky, w * kx, h * ky);
+    } else c.rect(r.x + r.w * 0.1, r.y, r.w * 0.8, r.h); // (inset: it passes behind curtains and frame)
+    c.clip();
     c.globalAlpha = 0.94; c.translate(cx, 0); if (P.dir < 0) c.scale(-1, 1);
     c.drawImage(img, -sw / 2, feet - h, sw, h);
     c.restore();
@@ -3467,8 +3837,70 @@
     const ringing = G.state === 'waking' || (G.fd && G.fd.phase === 'ring');
     const hrs = ringing ? 6 : clamp(G.nightT / hourSec(), 0, 6) + G.clockSkew; // (it says six while it rings)
     const o = { h: Math.floor(hrs), m: (hrs % 1) * 60, ring: ringing ? 1 : 0 };
-    if (Art.officeMissing) drawAlarmClock(c, k.x, k.y, k.r / 0.78, o);
+    if (Art.officePhoto) drawClockPhoto(c, k.x, k.y, k.r / 0.78, o, DESK_CLOCK_LIGHT);
+    else if (Art.officeMissing) drawAlarmClock(c, k.x, k.y, k.r / 0.78, o);
     else { c.save(); c.translate(k.x, k.y); clockHands(c, k.r, o); c.restore(); }
+  }
+  /* the whole clock in the light of a photo room (drawn on a small canvas of its own and shaded there, so the room
+     around it is untouched). light: [left, right] colours laid over it. The desk clock: a little warm lamplight on
+     its left, its right side in the monitor's shadow. The morning clock: in the shade on the left, sun on the right. */
+  const DESK_CLOCK_LIGHT = ['rgba(46,24,12,.32)', 'rgba(10,6,22,.62)'], MORNING_CLOCK_LIGHT = ['rgba(52,28,14,.3)', 'rgba(255,236,200,.03)'];
+  /* the photo clock (assets/scenes/clock.png, a real twin-bell alarm clock cut out of its photo, in the game's grade):
+     where its dial is (cx, cy: fractions of its width and height) and how big its round body and its dial are
+     (body, face: radius, a fraction of its width). The code draws its hands.
+     Its light: colours it is multiplied by, [left, right, top, bottom] (the warm lamp, the moon, the morning sun) */
+  const CLOCK_PHOTO = { cx: 0.5, cy: 0.604, body: 0.4217, face: 0.3842 }; // (printed by art-src/compose/scene_clock.py)
+  const CLOCK_LIGHT = {
+    desk: ['rgb(226,170,118)', 'rgb(74,64,104)', 'rgb(255,255,255)', 'rgb(150,140,160)'],
+    night: ['rgb(132,126,184)', 'rgb(104,98,150)', 'rgb(255,255,255)', 'rgb(170,166,196)'],
+    morning: ['rgb(182,160,146)', 'rgb(255,246,230)', 'rgb(255,255,255)', 'rgb(200,184,170)'],
+  };
+  const NIGHT_CLOCK_LIGHT = CLOCK_LIGHT.night;
+  /* the photo clock with its hands, lit by light (CLOCK_LIGHT), ringing and squashed like drawAlarmClock.
+     Without the photo: the painted clock, shaded the old way */
+  let photoClockCanvas = null;
+  function drawClockPhoto(c, x, y, r, o, light) {
+    const P = Art.clock;
+    if (!P) {
+      const old = light === CLOCK_LIGHT.morning ? MORNING_CLOCK_LIGHT : light === CLOCK_LIGHT.night ? null : DESK_CLOCK_LIGHT;
+      if (old) drawShadedClock(c, x, y, r, o, old); else drawAlarmClock(c, x, y, r, o);
+      return;
+    }
+    if (!Array.isArray(light) || light.length < 4) light = CLOCK_LIGHT.desk;
+    const s = r / (CLOCK_PHOTO.body * P.width), w = Math.ceil(P.width * s), h = Math.ceil(P.height * s);
+    if (!photoClockCanvas || photoClockCanvas.width < w || photoClockCanvas.height < h) photoClockCanvas = makeCanvas(Math.max(w, 8), Math.max(h, 8));
+    const k = photoClockCanvas.getContext('2d'), cx = CLOCK_PHOTO.cx * w, cy = CLOCK_PHOTO.cy * h;
+    k.globalCompositeOperation = 'source-over'; k.clearRect(0, 0, photoClockCanvas.width, photoClockCanvas.height);
+    k.drawImage(P, 0, 0, w, h);
+    k.save(); k.translate(cx, cy); clockHands(k, CLOCK_PHOTO.face * w, o); k.restore();
+    if (blendOk('multiply')) { // the room's light on it: across (left to right), then a little from above
+      k.globalCompositeOperation = 'multiply';
+      let g = k.createLinearGradient(0, 0, w, 0); g.addColorStop(0, light[0]); g.addColorStop(1, light[1]);
+      k.fillStyle = g; k.fillRect(0, 0, w, h);
+      g = k.createLinearGradient(0, 0, 0, h); g.addColorStop(0, light[2]); g.addColorStop(1, light[3]);
+      k.fillStyle = g; k.fillRect(0, 0, w, h);
+      k.globalCompositeOperation = 'destination-in'; k.drawImage(P, 0, 0, w, h); // (keep only the clock)
+      k.globalCompositeOperation = 'source-over';
+    }
+    const ring = (o.ring || 0) * fxMul(), wob = Math.sin(G.t * Math.PI * 2 * 12);
+    c.save(); c.translate(x + wob * 0.065 * r * ring, y + Math.cos(G.t * 71) * 0.02 * r * ring);
+    if (ring) c.rotate(wob * 0.035 * ring);
+    if (o.squash) { c.translate(0, r * 1.05); c.scale(1 + 0.12 * o.squash, 1 - 0.18 * o.squash); c.translate(0, -r * 1.05); }
+    c.drawImage(photoClockCanvas, 0, 0, w, h, -cx, -cy, w, h);
+    c.restore();
+  }
+  let clockCanvas = null;
+  function drawShadedClock(c, x, y, r, o, light) {
+    const s = Math.ceil(r * 2.4), n = s * 2;
+    if (!clockCanvas || clockCanvas.width !== n) clockCanvas = makeCanvas(n, n);
+    const k = clockCanvas.getContext('2d');
+    k.globalCompositeOperation = 'source-over'; k.clearRect(0, 0, n, n);
+    drawAlarmClock(k, s, s, r, o);
+    k.globalCompositeOperation = 'source-atop';
+    const g = k.createLinearGradient(s - r, 0, s + r, 0);
+    g.addColorStop(0, light[0]); g.addColorStop(1, light[1]);
+    k.fillStyle = g; k.fillRect(0, 0, n, n);
+    c.drawImage(clockCanvas, x - s, y - s);
   }
 
   /* Lucidity zero: on each tick it stands somewhere new, bigger every time: the left door, the window, the right door …
@@ -3520,6 +3952,7 @@
   function drawLie(c, L, box, pose, fade) {
     const alpha = LIE.alpha * (1 - fade);
     if (alpha <= 0.01) return;
+    meet(L.who.def);
     const img = ghostOf(L.who.art.soft[L.frame]), p = Object.assign({ x: 0.5, y: 1.02, h: 0.7 }, pose);
     const at = (dx) => ({ x: box.x + dx, y: box.y, w: box.w, h: box.h });
     drawSprite(c, img, box, p, alpha);
@@ -3554,14 +3987,14 @@
       c.fillStyle = g; c.fillRect(box.x, box.y, box.w, box.h);
     }
     if (lit) {
-      for (const m of here) drawMonster(c, m, box, doorPoseOf(m, side));
+      for (const m of here) drawMonster(c, m, box, doorPoseOf(m, side), 'floor');
       if (!here.length) for (const L of G.lies) if (L.kind === 'door' && L.side === side) drawLie(c, L, box, doorPoseOf(L.who, side), lieFade(L));
       if (DEV) Dev.inDoorway(c, side, box); // (the art helper's see-through monster, for placing doorPose)
       // the light stutters while something real stands there (slow timer; a steady dim with effects Off)
       const dim = here.length ? (save.fx === 'off' ? 0.3 : flick(G.stutter[side])) : 0;
       if (dim) { c.fillStyle = `rgba(0,0,0,${dim})`; c.fillRect(box.x, box.y, box.w, box.h); }
-      const g = c.createLinearGradient(0, box.y, 0, box.y + box.h);
-      g.addColorStop(0, 'rgba(255,230,160,.12)'); g.addColorStop(1, 'rgba(0,0,0,.25)');
+      const g = c.createLinearGradient(0, box.y, 0, box.y + box.h); // (the bulb is above the door: a warm wash from the top)
+      g.addColorStop(0, 'rgba(255,200,130,.16)'); g.addColorStop(0.6, 'rgba(255,200,130,0)'); g.addColorStop(1, 'rgba(0,0,0,.08)');
       c.fillStyle = g; c.fillRect(box.x, box.y, box.w, box.h);
     }
     if (D.p > 0) drawShutter(c, side, D, A.closed, box);
@@ -3616,6 +4049,10 @@
     c.restore();
   }
 
+  /* what a monster stands on in a camera room: the game's own photos have floors (and the Drowned Parlor, water);
+     a picture of your own gets the soft floor shadow too (water only where the photo has it) */
+  const SCENE_WATER = { parlor: true };
+  function camGround(cam) { return Art.standIn[`camera "${cam.id}"`] === 'photo' && SCENE_WATER[cam.id] ? 'water' : 'floor'; }
   /* the camera picture is zoomed in a little and pans slowly (so its very edges come and go) */
   function camFeedBox() {
     const fw = W * CAM_ZOOM, fh = H * CAM_ZOOM;
@@ -3636,7 +4073,7 @@
       for (const m of G.monsters) {
         if (m.state !== 'roam' || m.room !== cam.id) continue;
         const pose = leanPose(m.def.poses && m.def.poses[cam.id], stareK(m, lim)), B = brainOf(m);
-        if (B.drawCam) B.drawCam(c, m, box, pose); else drawMonster(c, m, box, pose); // (a sleeper is drawn asleep)
+        if (B.drawCam) B.drawCam(c, m, box, pose, camGround(cam)); else drawMonster(c, m, box, pose, camGround(cam)); // (a sleeper is drawn asleep)
       }
       const real = G.monsters.some((m) => m.state === 'roam' && m.room === cam.id);
       if (!real) for (const L of G.lies) if (L.kind === 'cam' && L.room === cam.id) drawLie(c, L, box, L.who.def.poses && L.who.def.poses[cam.id], 0);
@@ -3663,10 +4100,50 @@
     c.strokeStyle = 'rgba(0,0,0,.9)'; c.lineWidth = 40; c.strokeRect(0, 0, W, H);
   }
 
+  /* you from behind in CAM 7's photo (made once for each size): head and shoulders, dark, a warm rim of lamplight on
+     the left, the monitor's faint teal glow round the top, and the room's film grain. The back of the photo's chair
+     (assets/scenes/cam7_chair.png, drawn over you) hides where you end. */
+  const CAM7_CHAIR = { x: 670, y: 700 }; // where cam7_chair.png sits in cam7_you.jpg (its top-left corner, in pixels; scene_cam7.CHAIR_LAYER)
+  const youFigures = {};
+  function youFigure(k) {
+    const key = k.toFixed(3);
+    if (youFigures[key]) return youFigures[key];
+    const w = Math.ceil(480 * k), h = Math.ceil(420 * k), hx = w / 2, hy = 92 * k;
+    const c = makeCanvas(w, h), x = c.getContext('2d');
+    const path = (g) => {
+      g.beginPath(); // shoulders and neck
+      g.moveTo(hx - 215 * k, hy + 320 * k); g.bezierCurveTo(hx - 215 * k, hy + 150 * k, hx - 140 * k, hy + 105 * k, hx - 42 * k, hy + 88 * k);
+      g.lineTo(hx - 34 * k, hy + 40 * k); g.lineTo(hx + 34 * k, hy + 40 * k); g.lineTo(hx + 42 * k, hy + 88 * k);
+      g.bezierCurveTo(hx + 140 * k, hy + 105 * k, hx + 215 * k, hy + 150 * k, hx + 215 * k, hy + 320 * k); g.closePath();
+      g.ellipse(hx, hy, 62 * k, 78 * k, 0, 0, 7); // head
+    };
+    let g = x.createLinearGradient(0, 0, w, 0); // a dark jumper and dark hair, a little warmer on the lamp side
+    g.addColorStop(0, '#22171a'); g.addColorStop(0.4, '#120d14'); g.addColorStop(1, '#0a080e');
+    path(x); x.fillStyle = g; x.fill();
+    const rimOf = (color, dx, dy, x0, x1) => { // an edge light: you, minus you moved away from the light (a thin crescent)
+      const rim = makeCanvas(w, h), r = rim.getContext('2d');
+      path(r); r.fillStyle = color; r.fill();
+      r.globalCompositeOperation = 'destination-out'; r.save(); r.translate(dx, dy); path(r); r.fillStyle = '#000'; r.fill(); r.restore();
+      if (x1 != null) { // fading out across you
+        r.globalCompositeOperation = 'destination-in';
+        const m = r.createLinearGradient(x0, 0, x1, 0); m.addColorStop(0, 'rgba(0,0,0,1)'); m.addColorStop(1, 'rgba(0,0,0,0)');
+        r.fillStyle = m; r.fillRect(0, 0, w, h);
+      }
+      return rim;
+    };
+    x.globalCompositeOperation = 'source-atop'; // (only on you, never outside your edge)
+    x.drawImage(rimOf('rgba(255,184,112,.75)', 7 * k, 2 * k, hx - 120 * k, hx + 90 * k), 0, 0); // the lamp, on your left
+    x.drawImage(rimOf('rgba(140,240,200,.22)', 0, 5 * k), 0, 0); // the monitor's glow round your head and shoulders
+    noiseFill(x, w, h, 0.05, 23, Math.max(1, 1.6 * k));
+    x.globalCompositeOperation = 'destination-in'; path(x); x.fillStyle = '#000'; x.fill(); // (grain only inside)
+    x.globalCompositeOperation = 'source-over';
+    return (youFigures[key] = { canvas: c, hx, hy });
+  }
   /* CAM 7: your desk room from behind and above, and you in your chair, lit by the monitor.
-     config youCam.image replaces the room (then seat: { x, y, size } says where the back of your head goes). */
+     config youCam.image replaces the room (then seat: { x, y, size } says where the back of your head goes).
+     The game's own photo of it (assets/scenes/cam7_you.jpg) has its chair in it, and its own seat (SCENE_SEAT). */
   function drawYouCam(c, box) {
-    const Y = G.youCam || {}, own = Art.youCam, cfg = CFG.youCam || {};
+    const Y = G.youCam || {}, own = Art.youCam, cfg = Art.youCamPhoto ? { seat: SCENE_SEAT } : CFG.youCam || {};
     if (own) drawCover(c, own, box.x, box.y, box.w, box.h);
     else { // the desk room picture, centred on the desk and darkened, with the monitor's teal glow
       const s = box.h / H, ow = officeWidthFor(Art.office) * s;
@@ -3679,8 +4156,17 @@
     // you, from behind: shoulders and head over the back of your chair (the chair is empty on the last night)
     const seat = Object.assign({ x: 0.5, y: 0.5, size: 1 }, own ? cfg.seat : null);
     const k = seat.size * box.h / H, hx = box.x + seat.x * box.w, hy = box.y + seat.y * box.h; // the middle of your head
+    if (!Y.empty && Art.youCamPhoto) { // in the photo: you, lit like the room (lamp on your left, the monitor in front of you)
+      const f = youFigure(k);
+      c.drawImage(f.canvas, hx - f.hx, hy - f.hy);
+    }
+    if (Art.youCamPhoto && Art.youCamChair) { // the back of the chair in the photo, in front of you
+      const s = Math.max(box.w / own.width, box.h / own.height), x0 = box.x + (box.w - own.width * s) / 2, y0 = box.y + (box.h - own.height * s) / 2;
+      const ch = Art.youCamChair, q = own.width / 1824; // (CAM7_CHAIR is in cam7_you.jpg's own pixels)
+      c.drawImage(ch, x0 + CAM7_CHAIR.x * q * s, y0 + CAM7_CHAIR.y * q * s, ch.width * q * s, ch.height * q * s);
+    }
     c.save(); c.lineWidth = 3; c.lineJoin = 'round';
-    if (!Y.empty) {
+    if (!Y.empty && !Art.youCamPhoto) {
       c.fillStyle = '#050307'; c.strokeStyle = 'rgba(150,255,210,.28)'; // dark, with the monitor's light on the edges
       c.beginPath(); // shoulders and neck
       c.moveTo(hx - 215 * k, hy + 300 * k); c.bezierCurveTo(hx - 215 * k, hy + 150 * k, hx - 140 * k, hy + 105 * k, hx - 42 * k, hy + 88 * k);
@@ -3703,31 +4189,59 @@
     if (Y.stage === 2 && Y.lie) drawLie(c, Y.lie, box, { x: 0.3, y: 1.1, h: 0.95 }, 0);
   }
 
-  let menuShade = null; // (the dark edge between the menu and the monster: one gradient, made once)
+  /* ----- the title screen: the game's photo of the dark hall (a door left ajar, its lamplight breathing and now and
+     then sputtering, low fog drifting by), leaning a little with the mouse or with the tilt of a phone. Dream effects
+     Low: calmer; Off: it stands still. Without the photo: the old drifting fog. There is never a monster here:
+     you meet it in the dream. ----- */
+  const menuPar = { x: 0, y: 0, tx: 0, ty: 0 };      // the lean (-1..1): smoothed toward the mouse or the tilt
+  const menuLamp = { wait: 2.5, t: 0, dur: 0, a: 0 }; // the door light's sputters: each one a slow dip, 1.5-5 s apart
+  const tilt = { x: 0, y: 0, bx: null, by: null, at: 0 };
+  window.addEventListener('deviceorientation', (e) => { // a phone held in landscape: tilting it turns the hall a little
+    if (e.beta == null || e.gamma == null) return;
+    const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+    const rx = ang === 90 ? e.beta : ang === -90 || ang === 270 ? -e.beta : e.gamma, ry = ang === 90 ? -e.gamma : ang === -90 || ang === 270 ? e.gamma : e.beta;
+    if (tilt.bx == null) { tilt.bx = rx; tilt.by = ry; }
+    tilt.bx += (rx - tilt.bx) * 0.01; tilt.by += (ry - tilt.by) * 0.01; // (the way you hold it drifts back to "straight")
+    tilt.x = clamp((rx - tilt.bx) / 18, -1, 1); tilt.y = clamp((ry - tilt.by) / 18, -1, 1); tilt.at = performance.now();
+  });
+  function updateMenuScene(dt) {
+    const still = save.fx === 'off';
+    const mouse = pointer.type === 'mouse' && pointer.inside, tilted = performance.now() - tilt.at < 1000;
+    menuPar.tx = still ? 0 : mouse ? clamp(pointer.x / W * 2 - 1, -1, 1) : tilted ? tilt.x : 0;
+    menuPar.ty = still ? 0 : mouse ? clamp(pointer.y / H * 2 - 1, -1, 1) : tilted ? tilt.y : 0;
+    const k = 1 - Math.exp(-dt * 2.2); // (slow and soft)
+    menuPar.x += (menuPar.tx - menuPar.x) * k; menuPar.y += (menuPar.ty - menuPar.y) * k;
+    const L = menuLamp;
+    if (L.dur > 0) { L.t += dt; if (L.t >= L.dur) { L.dur = 0; L.wait = rand(1.5, 5); } }
+    else if ((L.wait -= dt) <= 0) { L.dur = rand(0.35, 0.8); L.t = 0; L.a = rand(0.45, 1); }
+  }
   function drawMenuScene(c) {
-    c.fillStyle = '#05030a'; c.fillRect(0, 0, W, H);
-    // drifting fog
-    for (let i = 0; i < 5; i++) {
-      const fx = W * (0.5 + 0.45 * Math.sin(G.t * 0.05 + i * 1.7)), fy = H * (0.5 + 0.35 * Math.cos(G.t * 0.07 + i * 2.3));
-      c.drawImage(Art.fog[i % 2], fx - 520, fy - 520, 1040, 1040);
-    }
-    const def = CFG.monsters[0];
-    if (def && Art.monsters[def.id]) {
-      const A = Art.monsters[def.id];
-      // a short glitch once every 7 s (none with effects Off); its double image stays put during the burst
-      const glitch = save.fx !== 'off' && (G.t % 7) > 6.75;
-      const fi = glitch ? Math.floor(G.t * 30) % A.frames.length : Math.floor(G.t * (def.fps || 4)) % A.frames.length;
-      const box = { x: W * 0.56, y: 0, w: W * 0.44, h: H };
-      const alpha = 0.78 + 0.12 * Math.sin(G.t * 0.9) - flick(G.menuFlick);
-      if (glitch) {
-        const off = (mulberry32(Math.floor(G.t / 7))() - 0.5) * 28 * fxMul();
-        c.save(); c.globalCompositeOperation = 'lighter';
-        drawSprite(c, A.soft[fi], { x: box.x + off, y: box.y, w: box.w, h: box.h }, { x: 0.5, y: 1.08, h: 1.02 }, 0.35);
-        c.restore();
+    const M = Art.menu;
+    if (!M) { // no photo: the old scene, fog drifting in the dark
+      c.fillStyle = '#05030a'; c.fillRect(0, 0, W, H);
+      for (let i = 0; i < 5; i++) {
+        const fx = W * (0.5 + 0.45 * Math.sin(G.t * 0.05 + i * 1.7)), fy = H * (0.5 + 0.35 * Math.cos(G.t * 0.07 + i * 2.3));
+        c.drawImage(Art.fog[i % 2], fx - 520, fy - 520, 1040, 1040);
       }
-      drawSprite(c, A.soft[fi], box, { x: 0.5, y: 1.08, h: 1.02 }, alpha);
-      if (!menuShade) { menuShade = c.createLinearGradient(W * 0.4, 0, W, 0); menuShade.addColorStop(0, 'rgba(5,3,10,1)'); menuShade.addColorStop(0.25, 'rgba(5,3,10,0)'); }
-      c.fillStyle = menuShade; c.fillRect(W * 0.4, 0, W * 0.6, H);
+      return;
+    }
+    const fx = save.fx, calm = fx === 'off' ? 0 : fx === 'low' ? 0.5 : 1;
+    // the lean: the picture is drawn 2% bigger, so its edges never show; the near fog moves more than the room
+    const S = 1.02, dx = -menuPar.x * 13 * calm, dy = -menuPar.y * 7 * calm; // (half as much with effects Low)
+    c.save(); c.translate(W / 2 + dx, H / 2 + dy); c.scale(S, S); c.translate(-W / 2, -H / 2);
+    c.drawImage(M.base, 0, 0, W, H);
+    if (M.lit) { // the light through the door: it breathes (the picture has it at 80%: this adds up to ~20% more) …
+      const B = MENU_LIGHT_BOX, up = 0.1 + (0.07 * Math.sin(G.t * 0.8) + 0.03 * Math.sin(G.t * 2.3 + 1)) * calm;
+      c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = clamp(up, 0, 0.25); c.drawImage(M.lit, B.x, B.y); c.restore();
+      const L = menuLamp, dip = L.dur > 0 ? L.a * Math.sin(Math.PI * L.t / L.dur) * 0.55 * calm : 0; // … and now and then it sputters (a slow dip, never a flash)
+      if (dip > 0.01) { c.save(); c.globalAlpha = dip; c.drawImage(M.dim, B.x, B.y); c.restore(); }
+    }
+    c.restore();
+    if (M.fog) { // the low fog: two copies side by side, drifting left (slower with effects Low, still with Off)
+      const fw = W * 1.1, fh = 420 * fw / W, y = 450 - menuPar.y * 12 * calm, off = ((G.t * 9 * calm) % fw + fw) % fw, x0 = -off - menuPar.x * 22 * calm;
+      c.save(); c.globalAlpha = 0.9;
+      for (let x = x0 - fw; x < W; x += fw) c.drawImage(M.fog, x, y, fw + 1, fh);
+      c.restore();
     }
   }
 
@@ -3931,17 +4445,24 @@
     drawMotes(c, 0.45);
     const ringing = G.state !== 'win', K = MORNING_CLOCK;
     if (ringing) drawRingArcs(c, K.x, K.y, K.r, 0.8);
-    drawAlarmClock(c, K.x, K.y, K.r, { h: 6, m: 0, ring: ringing ? 1 : 0, squash: G.state === 'win' ? G.slapT / 0.25 : 0 });
+    const o = { h: 6, m: 0, ring: ringing ? 1 : 0, squash: G.state === 'win' ? G.slapT / 0.25 : 0 };
+    if (Art.bedroomPhoto) { // (in the photo bedroom: a soft shadow on the quilt, and the room's light on it)
+      c.save(); c.fillStyle = 'rgba(20,10,6,.35)'; c.beginPath(); c.ellipse(K.x + 10, K.y + K.r * 1.08, K.r * 0.95, K.r * 0.16, 0, 0, Math.PI * 2); c.fill(); c.restore();
+      drawClockPhoto(c, K.x, K.y, K.r, o, CLOCK_LIGHT.morning);
+    } else drawAlarmClock(c, K.x, K.y, K.r, o);
     if (G.state === 'morning') drawEyelids(c, wakeLids(G.wakeT));
   }
 
+  /* where bedroom_ev2.jpg / bedroom_ev4.jpg go on bedroom_morning.jpg (their top-left corners, in its pixels) */
+  const EV_PATCH = { 2: { x: 96, y: 110 }, 4: { x: 200, y: 650 } }; // (scene_bedroom.EV_PATCH)
   /* something followed you out of the dream (Nights 2-4; config morning.evidence can use your own pictures) */
   function drawEvidence(c) {
     const n = G.night;
     if (G.endless || !EVIDENCE_SPOTS[n]) return;
-    const b = spotPx(evidenceCfg(n)), img = Art.evidence[n];
+    const b = spotPx(evidenceCfg(n)), img = Art.evidence[n], patch = !img && Art.evPatch && Art.evPatch[n];
     c.save();
-    if (img) { // your picture, fitted into the spot and standing on its bottom edge
+    if (patch) c.drawImage(patch, EV_PATCH[n].x, EV_PATCH[n].y); // (the photo bedroom: the evidence is in the photo)
+    else if (img) { // your picture, fitted into the spot and standing on its bottom edge
       const s = Math.min(b.w / img.width, b.h / img.height);
       c.drawImage(img, b.x + (b.w - img.width * s) / 2, b.y + b.h - img.height * s, img.width * s, img.height * s);
     } else if (n === 2) { // the closet door is open a crack
@@ -3949,8 +4470,9 @@
       const g = c.createLinearGradient(b.x + b.w - 44, 0, b.x + b.w, 0); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.45)');
       c.fillStyle = g; c.fillRect(b.x + b.w - 44, b.y, 44, b.h);
       c.fillStyle = '#050307'; c.fillRect(b.x + b.w - 4, b.y + 3, 4, b.h - 3);
-    } else if (n === 3) { // the drawing from the desk-room wall, leaning on your bedside table
-      const d = Art.drawing, s = Math.min(b.w / d.width, b.h / d.height), dw = d.width * s, dh = d.height * s;
+    } else if (n === 3) { // the drawing from the desk-room wall, leaning on your bedside table (in the morning light)
+      const d = Art.drawingDay || (Art.drawingDay = shadedDrawing(['rgb(236,222,200)', 'rgb(214,196,172)']));
+      const s = Math.min(b.w / d.width, b.h / d.height), dw = d.width * s, dh = d.height * s;
       c.translate(b.x + b.w / 2, b.y + b.h); c.rotate(-0.07);
       c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(-dw / 2 + 6, -dh + 4, dw, dh);
       c.drawImage(d, -dw / 2, -dh, dw, dh);
@@ -4040,13 +4562,14 @@
     // the first moment of a jumpscare tears the picture sideways in a few bands (Dream effects Full only)
     const tear = st === 'jumpscare' && G.scare && G.scare.tear.length && G.jumpT < 0.18 ? G.scare.tear : null, tk = tear ? 1 - G.jumpT / 0.18 : 0;
     // "Low" is also the lighter mode for slower devices: no wavy strips and no bloom (the shake and ghosting stay calm)
-    if ((warp < 1 || fx !== 'full') && !tear) ctx.drawImage(buf, 0, 0);
+    const R = sharp.res;
+    if ((warp < 1 || fx !== 'full') && !tear) ctx.drawImage(buf, 0, 0, W, H);
     else {
       const SH = tear ? 6 : clamp(Math.floor(40 / warp), 6, 24); // (taller strips while it barely wobbles: neighbours stay within ~1 px)
       for (let y = 0; y < H; y += SH) {
         let dx = Math.sin(y * 0.011 + G.t * 1.6) * warp + Math.sin(y * 0.037 - G.t * 0.8) * warp * 0.35;
         if (tear) for (const b of tear) if (y >= b.y0 && y < b.y1) dx += b.dx * tk;
-        ctx.drawImage(buf, 0, y, W, SH, dx - warp, y, W + warp * 2, SH);
+        ctx.drawImage(buf, 0, y * R, W * R, SH * R, dx - warp, y, W + warp * 2, SH);
       }
     }
     ctx.globalAlpha = 1;
@@ -4193,6 +4716,7 @@
     }
     setCls(hudEls.lDoor, 'on', L.closed); setCls(hudEls.rDoor, 'on', R.closed);
     setCls(hudEls.lLight, 'on', G.doors.left.light); setCls(hudEls.rLight, 'on', G.doors.right.light);
+    setCls(hudEls.lPanel, 'lit', G.doors.left.light); setCls(hudEls.rPanel, 'lit', G.doors.right.light); // (phones: see-through over the lit doorway)
     for (const b of [hudEls.lDoor, hudEls.lLight, hudEls.rDoor, hudEls.rLight, hudEls.camBar, hudEls.pinch]) setCls(b, 'dead', G.powerOut);
     const camsShown = G.cams.t >= 0.98;
     showHud(hudEls.overlay, camsShown);
@@ -4335,30 +4859,56 @@
     showScreen('#settings');
   }
 
+  /* Extras: one card per monster, with a little door emblem and NEVER its picture (you meet it in the dream).
+     Its name and story show only once you have met it (see meet); until then "???".
+     The art helper (?dev) shows the frames here instead, for the artist. */
   const galleryCanvases = [];
   function openExtras() {
     const gal = $('#gallery'); gal.innerHTML = ''; galleryCanvases.length = 0;
     for (const def of CFG.monsters) {
-      const item = document.createElement('div'); item.className = 'gItem';
+      const met = !!save.met[def.id];
+      const item = document.createElement('div'); item.className = 'gItem' + (met ? ' met' : ' locked');
       const cv = makeCanvas(240, 240); item.appendChild(cv);
       const txt = document.createElement('div');
       txt.innerHTML = '<div class="gName"></div><div class="gDesc"></div>';
-      txt.querySelector('.gName').textContent = def.name;
-      txt.querySelector('.gDesc').textContent = def.description || '';
+      txt.querySelector('.gName').textContent = met ? def.name : '???';
+      txt.querySelector('.gDesc').textContent = met ? def.description || '' : 'You haven\u2019t met this one yet.';
       item.appendChild(txt); gal.appendChild(item);
-      galleryCanvases.push({ cv, def });
+      if (DEV) galleryCanvases.push({ cv, def }); // (the art helper animates the frames in it)
+      else { cv.className = 'emblem'; drawEmblem(cv, met); }
     }
     const cl = $('#creditList'); cl.innerHTML = '';
+    // (a monster you haven't met yet stays a secret in the credits too: its name shows as ???)
+    const secret = (s) => { s = String(s || ''); for (const def of CFG.monsters) if (!save.met[def.id] && def.name) s = s.split(def.name).join('???'); return s; };
     for (const c of (CFG.credits || [])) {
       const d = document.createElement('div');
-      const b = document.createElement('b'); b.textContent = c.what; d.appendChild(b);
+      const b = document.createElement('b'); b.textContent = secret(c.what); d.appendChild(b);
       d.appendChild(document.createTextNode(' — ' + c.who + (c.license ? ' (' + c.license + ')' : '')));
       if (c.url) { d.appendChild(document.createTextNode(' ')); const a = document.createElement('a'); a.href = c.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'source'; d.appendChild(a); }
       cl.appendChild(d);
     }
     showScreen('#extras');
+    const pnl = $('#extras .panel'); if (pnl) pnl.scrollTop = 0; // (always open at the top, where the cards are)
+  }
+  /* a small closed door with a keyhole (once you have met what is behind it, a warm light shows through the keyhole) */
+  function drawEmblem(cv, met) {
+    const x = cv.getContext('2d'), w = cv.width, h = cv.height, cx = w / 2;
+    x.clearRect(0, 0, w, h);
+    const dw = w * 0.42, top = h * 0.16, bot = h * 0.86, arch = dw / 2;
+    const door = () => { x.beginPath(); x.moveTo(cx - dw / 2, bot); x.lineTo(cx - dw / 2, top + arch); x.arc(cx, top + arch, arch, Math.PI, 0); x.lineTo(cx + dw / 2, bot); x.closePath(); };
+    door(); x.fillStyle = '#140c18'; x.fill();
+    x.lineWidth = 4; x.strokeStyle = met ? 'rgba(233,223,207,.7)' : 'rgba(167,155,138,.45)'; x.stroke();
+    x.lineWidth = 2; x.strokeStyle = 'rgba(167,155,138,.22)'; // two panels
+    x.strokeRect(cx - dw * 0.32, top + arch * 0.9, dw * 0.64, (bot - top) * 0.3);
+    x.strokeRect(cx - dw * 0.32, top + arch * 0.9 + (bot - top) * 0.36, dw * 0.64, (bot - top) * 0.3);
+    const ky = top + (bot - top) * 0.58, kx = cx + dw * 0.26;
+    if (met) { const g = x.createRadialGradient(kx, ky, 0, kx, ky, w * 0.16); g.addColorStop(0, 'rgba(255,180,102,.55)'); g.addColorStop(1, 'rgba(255,180,102,0)'); x.fillStyle = g; x.fillRect(0, 0, w, h); }
+    x.fillStyle = met ? '#ffb466' : '#05030a';
+    x.beginPath(); x.arc(kx, ky - 4, 6, 0, Math.PI * 2); x.moveTo(kx - 3, ky); x.lineTo(kx + 3, ky); x.lineTo(kx + 5, ky + 14); x.lineTo(kx - 5, ky + 14); x.closePath(); x.fill();
+    x.strokeStyle = 'rgba(217,194,126,.6)'; x.lineWidth = 2; x.beginPath(); x.arc(kx, ky + 3, 13, 0, Math.PI * 2); x.stroke(); // the brass plate
   }
   function drawGallery() {
+    if (!DEV) return;
     for (const { cv, def } of galleryCanvases) {
       const x = cv.getContext('2d'), A = Art.monsters[def.id];
       x.clearRect(0, 0, cv.width, cv.height);
@@ -4402,6 +4952,7 @@
     stage.style.transform = `translate(${stageX}px, ${stageY}px) scale(${stageScale})`;
     // CSS uses this to keep text and touch targets a real-world size on small screens
     document.documentElement.style.setProperty('--scale', stageScale.toFixed(4));
+    applyRes();
   }
   window.addEventListener('resize', layout);
   window.addEventListener('orientationchange', () => setTimeout(layout, 200));
@@ -4539,13 +5090,13 @@
   bind('#sReset', () => {
     const b = $('#sReset');
     if (!b.dataset.confirm) { b.dataset.confirm = '1'; b.textContent = `Really erase? ${TAP === 'tap' ? 'Tap' : 'Click'} again`; return; }
-    save.night = 1; save.beaten = 0; save.custom = {}; save.tutorialDone = false; save.deaths = {}; save.hints = {}; writeSave();
+    save.night = 1; save.beaten = 0; save.custom = {}; save.tutorialDone = false; save.deaths = {}; save.hints = {}; save.met = {}; writeSave();
     b.textContent = 'Save erased'; b.dataset.confirm = '';
   });
   $('#sVol').addEventListener('input', (e) => { save.vol = parseInt(e.target.value, 10); Sound.applyVolumes(); writeSave(); });
   $('#sMusic').addEventListener('input', (e) => { save.music = parseInt(e.target.value, 10); Sound.applyVolumes(); writeSave(); });
   document.querySelectorAll('#sFx button').forEach((b) => b.addEventListener('click', () => {
-    save.fx = b.dataset.v; writeSave(); applyFxSetting();
+    save.fx = b.dataset.v; writeSave(); applyFxSetting(); applyRes();
     document.querySelectorAll('#sFx button').forEach((x) => x.classList.toggle('sel', x === b));
   }));
   document.querySelectorAll('#sCap button').forEach((b) => b.addEventListener('click', () => {
@@ -4586,9 +5137,10 @@
   let loggedError = false;
   function frame(now) {
     requestAnimationFrame(frame);           // keep going even if one frame fails
-    const dt = clamp((now - last) / 1000, 0, 0.05);
+    const raw = (now - last) / 1000, dt = clamp(raw, 0, 0.05);
     last = now;
     try {
+      watchRes(raw);
       update(dt);
       if (G.ready || G.state !== 'boot') render();
       if (!$('#extras').classList.contains('hidden')) drawGallery();
@@ -4605,6 +5157,7 @@
   }
 
   async function boot() {
+    const bootT0 = performance.now();
     if (DEV) loadDevtools();
     loadSave();
     layout();
@@ -4617,11 +5170,16 @@
     // fonts first so the stand-in art can use them
     const fontLoads = ['48px "Fell SC"', '20px "Fell"', '20px VT323', '20px "Special Elite"', '20px Eater'].map((f) => document.fonts ? document.fonts.load(f).catch(() => {}) : Promise.resolve());
     await Promise.race([Promise.all(fontLoads), new Promise((r) => setTimeout(r, 3000))]);
-    const soundP = Sound.load(tick), artP = loadArt(tick);
+    const soundP = Sound.load(tick), artP = loadArt(tick, 0, { lazy: true, backdrop: bootBackdrop });
     total = Sound.total + Art.total; // (both count their files straight away)
-    await artP;
+    await Art.bootP;
     $('#bootMsg').textContent = 'listening for the dream…';
     await Promise.race([soundP, new Promise((r) => setTimeout(r, 9000))]);
+    // the desk room, doorways and cameras load now, behind the title screen (a night waits for them with your eyes
+    // shut). On a quick connection they are in before the button shows; the art helper always waits for them.
+    Art.startRest();
+    const quick = performance.now() - bootT0 < 2500; // (a quick connection: the rooms are in a moment later, so wait for them)
+    await Promise.race([artP.catch(() => {}), new Promise((r) => setTimeout(r, DEV ? 60000 : quick ? 900 : 0))]);
     $('#loadFill').style.width = '100%';
     buildCamMap(); updateCamUi();
     G.ready = true;
@@ -4633,6 +5191,20 @@
     show($('#bootGo'));
     $('#boot').addEventListener('click', bootGo);
     if (DEV) Dev.booted();
+  }
+  /* the boot screen: the title screen's hall, dark and soft, fades in behind the title as soon as its photo is here */
+  function bootBackdrop(img) {
+    const el = $('#boot'); if (!el || el.querySelector('.bootBack')) return;
+    const cv = makeCanvas(W / 2, H / 2), x = cv.getContext('2d');
+    const sm = makeCanvas(W / 8, H / 8); sm.getContext('2d').drawImage(img, 0, 0, sm.width, sm.height); // (shrunk and grown again: a soft blur anywhere)
+    x.drawImage(img, 0, 0, cv.width, cv.height);
+    x.globalAlpha = 0.65; x.drawImage(sm, 0, 0, cv.width, cv.height); x.globalAlpha = 1;
+    x.fillStyle = 'rgba(7,5,12,.58)'; x.fillRect(0, 0, cv.width, cv.height);
+    const g = x.createRadialGradient(cv.width / 2, cv.height * 0.4, cv.height * 0.1, cv.width / 2, cv.height * 0.45, cv.width * 0.6);
+    g.addColorStop(0, 'rgba(27,16,48,.15)'); g.addColorStop(1, 'rgba(7,5,12,.75)');
+    x.fillStyle = g; x.fillRect(0, 0, cv.width, cv.height);
+    cv.className = 'bootBack'; el.insertBefore(cv, el.firstChild);
+    requestAnimationFrame(() => requestAnimationFrame(() => cv.classList.add('on')));
   }
   /* sound slots the game copes without (each one has a stand-in sound) */
   const OPTIONAL_SOUNDS = ['clock_tick', 'type_key', 'reality_snap', 'redhorn_click', 'door_strain', 'hypnic_jolt', 'water_drip'];
@@ -4674,6 +5246,7 @@
     // the dreaming HUD, monster brains, the art helper (js/devtools.js) and the office fitting
     dreamy, SLIP, eyeLid, hourLands, BRAINS, brainOf, walkerMove, walkerHear, validateBrains, doorsOf, approachAnchors, SHY, SLEEPER,
     Dev, loadArt, fitOffice, inBand, officeDoor, officeWidthFor, OFFICE_MIN_W, paintOffice, paintDoorway, paintShutter, shadowFigure,
+    sharp, applyRes, wantRes, SCENES, SCENE_DIR, SCENE_SEAT, fitDoor, photoOffice, menuArt, menuPar, menuLamp, paintKidDrawing, shadedDrawing, KID_CAPTION, meet, drawEmblem, PIN_SPOT,
     officeOriginX, doorBox, camFeedBox, spriteRect, drawSprite, doorPoseOf, camById, YOU_CAM, OPTIONAL_SOUNDS, escapeHtml, hourSec, setText,
     loadSave, bootNote, updateHud, updateCamUi, camTitle,
   };

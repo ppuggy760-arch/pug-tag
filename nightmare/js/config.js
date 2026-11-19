@@ -2,7 +2,8 @@
    GAME CONFIG  —  this is the file YOU edit.
    ---------------------------------------------------------------------
    * Every picture path is relative to the nightmare/ folder.
-   * If a picture is missing, the game draws a stand-in so it still runs.
+   * If a picture is missing, the game shows its own stand-in so it still
+     runs: a photo room made from free pictures (in assets/scenes/).
      The moment you drop your real picture at that path, it is used.
    * Positions (x, y, w, h) are fractions: 0 = left/top edge,
      1 = right/bottom edge, 0.5 = middle.
@@ -132,7 +133,7 @@ window.GAME_CONFIG = {
                    The game makes it dark blue at night and warm in the morning.
      morningImage: (optional) a different picture for the morning. "" = the
                    game warms up "image" by itself.
-     Until you draw it, the game paints a stand-in bedroom.
+     Until you draw it, the game shows its own photo of a bedroom.
      ------------------------------------------------------------------ */
   bedroom: { image: "assets/rooms/bedroom.png", morningImage: "" },
 
@@ -148,7 +149,8 @@ window.GAME_CONFIG = {
 
   /* THE MORNING. Something follows you out of the dream:
      night 2: the closet door is open a crack,
-     night 3: the "he walks at night" drawing is on your bedside table,
+     night 3: the crayon drawing from the desk-room wall ("he walks at
+              night") is on your bedside table,
      night 4: a scrap of pink collar lies on the floor.
      Draw your own (a transparent PNG) and put its path here.
      "" = the game draws it for you.
@@ -175,8 +177,9 @@ window.GAME_CONFIG = {
   /* CAM 7, "YOUR ROOM": once a night (from Night 3, see youCam in nights) a
      camera that isn't on the map appears. It films YOU from behind...
        image: (optional) your desk room seen from behind and above, with an
-              EMPTY chair (1600 x 900). Until you draw it, the game makes one.
-       seat:  where the back of your head goes in that picture (x, y = the
+              EMPTY chair (1600 x 900). Until you draw it, the game shows its
+              own photo of it.
+       seat:  where the back of your head goes in YOUR picture (x, y = the
               middle of your head, size: 1 = normal). */
   youCam: { image: "assets/rooms/cam7_you.png", seat: { x: 0.5, y: 0.5, size: 1 } },
 
@@ -260,17 +263,19 @@ window.GAME_CONFIG = {
         east:    ["door:right"],
       },
       retreat: ["hall", "parlor", "stairs"],
+      // These fit the game's built-in photo rooms (its feet on the floor, never under the camera map).
+      // When you draw your own room, place Redhorn in it again with ?dev (see HOW-TO-ADD-ART.md).
       poses: {
-        nursery: { x: 0.62, y: 1.02, h: 0.78 },
-        hall:    { x: 0.50, y: 0.92, h: 0.52 },
-        parlor:  { x: 0.34, y: 1.04, h: 0.80 },
-        stairs:  { x: 0.60, y: 0.96, h: 0.66 },
-        west:    { x: 0.55, y: 1.05, h: 0.92 },
-        east:    { x: 0.45, y: 1.05, h: 0.92, flip: true },
+        nursery: { x: 0.45, y: 0.80, h: 0.42 },               // on the carpet, by the crib
+        hall:    { x: 0.49, y: 0.70, h: 0.30 },               // a little way down the endless hall
+        parlor:  { x: 0.46, y: 0.83, h: 0.39 },               // standing in the water
+        stairs:  { x: 0.46, y: 0.78, h: 0.36 },               // halfway up the stairs
+        west:    { x: 0.45, y: 0.78, h: 0.41 },               // on the carpet runner
+        east:    { x: 0.48, y: 0.78, h: 0.41, flip: true },
       },
-      doorPose: {   // small enough that both horns fit inside the doorway
-        left:  { x: 0.55, y: 1.00, h: 0.70 },
-        right: { x: 0.45, y: 1.00, h: 0.70, flip: true },
+      doorPose: {   // one step back in the hall, just behind your doorway
+        left:  { x: 0.55, y: 0.87, h: 0.70 },
+        right: { x: 0.45, y: 0.87, h: 0.70, flip: true },
       },
     },
   ],
@@ -437,7 +442,8 @@ window.GAME_CONFIG = {
   ],
 
   /* Credits shown in the Extras screen (see also CREDITS.md) and rolled after Night 5.
-     The first line is YOU: change "You!" to your name if you like. */
+     The first line is YOU: change "You!" to your name if you like.
+     Lines starting with "Sound:", "Font:" or "Picture:" are rolled together as one list of names. */
   credits: [
     { what: "Monster art & animation (Redhorn)", who: "You!", license: "" },
     { what: "Sound: Night ambience", who: "congusbongus", license: "CC0", url: "https://opengameart.org/content/lost-in-a-bad-place-horror-ambience-loop" },
@@ -474,5 +480,81 @@ window.GAME_CONFIG = {
     { what: "Font: Special Elite", who: "Astigmatic", license: "Apache 2.0" },
     { what: "Font: VT323", who: "Peter Hull", license: "OFL 1.1" },
     { what: "Font: Eater", who: "Typomondo", license: "OFL 1.1" },
+    /* The free pictures the game's built-in photo rooms are made from (assets/scenes/, see art-src/).
+       All are CC0 or public domain: free for anyone to use. When you draw all your own rooms,
+       you can delete these lines. */
+    { what: "Picture: \"A Moonlit Night at Sea\" (painting, 1885)", who: "Ivan Aivazovsky", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Ivan_Konstantinovich_Aivazovsky_-_A_Moonlit_Night_at_Sea,_1885.jpg" },
+    { what: "Picture: \"Island of the Dead\" (painting)", who: "Arnold Böcklin", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:Island_of_the_Dead_MET_DP-14201-003.jpg" },
+    { what: "Picture: \"Portrait of a Young Woman\" (painting)", who: "Petrus Christus", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Petrus_Christus_-_Portrait_of_a_Young_Woman_-_Google_Art_Project.jpg" },
+    { what: "Picture: \"Moonrise over the Sea\" (painting)", who: "Caspar David Friedrich", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Caspar_David_Friedrich_-_Mondaufgang_%C3%BCber_dem_Meer.jpg" },
+    { what: "Picture: \"A Walk at Dusk\" (painting)", who: "Caspar David Friedrich", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Caspar_David_Friedrich_-_A_Walk_at_Dusk.jpg" },
+    { what: "Picture: \"Street Scene in Moonlight\" (painting)", who: "John Atkinson Grimshaw", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:John_Atkinson_Grimshaw_-_Street_Scene_in_Moonlight.jpg" },
+    { what: "Picture: \"Under the Moonbeams\" (painting)", who: "John Atkinson Grimshaw", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:John_Atkinson_Grimshaw_-_Under_the_Moonbeams.jpg" },
+    { what: "Picture: \"Interior. Artificial Light\" (painting)", who: "Vilhelm Hammershøi", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Vilhelm_Hammersh%C3%B8i_-_Interior._Artificial_Light_-_KMS8677_-_Statens_Museum_for_Kunst.jpg" },
+    { what: "Picture: \"The Four Rooms\" (painting, 1914)", who: "Vilhelm Hammershøi", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Vilhelm_Hammersh%C3%B8i-_Die_vier_Zimmer,_1914.jpg" },
+    { what: "Picture: \"White Doors\" (painting, 1913)", who: "Vilhelm Hammershøi", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Vilhelm_Hammersh%C3%B8i_-_Hvide_d%C3%B8re._Interi%C3%B8r_fra_Strandgade_25_-_1913.png" },
+    { what: "Picture: \"Night on the Dnieper\" (painting)", who: "Arkhip Kuindzhi", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Arkhip_Kuindzhi_-_%D0%9D%D0%BE%D1%87%D1%8C_%D0%BD%D0%B0_%D0%94%D0%BD%D0%B5%D0%BF%D1%80%D0%B5_-_Google_Art_Project.jpg" },
+    { what: "Picture: \"Portrait of a Young Girl\" (painting, 1840)", who: "H[einrich?] Paul (German, 19th century)", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Heinrich_Paul_Portrait_of_a_young_girl_1840.jpg" },
+    { what: "Picture: \"Nocturne, Grey and Silver (Chelsea Embankment, Winter)\" (painting)", who: "James McNeill Whistler", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:James_McNeill_Whistler_-_Nocturne_Grey_and_Silver--Chelsea_Embankment,_Winter_(c._1879).jpg" },
+    { what: "Picture: Victorian armchair (3-D scan: the parlor's armchairs and your chair on CAM 7)", who: "Kirill Sannikov", license: "CC0", url: "https://polyhaven.com/a/ArmChair_01" },
+    { what: "Picture: Twin-bell alarm clock (3-D scan: the alarm clock)", who: "Yann Kervran, James Ray Cock", license: "CC0", url: "https://polyhaven.com/a/alarm_clock_01" },
+    { what: "Picture: Old iron bed frame (3-D scan: the cot in the nursery)", who: "Luca B", license: "CC0", url: "https://polyhaven.com/a/old_bed_frame" },
+    { what: "Picture: Painted wooden nightstand (3-D scan: the nursery)", who: "Kirill Sannikov", license: "CC0", url: "https://polyhaven.com/a/painted_wooden_nightstand" },
+    { what: "Picture: Grandfather clock (3-D scan: the Endless Hall)", who: "Yann Kervran, James Ray Cock", license: "CC0", url: "https://polyhaven.com/a/vintage_grandfather_clock_01" },
+    { what: "Picture: Misty pine forest (outside the windows)", who: "Greg Zaal", license: "CC0", url: "https://polyhaven.com/a/misty_pines" },
+    { what: "Picture: Old photo: second-floor center hall, Blandair (beyond the west doorway)", who: "Historic American Buildings Survey (Library of Congress)", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:View_of_second_floor_Center_Hall_(Room_201),_looking_north,_with_scale_stick_-_Blandair,_6651_Highway_175,_Columbia,_Howard_County,_MD_HABS_MD-1149-28.tif" },
+    { what: "Picture: Old photo: first-floor hall, Lyndhurst (beyond the east doorway)", who: "Historic American Buildings Survey (Library of Congress)", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:VIEW_FIRST_FLOOR_HALL_FROM_SOUTH_-_Lyndhurst,_Main_House,_635_South_Broadway,_Tarrytown,_Westchester_County,_NY_HABS_NY,60-TARY,1A-37.tif" },
+    { what: "Picture: The full moon", who: "NASA/GSFC/Arizona State University", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Full_Moon_(15984763045).jpg" },
+    { what: "Picture: The moon picture in your bedroom", who: "NASA/GSFC/Arizona State University", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Moon_nearside_LRO_5000.jpg" },
+    { what: "Picture: Old paper (the crayon drawing, letters)", who: "unknown author (The Digital Yard Sale)", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Old_paper6.jpg" },
+    { what: "Picture: The carved mantel in the Drowned Parlor (Old Hall)", who: "Sergej Majboroda", license: "CC0", url: "https://polyhaven.com/a/old_hall" },
+    { what: "Picture: Night sky (Rogland Clear Night)", who: "Greg Zaal", license: "CC0", url: "https://polyhaven.com/a/rogland_clear_night" },
+    { what: "Picture: Rocking horse with yellow halter (ca. 1900, the nursery)", who: "Unknown maker (Smithsonian American Art Museum, gift of Herbert Waide Hemphill, Jr.)", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:Rocking_Horse_with_Yellow_Halter-saam-1986.65.89_1.jpg" },
+    { what: "Picture: Wallpaper, sidewall, France 1875-1900 (the desk room)", who: "J. Zuber et Cie (Cooper Hewitt)", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Sidewall_(France),_1875%E2%80%931900_(CH_18798335).jpg" },
+    { what: "Picture: \"Daisy\" wallpaper", who: "William Morris / Morris & Co.", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:Daisy_MET_DP306732.jpg" },
+    { what: "Picture: \"Fruit or Pomegranate\" wallpaper", who: "William Morris / Morris & Co.", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:Fruit_or_Pomegranate_MET_DP109416.jpg" },
+    { what: "Picture: \"St. James\" acanthus wallpaper (the carving on the desk room's picture frame)", who: "William Morris", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Morris_St_James_1880.jpg" },
+    { what: "Picture: \"Nursery Rhymes (1876)\" wallpaper", who: "unknown artist (Cooper Hewitt)", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Sidewall,_Nursery_Rhymes,_1876_(CH_18606165).jpg" },
+    { what: "Picture: Wallpaper with umbel flowers, butterflies and dragonflies", who: "Rijksmuseum", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:Blad_behangselpapier_met_schermbloemen,_vlinders_en_libellen,_RP-P-1970-1.jpg" },
+    { what: "Picture: Book Pattern (col2) (texture)", who: "Rob Tuytel", license: "CC0", url: "https://polyhaven.com/a/book_pattern" },
+    { what: "Picture: Brown Leather (texture)", who: "Rob Tuytel", license: "CC0", url: "https://polyhaven.com/a/brown_leather" },
+    { what: "Picture: Fabric Pattern 05 (col_02) (texture)", who: "Rob Tuytel", license: "CC0", url: "https://polyhaven.com/a/fabric_pattern_05" },
+    { what: "Picture: Wholecloth quilt", who: "The Metropolitan Museum of Art", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:Wholecloth_quilt_MET_DP123109.jpg" },
+    { what: "Picture: Wholecloth calamanco quilt", who: "The Metropolitan Museum of Art", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:Wholecloth_calamanco_quilt_MET_DP332843.jpg" },
+    { what: "Picture: Velour Velvet (texture)", who: "colormass, Rico Cilliers", license: "CC0", url: "https://polyhaven.com/a/velour_velvet" },
+    { what: "Picture: Dark Wooden Planks (texture)", who: "Amal Kumar", license: "CC0", url: "https://polyhaven.com/a/dark_wooden_planks" },
+    { what: "Picture: Plank Flooring 04 (texture)", who: "Dimitrios Savva", license: "CC0", url: "https://polyhaven.com/a/plank_flooring_04" },
+    { what: "Picture: Herringbone Parquet (texture)", who: "Jenelle van Heerden, Sergej Majboroda", license: "CC0", url: "https://polyhaven.com/a/herringbone_parquet" },
+    { what: "Picture: Old Wooden Floor 02 (texture)", who: "Charlotte Baglioni, Jenelle van Heerden", license: "CC0", url: "https://polyhaven.com/a/old_wooden_floor_02" },
+    { what: "Picture: Old Wood Floor (texture)", who: "Guillaume Monsergent", license: "CC0", url: "https://polyhaven.com/a/old_wood_floor" },
+    { what: "Picture: Distressed Painted Planks (texture)", who: "Rob Tuytel", license: "CC0", url: "https://polyhaven.com/a/distressed_painted_planks" },
+    { what: "Picture: Stair Planks (texture)", who: "Rob Tuytel", license: "CC0", url: "https://polyhaven.com/a/stair_planks" },
+    { what: "Picture: Brushed brass (Apollo 11 interior paint)", who: "NASA / Smithsonian Institution", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:Brushed_brass_paint_(Apollo_11)_interior.png" },
+    { what: "Picture: Rusty Metal 02 (texture)", who: "Rob Tuytel", license: "CC0", url: "https://polyhaven.com/a/rusty_metal_02" },
+    { what: "Picture: Wallpaper, sidewall, ca. 1880 (CH 85010069)", who: "unknown designer, ca. 1880 (Cooper Hewitt)", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Sidewall,_ca._1880_(CH_85010069).jpg" },
+    { what: "Picture: Wallpaper, sidewall, ca. 1880 (CH 85010039)", who: "unknown designer, ca. 1880 (Cooper Hewitt)", license: "Public domain", url: "https://commons.wikimedia.org/wiki/File:Sidewall,_ca._1880_(CH_85010039).jpg" },
+    { what: "Picture: Decrepit Wallpaper (texture)", who: "Rob Tuytel", license: "CC0", url: "https://polyhaven.com/a/decrepit_wallpaper" },
+    { what: "Picture: \"Blackthorn\" wallpaper", who: "William Morris / Morris & Co. (The Met)", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:Blackthorn_MET_DP306737.jpg" },
+    { what: "Picture: \"Trellis\" wallpaper", who: "William Morris, Philip Webb / Morris & Co. (The Met)", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:Trellis_MET_DP306738.jpg" },
+    { what: "Picture: \"Willow Bough\" wallpaper", who: "William Morris / Morris & Co. (The Met)", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:Willow_Bough_MET_DP306734.jpg" },
+    { what: "Picture: White Planks Clean (texture)", who: "Rob Tuytel", license: "CC0", url: "https://polyhaven.com/a/white_planks_clean" },
+    { what: "Picture: Wooden Panels (texture)", who: "Dimitrios Savva", license: "CC0", url: "https://polyhaven.com/a/wooden_panels" },
+    { what: "Picture: Papier7 (Paper-Textures seamless pack) (texture)", who: "Leschge", license: "CC0", url: "https://opengameart.org/content/paper-textures-seamless" },
+    { what: "Picture: Grey Plaster 03 (texture)", who: "Rob Tuytel", license: "CC0", url: "https://polyhaven.com/a/grey_plaster_03" },
+    { what: "Picture: Worn Plaster Wall (texture)", who: "Dimitrios Savva", license: "CC0", url: "https://polyhaven.com/a/worn_plaster_wall" },
+    { what: "Picture: Plastered Wall 04 (texture)", who: "Rob Tuytel", license: "CC0", url: "https://polyhaven.com/a/plastered_wall_04" },
+    { what: "Picture: Ceiling Interior (texture)", who: "Dimitrios Savva", license: "CC0", url: "https://polyhaven.com/a/ceiling_interior" },
+    { what: "Picture: Worn Mossy Plasterwall (texture)", who: "Amal Kumar", license: "CC0", url: "https://polyhaven.com/a/worn_mossy_plasterwall" },
+    { what: "Picture: Plastered Wall 03 (texture)", who: "Rob Tuytel", license: "CC0", url: "https://polyhaven.com/a/plastered_wall_03" },
+    { what: "Picture: Rough Plaster Broken (texture)", who: "Rob Tuytel", license: "CC0", url: "https://polyhaven.com/a/rough_plaster_broken" },
+    { what: "Picture: 'Lotto' carpet", who: "The Metropolitan Museum of Art", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:%27Lotto%27_Carpet_MET_DP329233.jpg" },
+    { what: "Picture: Carpet MET DP169907", who: "The Metropolitan Museum of Art", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:Carpet_MET_DP169907.jpg" },
+    { what: "Picture: Carpet MET DP169905", who: "The Metropolitan Museum of Art", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:Carpet_MET_DP169905.jpg" },
+    { what: "Picture: 'Star Ushak' carpet", who: "The Metropolitan Museum of Art", license: "CC0", url: "https://commons.wikimedia.org/wiki/File:%27Star_Ushak%27_Carpet_MET_DP169931.jpg" },
+    { what: "Picture: Dark Wood (texture)", who: "Dario Barresi, Dimitrios Savva, Rico Cilliers", license: "CC0", url: "https://polyhaven.com/a/dark_wood" },
+    { what: "Picture: Fine Grained Wood (texture)", who: "Rob Tuytel", license: "CC0", url: "https://polyhaven.com/a/fine_grained_wood" },
+    { what: "Picture: Lacquered Cherry Wood (texture)", who: "Jenelle van Heerden, Rico Cilliers", license: "CC0", url: "https://polyhaven.com/a/lacquered_cherry_wood" },
+    { what: "Picture: Green Rough Planks (texture)", who: "Rob Tuytel", license: "CC0", url: "https://polyhaven.com/a/green_rough_planks" },
+    { what: "Picture: Wood Table Worn (texture)", who: "Dimitrios Savva, Rico Cilliers", license: "CC0", url: "https://polyhaven.com/a/wood_table_worn" },
   ],
 };

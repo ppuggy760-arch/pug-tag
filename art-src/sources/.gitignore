@@ -1,0 +1,6 @@
+# The raw source library (about 62 MB of photos, textures and 3-D scans) is kept out of git
+# so the game download stays small. Every file is listed, with its licence and download link,
+# in textures.json, photos.json and models.json next to this file.
+textures/
+photos/
+models/

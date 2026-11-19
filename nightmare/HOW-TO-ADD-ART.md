@@ -1,9 +1,19 @@
 # How to add your art to *Until the Alarm*
 
-The game already runs. Every picture you haven't drawn yet is a **stand-in**
-that the game paints by itself. When you save a picture with the right name in
-the right folder, the game uses yours instead. You never have to change the
-game's code.
+The game already runs. Every room you haven't drawn yet is a **stand-in**: a
+photo room the game brings along in **`assets/scenes/`**. Each one is put
+together from lots of free pictures from the internet (old wood, plaster,
+wallpaper, velvet, carpets, photos of real old houses, old paintings, NASA's
+moon), all lit the same way so they look like one dreamy old house. None of
+them has a monster in it: your monster only shows up in the real game.
+
+When you save **your own picture** with the right name in **`assets/rooms/`**,
+the game uses yours instead, straight away. You never have to change the game's
+code, and you never have to touch `assets/scenes/`.
+
+(If you are curious how the photo rooms are made: the recipe is in the
+`art-src/` folder next to this game, and it can build every one of them again.
+The pictures they are made from are listed in `CREDITS.md`.)
 
 Everything you can change lives in one file: **`js/config.js`**. It has the
 title, the rooms, the monsters, the sounds and all the words. Its notes (the
@@ -53,8 +63,10 @@ A green **ART HELPER** box appears. Players never see it.
 and sound `config.js` asks for:
 
 * ✓ found, with its size
-* – not found, so the game uses a stand-in: either it isn't drawn yet, or its
-  name or folder isn't exactly the same as in `config.js` (capital letters count)
+* – not found, so the game shows its built-in photo stand-in: either it isn't
+  drawn yet, or its name or folder isn't exactly the same as in `config.js`
+  (capital letters count). On screen the helper also says, for example,
+  "using the built-in photo stand-in; your picture goes at assets/rooms/office.png".
 * **!** something to look at, in plain words, for example:
   * "office.png is 1600×900. Make it wider (about 2400×900) so there is room to look around."
   * "cam3_parlor.png is 1000×1000: its edges will be cropped (use 16:9, like 1600×900)."
@@ -116,6 +128,10 @@ into `config.js`. Press **copy**, then paste it over the old line.
 **Onion skin.** In ?dev mode, *Extras* shows every frame of your monster at
 once, faint, each with a coloured box around it. If the boxes jump around, so
 will your monster. The checklist also says how far its body moves sideways.
+(Only you see this. Players never see your monster outside the real game:
+not on the title screen, not in *Extras*, not on the wall. In *Extras* a player
+sees a little door with "???" until they have met the monster in a dream; then
+its name and `description` appear, but still never its picture.)
 
 ---
 
@@ -129,15 +145,19 @@ there yet), and monster frames in **`assets/monsters/<name>/`**. Use PNG.
 
 | Picture | Size | See-through? | In `config.js` | If it's missing |
 |---|---|---|---|---|
-| `assets/rooms/office.png` (your desk room) | **2400 × 900** (wide!) | no | `office.image` | a dreamy stand-in room |
-| a doorway with the light off | the door box's shape | no | `office.doors.left.darkImage` (and `right`) | the doorway you painted in office.png |
-| a doorway with the light on | the door box's shape | no | `office.doors.left.litImage` | a lit hallway |
-| a shut door | the door box's shape | no | `office.doors.left.closedImage` | a shutter with a glowing sign |
-| `assets/rooms/bedroom.png` | 1600 × 900 | no | `bedroom.image` | a stand-in bedroom |
-| your bedroom in the morning | 1600 × 900 | no | `bedroom.morningImage` | the game warms up `bedroom.png` |
+| `assets/rooms/office.png` (your desk room) | **2400 × 900** (wide!) | no | `office.image` | the photo desk room (`assets/scenes/office.jpg`) |
+| a doorway with the light off | the door box's shape | no | `office.doors.left.darkImage` (and `right`) | the doorway you painted in office.png (or the photo's dark hall) |
+| a doorway with the light on | the door box's shape | no | `office.doors.left.litImage` | a photo of a lit hall |
+| a shut door | the door box's shape | no | `office.doors.left.closedImage` | a photo of a heavy old door |
+| `assets/rooms/bedroom.png` | 1600 × 900 | no | `bedroom.image` | the photo bedroom |
+| your bedroom in the morning | 1600 × 900 | no | `bedroom.morningImage` | the game warms up `bedroom.png` (or the photo bedroom's morning) |
 | things that follow you out (Nights 2, 3, 4) | small | **yes** | `morning.evidence` | the game draws them |
-| `assets/rooms/cam1_nursery.png` … `cam6_east.png` | 1600 × 900 | no | `cameras[].image` | a stand-in room each |
-| `assets/rooms/cam7_you.png` | 1600 × 900 | no | `youCam.image` | made from your desk room |
+| `assets/rooms/cam1_nursery.png` … `cam6_east.png` | 1600 × 900 | no | `cameras[].image` | a photo room each |
+| `assets/rooms/cam7_you.png` | 1600 × 900 | no | `youCam.image` | a photo of the desk room from behind |
+
+The photo stand-ins are in `assets/scenes/`. Leave them there: they are only
+shown while your own picture is missing. (If one of them is missing too, the
+game simply paints a plainer stand-in by itself.)
 | `assets/monsters/redhorn/frame1.png` … | the same size for every frame | **yes** | `frames` | a shadow with glowing eyes |
 | close-up jumpscare frames | any | **yes** | `jumpscareFrames` | its normal frames |
 | a sleeper asleep | like its frames | **yes** | `sleepFrames` | its normal frame, darker, with z's |
@@ -177,10 +197,11 @@ What the player sees in a doorway:
 
 * **Light off:** what **you painted** in the doorway, a little darker. (Or your
   `darkImage`, if you give one.)
-* **Light on:** a lit hallway, and the monster if it's there. Draw your own
-  empty, lit hallway as `litImage` if you like.
-* **Door shut:** a shutter, or your `closedImage`. You don't need to draw it
-  cracked: when a door is held shut too long, the game cracks and shakes it.
+* **Light on:** a photo of a lit hall, and the monster if it's there. Draw your
+  own empty, lit hallway as `litImage` if you like.
+* **Door shut:** a photo of a heavy old door, or your `closedImage`. You don't
+  need to draw it cracked: when a door is held shut too long, the game cracks
+  and shakes it.
 
 Make `darkImage`, `litImage` and `closedImage` the same shape as their door box.
 
@@ -213,8 +234,9 @@ dream. At 6 AM the alarm rings and you wake up in the same room.
   warm in the morning. (Or draw a separate morning picture as
   `bedroom.morningImage`.)
 * `morning.evidence` — something follows you out of the dream. Night 2: the
-  closet door is open a crack. Night 3: the "he walks at night" drawing is on
-  the bedside table. Night 4: a scrap of pink collar lies on the floor. Draw
+  closet door is open a crack. Night 3: the crayon drawing from the desk-room
+  wall (a house at night, its door left open: "he walks at night") is on the
+  bedside table. Night 4: a scrap of pink collar lies on the floor. Draw
   your own as **see-through PNGs** and put the path next to the night's number:
 
   ```js
@@ -261,11 +283,15 @@ One picture per camera, **1600 × 900** (16:9):
 
 **CAM 7, "Your Room".** Once a night (from Night 3) a camera that isn't on the
 map appears: it films *you* from behind. Look away, look back, and something
-stands behind your chair. The game builds this picture from your desk room,
-but you can draw it as `assets/rooms/cam7_you.png`: your desk room seen **from
-behind and above**, with an **empty chair**. The game draws the back of your
-head on it; `youCam.seat` says where (`x`, `y` = the middle of your head;
-`size`: 1 = normal).
+stands behind your chair. Until you draw it, the game shows its own photo of the
+desk room from behind. Draw yours as `assets/rooms/cam7_you.png`: your desk
+room seen **from behind and above**, with an **empty chair**. The game draws the
+back of your head on it; `youCam.seat` says where (`x`, `y` = the middle of your
+head; `size`: 1 = normal).
+
+**When you draw your own camera room**, Redhorn's `poses` (in `config.js`) were
+made for the photo rooms, so place it again with the art helper: open the
+camera, press **G** and click where its feet should be (see section 2).
 
 ---
 
@@ -357,7 +383,7 @@ first**, and waits at least `minWarning` seconds before it can come in.
 | `id` | Its short name for the game (one word, no spaces). Every monster needs its own. |
 | `name` | Its name for players ("REDHORN FOUND YOU"). |
 | `behavior` | Its brain, see above. Leave it out for `"walker"`. |
-| `description` | A line about it in *Extras*. |
+| `description` | A line about it in *Extras* (shown once the player has met it). |
 | `color` | Eye colour while it is still a shadow, like `"#5ad1ff"`. |
 | `frames` | Its animation pictures, in order. |
 | `fps` | Animation speed in frames per second (Redhorn: 4). |

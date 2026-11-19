@@ -155,6 +155,7 @@
     } catch (e) { alphaBlocked = true; return null; }
   }
   const fileName = (p) => String(p || '').split('/').pop();
+  const PHOTO_DOORS = { left: { x: 0.03, y: 0.178, w: 0.15, h: 0.7 }, right: { x: 0.82, y: 0.178, w: 0.15, h: 0.7 } }; // (where office.jpg has its doorways)
   /* the size each kind of picture is best drawn at */
   const WANT = [[/^office\.image$/, '2400×900'], [/^camera|^youCam|^bedroom/, '1600×900'], [/^office\.doors/, 'the shape of its door box']];
   const wantFor = (slot) => (WANT.find(([re]) => re.test(slot)) || [0, ''])[1];
@@ -193,6 +194,11 @@
       if (d.y < -0.01 || d.y + d.h > 1.01) rows.push({ slot: side + ' doorway', path: '', found: true, warn: [`Your ${side} doorway is taller than what fits on screen, so its top and bottom are cut off. ` +
         'Make the picture wider (about 2400×900), or the doorway shorter (drag its green box: its cut-off edges sit at the top and bottom of the screen).'] });
     }
+    if (Art.officePhoto) for (const side of ['left', 'right']) { // (the photo's doorways are painted in at the usual spots)
+      const d = CFG.office.doors[side], o = PHOTO_DOORS[side];
+      if (['x', 'y', 'w', 'h'].some((k) => Math.abs(d[k] - o[k]) > 0.004)) rows.push({ slot: side + ' doorway', path: '', found: true, warn: [], info: `You moved the ${side} door box, but the built-in photo desk room has its doorway at x:${o.x} y:${o.y} w:${o.w} h:${o.h}. ` +
+        'That only matters until you draw your own desk room (then put the box where YOUR doorway is).' });
+    }
     for (const def of CFG.monsters) { const s = bodyShift(def); if (s) rows.push({ slot: def.name + ' (moving)', path: '', found: true, info: s, warn: [] }); }
     for (const name of Object.keys(CFG.sounds || {})) {
       const miss = Sound.missing.has(name), opt = GM.OPTIONAL_SOUNDS.indexOf(name) >= 0;
@@ -211,6 +217,8 @@
     const mids = boxes.map((b) => (b.x + b.w / 2) * A.frames[0].width), shift = Math.round(Math.max(...mids) - Math.min(...mids));
     return shift > 40 ? `its body moves up to ${shift} px sideways between frames (see the onion skin in Extras). That's fine for a sway; for a still monster, line the frames up.` : '';
   }
+  /* what shows while your picture for that slot is missing: the game's photo (assets/scenes/) or its painted stand-in */
+  const standInWord = (slot) => (Art.standIn[slot] === 'photo' ? 'shows its built-in photo stand-in' : 'paints a stand-in');
   function drawReport() {
     const rows = D.report, look = rows.filter((r) => r.warn.length).length;
     const ok = rows.filter((r) => r.found && !r.warn.length && !r.info).length, stand = rows.filter((r) => !r.found && !r.warn.length).length;
@@ -219,7 +227,8 @@
     D.panel.querySelector('.dRows').innerHTML = rows.slice().sort((a, c) => rank(a) - rank(c)).map((r) => {
       const icon = r.warn.length ? '<i class="bad">!</i>' : r.info ? '<i class="info">i</i>' : r.found ? '<i class="ok">✓</i>' : '<i class="dim">–</i>';
       const what = r.sound ? '' : r.found ? (r.w ? ` ${r.w}×${r.h}` + (r.warn.length && r.want ? ` (best: ${r.want})` : '') : '')
-        : r.path ? ' not found, so the game uses a stand-in. Not drawn yet' + (r.want ? ` (draw it ${r.want})` : '') + '? Or check the name and folder exactly (capital letters count).' : ' (empty: the built-in look)';
+        : r.path ? ` not found, so the game ${standInWord(r.slot)}. Not drawn yet` + (r.want ? ` (draw it ${r.want})` : '') + '? Or check the name and folder exactly (capital letters count).'
+          : Art.standIn[r.slot] === 'photo' ? ' (empty: the built-in photo)' : ' (empty: the built-in look)';
       const so = r.sound && !r.found ? (r.opt ? ' optional, not added yet' : ' MISSING') : '';
       return `<div>${icon} <b>${esc(r.slot)}</b> <span class="dim">${esc(fileName(r.path))}</span>${esc(what + so)}` +
         r.warn.concat(r.info ? [r.info] : []).map((w) => `<div class="why">${esc(w)}</div>`).join('') + '</div>';
@@ -301,13 +310,14 @@
     d.x = +f3(clamp(x, 0, 1 - w)); d.w = +f3(w); d.y = +f3(toPicY(y)); d.h = +f3(h * k);
     g.moved = true;
   }
-  /* after a drag: the stand-in doorway, shutter (and stand-in room) are painted again at the new size */
+  /* after a drag: the stand-in doorway, shutter (and painted stand-in room) are made again at the new size
+     (the photo ones are cut to the new shape; the photo desk room itself stays as it is) */
   function repaintDoor(side) {
-    const A = Art.doors[side];
-    if (A.dark && !A.own.dark) A.dark = GM.paintDoorway(side, false);
-    if (!A.own.lit) A.lit = GM.paintDoorway(side, true);
-    if (!A.own.closed) A.closed = GM.paintShutter(side);
-    if (Art.officeMissing) Art.office = GM.paintOffice();
+    const A = Art.doors[side], S = A.shot || {};
+    if (A.dark && !A.own.dark) A.dark = GM.fitDoor(side, S.dark) || GM.paintDoorway(side, false);
+    if (!A.own.lit) A.lit = GM.fitDoor(side, S.lit) || GM.paintDoorway(side, true);
+    if (!A.own.closed) A.closed = GM.fitDoor(side, S.closed) || GM.paintShutter(side);
+    if (Art.officeMissing && !Art.officePhoto) Art.office = GM.paintOffice();
   }
   /* a click in the desk room: ready-made clock: and lamp: lines for that spot (the clock keeps its own size) */
   const picX = (sx) => (sx - GM.officeOriginX()) / G.officeW;
@@ -464,11 +474,11 @@
     if (st === 'night' && !D.jView) {
       if (G.cams.t >= 1) {
         const cam = GM.camById[G.cams.cur];
-        if (cam === GM.YOU_CAM) { if (!Art.youCam) standInHint(ctx, (CFG.youCam || {}).image || 'assets/rooms/cam7_you.png'); }
-        else if (cam && Art.camMissing[cam.id]) standInHint(ctx, cam.image);
-      } else if (Art.officeMissing) standInHint(ctx, CFG.office.image);
+        if (cam === GM.YOU_CAM) { if (!Art.youCam || Art.youCamPhoto) standInHint(ctx, (CFG.youCam || {}).image || 'assets/rooms/cam7_you.png', Art.youCamPhoto); }
+        else if (cam && Art.camMissing[cam.id]) standInHint(ctx, cam.image, Art.standIn[`camera "${cam.id}"`] === 'photo');
+      } else if (Art.officeMissing) standInHint(ctx, CFG.office.image, Art.officePhoto);
     }
-    if ((st === 'asleep' || st === 'morning' || st === 'win') && Art.bedroomMissing) standInHint(ctx, (CFG.bedroom || {}).image || 'assets/rooms/bedroom.png');
+    if ((st === 'asleep' || st === 'morning' || st === 'win') && Art.bedroomMissing) standInHint(ctx, (CFG.bedroom || {}).image || 'assets/rooms/bedroom.png', Art.bedroomPhoto);
     if (st === 'night' && D.jView) {
       const r = jumpRect(), f = monDef().jumpscareFocus || { x: 0.5, y: 0.2 }, fx = r.x + f.x * r.w, fy = r.y + f.y * r.h;
       ctx.save(); ctx.fillStyle = 'rgba(0,0,0,.92)'; ctx.fillRect(0, 0, W, H);
@@ -479,9 +489,9 @@
       ctx.restore();
     }
   }
-  /* which file would replace the stand-in picture on screen right now */
-  function standInHint(c, path) {
-    const text = 'stand-in art — your picture goes at ' + path;
+  /* which file would replace the stand-in picture on screen right now (photo: the game's own photo stand-in) */
+  function standInHint(c, path, photo) {
+    const text = (photo ? 'using the built-in photo stand-in; your picture goes at ' : 'stand-in art — your picture goes at ') + path;
     c.save();
     c.font = '24px VT323, monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
     const w = c.measureText(text).width + 28;
