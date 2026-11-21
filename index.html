@@ -90,6 +90,7 @@
   #board table{ width:100%; border-collapse:collapse; font-size:16px; }
   #board td{ padding:4px 8px; } #board tr.me td{ color:var(--gold); }
   #board .sw{ display:inline-block; width:12px; height:12px; box-shadow:0 0 0 2px var(--edge); margin-right:6px; vertical-align:middle; }
+  #hudVR{ position:absolute; left:50%; bottom:72px; transform:translateX(-50%); pointer-events:auto; display:none; }
   #fps{ position:absolute; bottom:8px; right:10px; font-family:'Press Start 2P',monospace; font-size:9px; color:#9fb0ff; text-shadow:1px 1px 0 #000; }
 
   /* ---------- MENU ---------- */
@@ -127,7 +128,11 @@
   #tJump{ right:30px; bottom:40px; width:96px; height:96px; }
   #tGrab{ right:140px; bottom:30px; }
   #tUse{ right:40px; bottom:150px; }
-  #tMenu{ right:14px; top:120px; width:58px; height:44px; font-size:8px; }
+  #tMenu{ left:14px; top:14px; width:58px; height:44px; font-size:8px; }
+  body.touch #mapName{ left:84px; }
+  /* short landscape phones: USE joins the bottom row; narrow portrait phones: a right-hand column, clear of the joystick */
+  @media (max-height:420px){ #tUse{ right:236px; bottom:30px; } }
+  @media (max-width:420px){ #tGrab{ right:30px; bottom:150px; } #tUse{ right:30px; bottom:242px; } }
   #lookPad{ position:absolute; right:0; top:0; width:55%; height:100%; pointer-events:auto; touch-action:none; }
 
   #fade{ position:fixed; inset:0; z-index:40; background:#000; opacity:0; pointer-events:none; transition:opacity .35s; }
@@ -177,12 +182,13 @@
   <div id="hint"></div>
   <div id="board" class="ppanel"><h3>SCOREBOARD</h3><table id="boardT"></table></div>
   <div id="fps"></div>
+  <button class="pbtn blue small" id="hudVR">ENTER VR</button>
 </div>
 
 <!-- ================= MENU ================= -->
 <div id="menu">
   <div id="menuBox" class="ppanel">
-    <div id="menuTop"><h2>PAUSED</h2><button class="pbtn green small" id="mResume">RESUME</button></div>
+    <div id="menuTop"><h2>PAUSED</h2><button class="pbtn blue small" id="mVR" style="display:none">ENTER VR</button><button class="pbtn green small" id="mResume">RESUME</button></div>
     <div class="tabs">
       <button class="pbtn small blue sel" data-tab="tPlay">PLAY</button>
       <button class="pbtn small blue" data-tab="tPug">MY PUG</button>
@@ -307,8 +313,9 @@ function loadSave() {
   return d;
 }
 const save = loadSave();
-let saveTimer = 0;
+let saveTimer = 0, saveOff = false;
 function writeSave(now) {
+  if (saveOff) return;
   if (!now) { saveTimer = 0.6; return; }
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { }
 }
@@ -781,7 +788,8 @@ function slab(ax, ay, az, bx, by, bz, width, thick, mat, o = {}) {
   return box(mid.x, mid.y, mid.z, width, thick, L, mat, Object.assign({ ry: yaw, rx: pitch }, o));
 }
 // flat decal quad lying on ground (visual only)
-function decal(x, y, z, w, d, mk, o = {}) { box(x, y + 0.006, z, w, 0.01, d, { top: mk }, Object.assign({ col: false, noBottom: true }, o)); }
+let _decalN = 0; // overlapping decals sit at slightly different heights (no z-fighting shimmer)
+function decal(x, y, z, w, d, mk, o = {}) { box(x, y + 0.006 + (_decalN++ % 8) * 0.0015, z, w, 0.01, d, { top: mk }, Object.assign({ col: false, noBottom: true }, o)); }
 // upright cross-billboard (2 crossed quads) for flowers / grass tufts
 function tuft(x, y, z, s, mk) {
   for (const ry of [0.6, 0.6 + Math.PI / 2]) {
@@ -932,7 +940,9 @@ function resolveSphere(p, r, info, skipFn) {
           if (_co.ny > 0.6) { info.ground = true; info.gn.set(_co.nx, _co.ny, _co.nz); info.gsurf = c.surf; info.gcol = c; }
           else if (_co.ny < -0.6) info.ceil = true;
           else { info.wall = true; info.wn.set(_co.nx, _co.ny, _co.nz); }
-          if (c.bouncy) info.bouncy = Math.max(info.bouncy, c.bouncy);
+          // bouncy only off the top of pads (trampoline, sponge, mattress); gumdrop spheres bounce every way. The bounce
+          // follows the bouncy contacts' own normal, so brushing a pad's side while on the floor doesn't catapult you
+          if (c.bouncy && (c.t === 2 || _co.ny > 0.5)) { info.bouncy = Math.max(info.bouncy, c.bouncy); const bn = info.bn || (info.bn = new THREE.Vector3()); bn.x += _co.nx; bn.y += _co.ny; bn.z += _co.nz; }
           if (c.slip) info.slip = Math.max(info.slip, c.slip);
         }
       }
@@ -940,7 +950,7 @@ function resolveSphere(p, r, info, skipFn) {
     if (!moved) break;
   }
 }
-function resetContact(info) { info.hit = info.ground = info.wall = info.ceil = false; info.bouncy = 0; info.slip = 0; info.n.set(0, 0, 0); info.gsurf = info.surf = null; info.gcol = info.col = null; }
+function resetContact(info) { if (info.bn) info.bn.set(0, 0, 0); info.hit = info.ground = info.wall = info.ceil = false; info.bouncy = 0; info.slip = 0; info.n.set(0, 0, 0); info.gsurf = info.surf = null; info.gcol = info.col = null; }
 
 // ---- raycast ----
 const RAY = { t: 0, nx: 0, ny: 0, nz: 0, c: null };
@@ -1034,7 +1044,7 @@ const sky = { group: new THREE.Group(), dome: null, extras: [] };
 scene.add(sky.group);
 function makeSunTex(col) { const P = Pix(32, 32, 1); P.fill([0, 0, 0], 0); const c = hexRGB(col); for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) { const d = Math.max(Math.abs(x - 15.5), Math.abs(y - 15.5)); if (d < 9) P.set(x, y, mix(c, [255, 255, 255], 0.5)); else if (d < 12) P.set(x, y, c); else if (d < 15 && (x + y) % 2) P.set(x, y, c, 140); } return canvasTex(P.canvas(), { repeat: false }); }
 function buildSky(def) {
-  for (const o of sky.extras) { sky.group.remove(o); o.geometry && o.geometry.dispose(); o.material && o.material.dispose(); }
+  for (const o of sky.extras) { sky.group.remove(o); o.geometry && o.geometry.dispose(); if (o.material) { if (o.userData.ownMap && o.material.map) o.material.map.dispose(); o.material.dispose(); } }
   sky.extras.length = 0;
   if (sky.dome) { sky.group.remove(sky.dome); sky.dome.geometry.dispose(); sky.dome.material.dispose(); }
   const s = def.sky;
@@ -1060,6 +1070,7 @@ function buildSky(def) {
   // sun / moon disc
   if (s.sun) {
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeSunTex(s.sun), fog: false, depthWrite: false }));
+    sp.userData.ownMap = true; // its texture is made per map load: dispose it with the sprite
     const L = world.light.L; sp.position.set(L.x, L.y, L.z).multiplyScalar(500); sp.scale.setScalar(s.sunSize || 70); sky.group.add(sp); sky.extras.push(sp);
   }
   if (s.clouds) for (let i = 0; i < s.clouds; i++) {
@@ -1133,6 +1144,8 @@ const SFX = {
     if (this.na) return false; if (!this.ok) return true;
     return this.ctx.state !== 'running' && performance.now() - Math.max(this._run, this._gest) > 1000;
   },
+  // MUSIC / SOUND on-off keys: switching back on restores the level you had (not a fixed default)
+  toggle(k, def) { const S = save.settings, mem = k + 'Was'; if (S[k] > 0) { S[mem] = S[k]; S[k] = 0; } else S[k] = S[mem] > 0 ? S[mem] : def; this.applyVolumes(); writeSave(); return S[k] > 0; },
   // sound effects switched off in settings / on the terminal's SOUND key
   muted() { return save.settings.sfx <= 0.001; },
   // spatial helpers --------------------------------------------------
@@ -1817,7 +1830,7 @@ const COS = [
   { id: 'goggles', slot: 'face', name: 'SKI GOGGLES', price: 150, build: b => { b.box(0, 0.06, 0.19, 0.36, 0.1, 0.03, C(0x26e0ff), { glow: 1.1 }); b.box(0, 0.06, 0.184, 0.38, 0.12, 0.02, C(0xffffff)); b.box(-0.205, 0.06, 0.06, 0.02, 0.05, 0.26, C(0x333340)); b.box(0.205, 0.06, 0.06, 0.02, 0.05, 0.26, C(0x333340)); } },
   { id: '3d', slot: 'face', name: '3D GLASSES', price: 60, build: b => { const w = C(0xffffff); b.box(0, 0.055, 0.188, 0.34, 0.1, 0.015, w); b.box(-0.08, 0.055, 0.197, 0.12, 0.06, 0.005, C(0xff2a3a)); b.box(0.08, 0.055, 0.197, 0.12, 0.06, 0.005, C(0x2ad6ff)); } },
   // ---------------- NECK ----------------
-  { id: 'bandana', slot: 'neck', name: 'RED BANDANA', price: 0, build: b => { const r = C(0xd8252a); b.box(0, 0.205, 0.02, 0.46, 0.06, 0.4, r); b.box(0, 0.15, 0.19, 0.22, 0.06, 0.03, r); b.box(0, 0.1, 0.19, 0.12, 0.05, 0.03, r); b.box(0, 0.065, 0.19, 0.05, 0.03, 0.03, r); b.box(-0.05, 0.16, 0.207, 0.02, 0.02, 0.005, C(0xffffff)); b.box(0.06, 0.12, 0.207, 0.02, 0.02, 0.005, C(0xffffff)); } },
+  { id: 'bandana', slot: 'neck', name: 'RED BANDANA', price: 0, build: b => { const r = C(0xd8252a); b.box(0, 0.205, 0.015, 0.46, 0.06, 0.41, r); b.box(0, 0.15, 0.19, 0.22, 0.06, 0.03, r); b.box(0, 0.1, 0.19, 0.12, 0.05, 0.03, r); b.box(0, 0.065, 0.19, 0.05, 0.03, 0.03, r); b.box(-0.05, 0.16, 0.207, 0.02, 0.02, 0.005, C(0xffffff)); b.box(0.06, 0.12, 0.207, 0.02, 0.02, 0.005, C(0xffffff)); } },
   { id: 'collar', slot: 'neck', name: 'BLUE COLLAR', price: 0, build: b => { b.box(0, 0.2, 0, 0.46, 0.05, 0.4, C(0x2468e0)); b.box(0, 0.15, 0.205, 0.06, 0.06, 0.02, C(0xffd23f), { glow: 1.1 }); } },
   { id: 'bowtie', slot: 'neck', name: 'BOW TIE', price: 30, build: b => { const r = C(0xe02a4a); b.box(-0.06, 0.19, 0.19, 0.08, 0.08, 0.03, r); b.box(0.06, 0.19, 0.19, 0.08, 0.08, 0.03, r); b.box(0, 0.19, 0.2, 0.04, 0.05, 0.035, C(0xb01a35)); } },
   { id: 'scarf', slot: 'neck', name: 'STRIPY SCARF', price: 70, build: b => { const a = C(0xff8a1a), w = C(0xfff4e0); b.box(0, 0.2, 0, 0.48, 0.07, 0.42, a); for (let i = 0; i < 4; i++) b.box(0.12, 0.13 - i * 0.07, 0.21, 0.09, 0.07, 0.03, i % 2 ? a : w); } },
@@ -1928,6 +1941,10 @@ class PugAvatar {
       this.cos[slot] = m;
       if (this.self) setLayer(m, LAYER_SELF);
     }
+    // the name tag (and chat bubble) float above whatever hat is worn, so tall hats don't hide the name
+    const hat = this.cos.hat; let top = 0;
+    if (hat) { const gg = hat.geometry; if (!gg.boundingBox) gg.computeBoundingBox(); top = gg.boundingBox.max.y; }
+    this.tagY = Math.max(0.42, top + 0.11);
   }
   setBubble(on) {
     if (on && !this.bubble) { this.bubble = new THREE.Mesh(BUBBLE_GEO, BUBBLE_MAT); this.group.add(this.bubble); if (this.self) this.bubble.layers.set(LAYER_SELF); }
@@ -1963,8 +1980,8 @@ class PugAvatar {
       fo.position.copy(E); fo.lookAt(T); fo.scale.set(1, 1, Math.max(0.05, E.distanceTo(T) - (Q ? 0 : WRIST)));
       p.position.copy(H); p.quaternion.copy(Q || fo.quaternion);
     }
-    this.tag.position.set(head.x, head.y + 0.42, head.z);
-    if (this.chatT > 0) { this.chatT -= dt; this.chat.position.set(head.x, head.y + 0.62, head.z); if (this.chatT <= 0) this.chat.visible = false; }
+    this.tag.position.set(head.x, head.y + this.tagY, head.z);
+    if (this.chatT > 0) { this.chatT -= dt; this.chat.position.set(head.x, head.y + this.tagY + 0.2, head.z); if (this.chatT <= 0) this.chat.visible = false; }
     for (const s of this.spins) s.mesh.rotation.y += dt * 14;
     if (this.bubble && this.bubble.visible) { this.bubble.position.copy(this.body.position); this.bubble.position.y += 0.15; this.bubble.rotation.y += dt; }
     // blob shadow
@@ -2006,7 +2023,7 @@ class Btn3D {
     this.base = this.mesh.position.clone();
     this.up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.mesh.quaternion);
     this.inv = new THREE.Matrix4().copy(this.mesh.matrixWorld).invert();
-    this.down = 0; this.cool = 0; this.inside = [false, false]; this.hover = false; this.lit = false;
+    this.down = 0; this.cool = 0; this.hover = false; this.lit = false;
     this.setLabel(label, color, ink);
     world.buttons.push(this);
   }
@@ -2035,6 +2052,14 @@ class Btn3D {
   test(p, r) {
     _bv.copy(p).applyMatrix4(this.inv);
     return Math.abs(_bv.x) < this.w / 2 + r * 0.4 && Math.abs(_bv.z) < this.d / 2 + r * 0.4 && _bv.y < this.h / 2 + r * 0.95 && _bv.y > -this.h / 2 - 0.12;
+  }
+  // how far the paw is from the key centre, in key sizes (picks one key when a paw sits on the seam between two)
+  off2(p) { _bv.copy(p).applyMatrix4(this.inv); return (_bv.x / this.w) ** 2 + (_bv.z / this.d) ** 2; }
+  // is the paw coming down onto the key (it was above the key's zone last frame, or is moving down into it fast)?
+  // A paw sliding in sideways at desk height, or resting on the desk next to the keys, doesn't press.
+  pushing(prev, p, r) {
+    _bv.copy(p).applyMatrix4(this.inv); const y = _bv.y; _bv.copy(prev).applyMatrix4(this.inv);
+    return _bv.y >= this.h / 2 + r * 0.95 - 0.004 || _bv.y - y > 0.008;
   }
   update(dt) {
     if (this.cool > 0) this.cool -= dt;
@@ -2079,7 +2104,7 @@ function buildTerminal(x, z, ry = 0, y = 0) {
     ['MODE', () => Game.cycleMode(), '#ff9f43'], ['BOTS -', () => Game.setBots(save.settings.bots - 1), '#ff9f43'], ['BOTS +', () => Game.setBots(save.settings.bots + 1), '#ff9f43'], ['SKILL', () => Game.cycleDiff(), '#ff9f43'],
     ['ARMS -', () => { save.settings.arm = clamp(+(save.settings.arm - 0.05).toFixed(2), 0.9, 1.7); writeSave(); }, '#c78bff'], ['ARMS +', () => { save.settings.arm = clamp(+(save.settings.arm + 0.05).toFixed(2), 0.9, 1.7); writeSave(); }, '#c78bff'],
     ['TURN', () => { const o = ['snap', 'smooth', 'off']; save.settings.turn = o[(o.indexOf(save.settings.turn) + 1) % 3]; writeSave(); }, '#c78bff'], ['STICK', () => { save.settings.stick = !save.settings.stick; writeSave(); }, '#c78bff'],
-    ['MUSIC', () => { save.settings.music = save.settings.music > 0 ? 0 : 0.45; SFX.applyVolumes(); writeSave(); }, '#ff7eb6'], ['SOUND', () => { save.settings.sfx = save.settings.sfx > 0 ? 0 : 0.85; SFX.applyVolumes(); writeSave(); }, '#ff7eb6'],
+    ['MUSIC', () => SFX.toggle('music', 0.45), '#ff7eb6'], ['SOUND', () => SFX.toggle('sfx', 0.85), '#ff7eb6'],
     ['NAME', () => Game.randomName(), '#ff7eb6'], ['NEW RND', () => Game.startRound(), '#ff7eb6']
   ];
   B.forEach((b, i) => { const c = i % 4, r = (i / 4) | 0; new Btn3D({ label: b[0], color: b[2], onPress: () => { b[1](); world.screens.forEach(s => s.dirty = true); }, x: -0.57 + c * 0.38, y: 0.415, z: -0.21 + r * 0.14 }); });
@@ -2127,7 +2152,8 @@ function drawScoreboard(ctx, w, h) {
   ctx.fillStyle = '#ffd23f'; ctx.fillRect(0, 0, w, 22);
   drawText(ctx, (MODES[save.settings.mode] || MODES.infection).name + ' - ' + (MAPS[world.id] ? MAPS[world.id].name : ''), w / 2, 7, 1, '#1a1206', 'center');
   const ents = Game.entities.slice().sort((a, b) => (b.tags - a.tags) || (a.itTime - b.itTime));
-  ents.slice(0, 10).forEach((e, i) => {
+  const rows = ents.slice(0, 10); if (!rows.includes(Game.player)) rows[9] = Game.player;
+  rows.forEach((e, i) => {
     const y = 30 + i * 17;
     ctx.fillStyle = e.it ? '#ff5a2a' : e.fur; ctx.fillRect(8, y, 10, 10);
     drawText(ctx, e.name, 24, y + 2, 1, e === Game.player ? '#ffd23f' : '#ffffff');
@@ -2180,8 +2206,8 @@ function shopAction() {
   const owned = save.owned.includes(it.id);
   if (save.equip[it.slot] === it.id) { save.equip[it.slot] = null; SFX.ev('equip', { rate: 0.9 }, null); }
   else if (owned) { save.equip[it.slot] = it.id; SFX.ev('equip', {}, null); }
-  else if (save.bones >= it.price) { save.bones -= it.price; save.owned.push(it.id); save.equip[it.slot] = it.id; SFX.ev('purchase', {}, () => SFX.pickup(true)); Game.toast('BOUGHT ' + it.name + '!'); }
-  else { Game.toast('NEED ' + (it.price - save.bones) + ' MORE BONES'); SFX.ev('error', {}, () => SFX.bonk()); }
+  else if (save.bones >= it.price) { save.bones -= it.price; save.owned.push(it.id); save.equip[it.slot] = it.id; SFX.ev('purchase', {}, () => SFX.pickup(true)); Game.toast('BOUGHT ' + it.name + '!', true); }
+  else { Game.toast('NEED ' + (it.price - save.bones) + ' MORE BONES', true); SFX.ev('error', {}, () => SFX.bonk()); }
   writeSave(); Game.applyLook(); shopPreview();
 }
 function drawShopScreen(ctx, w, h) {
@@ -2204,6 +2230,11 @@ function buildMirror(x, y, z, ry, w, h) {
   const rt = m.getRenderTarget(); rt.texture.magFilter = THREE.NearestFilter; rt.texture.minFilter = THREE.NearestFilter; rt.texture.generateMipmaps = false;
   m.position.set(P[0], P[1], P[2]); m.rotation.y = world.xf.ry + ry;
   m.camera.layers.set(0); m.camera.layers.enable(LAYER_SELF);
+  m.userData.w = w; m.userData.h = h;
+  // VR draws the scene once per eye; the reflection is rendered for the first eye only and reused for the second
+  // (a mirror reflection without its own stereo depth - half the cost)
+  const ob = m.onBeforeRender;
+  m.onBeforeRender = function (r, s, c) { if (r.xr.isPresenting) { const xc = r.xr.getCamera(); if (xc.cameras && xc.cameras.length > 1 && c !== xc.cameras[0]) return; } ob.call(this, r, s, c); };
   world.root.add(m); world.mirrors.push(m);
   pushXf(x, z, ry, y); box(0, 0, -0.05, w + 0.16, h + 0.16, 0.08, 'darkwood'); popXf();
 }
@@ -2255,7 +2286,19 @@ function buildNav() {
       const v2 = g * (dy + Math.hypot(dy, dh));
       if (v2 > BOT_VMAX * BOT_VMAX * 0.82) continue;
       A.copy(a.p); A.y += STAND_H; Bv.copy(b.p); Bv.y += STAND_H;
-      if (!losClear(A, Bv, 0.05)) continue;
+      if (!losClear(A, Bv, 0.05)) {
+        // the straight line clips an edge (chair seat -> table top, crates -> counter): an upward hop can still arc over
+        // it. 'loft' edges are flown with a high apex (see loftVel) that must fit in the bot's launch speed.
+        // (or, for a short hop up a step that overhangs the take-off spot like a crate stack, straight up then across:
+        // the bot hits the face and the wall-climb push carries it over the top)
+        if (dy < 0.3) continue;
+        M.copy(A).lerp(Bv, 0.5); M.y = Math.max(A.y, Bv.y) + 0.6 + dh * 0.12;
+        const arc = losClear(A, M) && losClear(M, Bv);
+        if (!arc) { M.copy(A); M.y = Math.max(A.y, Bv.y) + 0.6; }
+        if (!(arc || (dh < 3.6 && losClear(A, M) && losClear(M, Bv))) || !loftVel(a.p, b.p, g, BOT_VMAX * 0.9, _n1)) continue;
+        a.e.push({ to: b.i, cost: dh + dy * 1.6 + 2, kind: 'loft' });
+        made++; continue;
+      }
       let kind = 'walk';
       L.copy(a.p).lerp(b.p, 0.5); L.y += 0.32;
       if (dh > 3.6 || Math.abs(dy) > 0.55 || !losClear(_n1.copy(a.p).setY(a.p.y + 0.32), _n2.copy(b.p).setY(b.p.y + 0.32), 0.05)) kind = 'jump';
@@ -2265,10 +2308,86 @@ function buildNav() {
       made++;
     }
   }
-  world.nav = { nodes, hash, near };
+  // nodes that can't get back to the main walkable area (gantry levels, rocket rim, canopies, clouds) get a 'drop' edge
+  // to the nearest main-area node below them, so a bot that climbed up after someone can always come down again
+  if (nodes.length) {
+    const comp = sccs(nodes); const size = new Map(); for (const c of comp) size.set(c, (size.get(c) || 0) + 1);
+    let mainC = comp[0], bs = 0; for (const [c, k] of size) if (k > bs) { bs = k; mainC = c; }
+    const rev = nodes.map(() => []); for (const n of nodes) for (const e of n.e) rev[e.to].push(n.i);
+    const back = new Uint8Array(nodes.length), q = []; for (const n of nodes) if (comp[n.i] === mainC) { back[n.i] = 1; q.push(n.i); }
+    while (q.length) { const c = q.pop(); for (const f of rev[c]) if (!back[f]) { back[f] = 1; q.push(f); } }
+    for (const a of nodes) {
+      if (back[a.i]) continue;
+      // prefer a spot below that a hop can actually arc to (off the edge of a stacked gantry level, out from under a canopy)
+      const c = [];
+      for (const b of nodes) { if (comp[b.i] !== mainC) continue; const dy = a.p.y - b.p.y, dh = Math.hypot(b.p.x - a.p.x, b.p.z - a.p.z); c.push([dh + Math.abs(dy) * 0.3 + (dy < 0.3 ? 20 : 0) + (dh < 1.5 ? 6 : 0), b, dh]); }
+      c.sort((x, y) => x[0] - y[0]);
+      let pickB = c.length ? c[0] : null;
+      A.copy(a.p); A.y += STAND_H;
+      for (let k = 0; k < Math.min(40, c.length); k++) {
+        const b = c[k][1]; Bv.copy(b.p); Bv.y += STAND_H; M.copy(A).lerp(Bv, 0.5); M.y = Math.max(A.y, Bv.y) + 0.6 + c[k][2] * 0.12;
+        if (losClear(A, M) && losClear(M, Bv)) { pickB = c[k]; break; }
+      }
+      if (pickB) a.e.push({ to: pickB[1].i, cost: pickB[0] + 4, kind: 'jump' });
+    }
+  }
+  world.nav = { nodes, hash, near, reach: new Map() };
   world.navMs = Math.round(performance.now() - t0);
 }
-const _n1 = new THREE.Vector3(), _n2 = new THREE.Vector3();
+// strongly connected components (iterative Tarjan): comp[i] = component id
+function sccs(nodes) {
+  const n = nodes.length, idx = new Int32Array(n).fill(-1), low = new Int32Array(n), on = new Uint8Array(n), comp = new Int32Array(n).fill(-1), st = [];
+  let next = 0, nc = 0;
+  for (let r = 0; r < n; r++) {
+    if (idx[r] >= 0) continue;
+    const work = [[r, 0]]; idx[r] = low[r] = next++; st.push(r); on[r] = 1;
+    while (work.length) {
+      const top = work[work.length - 1], v = top[0], es = nodes[v].e;
+      if (top[1] < es.length) {
+        const w = es[top[1]++].to;
+        if (idx[w] < 0) { idx[w] = low[w] = next++; st.push(w); on[w] = 1; work.push([w, 0]); }
+        else if (on[w]) low[v] = Math.min(low[v], idx[w]);
+      } else {
+        work.pop(); if (work.length) { const u = work[work.length - 1][0]; low[u] = Math.min(low[u], low[v]); }
+        if (low[v] === idx[v]) { let w; do { w = st.pop(); on[w] = 0; comp[w] = nc; } while (w !== v); nc++; }
+      }
+    }
+  }
+  return comp;
+}
+// which nodes a bot standing on node s can get to (cached per node; the graph doesn't change until the next map load)
+function reachFrom(s) {
+  const nav = world.nav; let r = nav.reach.get(s); if (r) return r;
+  const N = nav.nodes; r = new Uint8Array(N.length); r[s] = 1; const q = [s];
+  while (q.length) { const c = q.pop(); for (const e of N[c].e) if (!r[e.to]) { r[e.to] = 1; q.push(e.to); } }
+  nav.reach.set(s, r); return r;
+}
+// high-apex hop velocity (apex 0.6 m above the higher end) for 'loft' edges; null if it needs more than vmax
+function loftVel(p0, p1, g, vmax, out) {
+  const dx = p1.x - p0.x, dy = p1.y - p0.y, dz = p1.z - p0.z, dh = Math.hypot(dx, dz), up = Math.max(0, dy) + 0.6 + dh * 0.12;
+  const vy = Math.sqrt(2 * g * up), T = vy / g + Math.sqrt(2 * (up - dy) / g), vh = dh / T;
+  if (Math.hypot(vy, vh) > vmax) return null;
+  return out.set(dh > 1e-4 ? dx / dh * vh : 0, vy, dh > 1e-4 ? dz / dh * vh : 0);
+}
+const _n1 = new THREE.Vector3(), _n2 = new THREE.Vector3(), _n3 = new THREE.Vector3();
+// goal node for a plan: of the few nearest nodes, the first one that can actually see the goal (not the node on the
+// other side of a kennel wall, bowl rim or container wall), else the plain nearest
+function goalNode(p) {
+  const nav = world.nav; if (!nav || !nav.nodes.length) return -1;
+  const c = [];
+  nav.near(p.x, p.z, 8, n => { const dy = p.y - n.p.y; if (dy < -0.8) return; const d = Math.hypot(n.p.x - p.x, n.p.z - p.z) + Math.max(0, dy - 1) * 2 + Math.abs(dy) * 0.3; if (d < 8) c.push([d, n]); });
+  if (!c.length) return nearestNode(p, 8);
+  c.sort((a, b) => a[0] - b[0]);
+  _n3.copy(p); _n3.y += STAND_H;
+  for (let i = 0; i < Math.min(8, c.length); i++) { const n = c[i][1]; _n2.copy(n.p); _n2.y += STAND_H; if (losClear(_n2, _n3, 0.3)) return n.i; }
+  return c[0][1].i;
+}
+// the node reachable from s that is closest to p
+function nearestReachable(s, p) {
+  const N = world.nav.nodes, r = reachFrom(s); let best = s, bd = 1e9;
+  for (let i = 0; i < N.length; i++) if (r[i]) { const n = N[i].p, d = Math.hypot(n.x - p.x, n.z - p.z) + Math.abs(n.y - p.y) * 0.7; if (d < bd) { bd = d; best = i; } }
+  return best;
+}
 function nearestNode(p, maxR = 6) {
   const nav = world.nav; if (!nav || !nav.nodes.length) return -1;
   let best = -1, bd = 1e9;
@@ -2286,15 +2405,17 @@ function astar(s, t, maxIter = 1600) {
   const N = world.nav.nodes; if (s < 0 || t < 0) return null; if (s === t) return [s];
   const gS = new Map([[s, 0]]), came = new Map(), open = [[0, s]], closed = new Set();
   const h = i => N[i].p.distanceTo(N[t].p);
+  // binary min-heap on f
+  const push = x => { open.push(x); let i = open.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (open[p][0] <= x[0]) break; open[i] = open[p]; i = p; } open[i] = x; };
+  const popMin = () => { const top = open[0], last = open.pop(); if (open.length) { let i = 0; const L = open.length; for (;;) { let c = 2 * i + 1; if (c >= L) break; if (c + 1 < L && open[c + 1][0] < open[c][0]) c++; if (open[c][0] >= last[0]) break; open[i] = open[c]; i = c; } open[i] = last; } return top; };
   let it = 0;
   while (open.length && it++ < maxIter) {
-    let bi = 0; for (let i = 1; i < open.length; i++) if (open[i][0] < open[bi][0]) bi = i;
-    const [, cur] = open[bi]; open[bi] = open[open.length - 1]; open.pop();
+    const [, cur] = popMin();
     if (cur === t) { const path = [cur]; let c = cur; while (came.has(c)) { c = came.get(c); path.push(c); } return path.reverse(); }
     if (closed.has(cur)) continue; closed.add(cur);
     for (const e of N[cur].e) {
       const ng = gS.get(cur) + e.cost;
-      if (ng < (gS.has(e.to) ? gS.get(e.to) : 1e9)) { gS.set(e.to, ng); came.set(e.to, cur); open.push([ng + h(e.to), e.to]); }
+      if (ng < (gS.has(e.to) ? gS.get(e.to) : 1e9)) { gS.set(e.to, ng); came.set(e.to, cur); push([ng + h(e.to), e.to]); }
     }
   }
   return null;
@@ -2333,8 +2454,10 @@ function bodyResolve(head, vel, info, bounceMul = 1) {
       n.multiplyScalar(1 / L);
       const vn = vel.dot(n);
       if (vn < 0) {
-        if (info.bouncy && vn < -1.2) { vel.addScaledVector(n, -vn * (1 + 0.85)); const out = vel.dot(n); const want = info.bouncy * bounceMul; if (out < want) vel.addScaledVector(n, want - out); info.bounced = true; }
-        else vel.addScaledVector(n, -vn);
+        const bn = info.bn, BL = info.bouncy && bn ? bn.length() : 0;
+        const vb = BL > 1e-6 ? vel.dot(bn.multiplyScalar(1 / BL)) : 0;
+        if (BL > 1e-6 && vb < -1.2) { vel.addScaledVector(bn, -vb * (1 + 0.85)); const out = vel.dot(bn); const want = info.bouncy * bounceMul; if (out < want) vel.addScaledVector(bn, want - out); info.bounced = true; }
+        else if (vn < 0) vel.addScaledVector(n, -vn);
       }
     }
   }
@@ -2369,6 +2492,7 @@ class Bot {
     this.onGround = false; this.yaw = Math.random() * TAU; this.lookYaw = this.yaw; this.lookPitch = 0;
     this.hands = [0, 1].map(i => ({ pos: new THREE.Vector3(), plant: null, side: i ? 1 : -1 }));
     this.it = false; this.immune = 0; this.freeze = 0; this.tags = 0; this.itTime = 0; this.shield = 0;
+    this.dBest = 1e9; this.dStuck = 0; this.unstick = 0;
     this.skill = 1; this.state = 'wander'; this.path = null; this.pi = 0; this.think = Math.random(); this.hopCD = 0; this.goal = null;
     this.target = null; this.stuckT = 0; this.bestD = 1e9; this.idleT = 0; this.wave = 0; this.cheer = 0; this.chatCD = rr(4, 12);
     this.climb = 0; this.fetchBall = null; this.heldBall = null; this.lastGround = 0; this.airT = 0;
@@ -2398,7 +2522,11 @@ class Bot {
   }
   planTo(p) {
     const goal = (this.goal || (this.goal = new THREE.Vector3())).copy(p);
-    const t = nearestNode(goal, 8), s = nearestNode(this.floor(_bt));
+    const s = nearestNode(this.floor(_bt));
+    let t = goalNode(goal);
+    // can't get there from here (target up somewhere with no way up): head for the closest place we CAN reach instead
+    // of re-running a failing search every think; the direct chase / climb takes over from there
+    if (s >= 0 && t >= 0 && !reachFrom(s)[t]) t = nearestReachable(s, goal);
     const path = astar(s, t);
     this.path = path; this.pi = path && path.length > 1 ? 1 : 0;
     this.stuckT = 0; this.bestD = 1e9;
@@ -2406,7 +2534,8 @@ class Bot {
   }
   randomGoal(radius) {
     const N = world.nav.nodes; if (!N.length) return;
-    for (let i = 0; i < 6; i++) { const n = pick(N); if (n.p.distanceTo(this.H) < radius && this.planTo(n.p)) return; }
+    const c = []; world.nav.near(this.H.x, this.H.z, radius, n => { if (n.p.distanceTo(this.H) < radius) c.push(n); });
+    for (let i = 0; i < 6 && c.length; i++) { const n = c.splice(Math.floor(Math.random() * c.length), 1)[0]; if (this.planTo(n.p)) return; }
   }
   // ------------- brain -------------
   brain(dt) {
@@ -2422,7 +2551,7 @@ class Bot {
       let best = null, bd = 1e9;
       for (const e of Game.entities) { if (e === this || e.it || e.immune > 0) continue; let d = e.H.distanceTo(this.H) * (e.isBot ? 1 : 0.8) + Math.max(0, e.H.y - this.H.y - 2) * 1.5; if (d < bd) { bd = d; best = e; } }
       this.target = best; this.state = best ? 'chase' : 'wander';
-      if (best) { const tp = _bt.copy(best.H); tp.y -= STAND_H; this.planTo(tp); } else this.wander();
+      if (best) { if (this.unstick > 0) this.path = null; else { const tp = _bt.copy(best.H); tp.y -= STAND_H; this.planTo(tp); } } else this.wander();
     } else {
       let th = null, td = 1e9;
       for (const e of Game.entities) { if (!e.it || e === this || e.freeze > 0) continue; const d = e.H.distanceTo(this.H); if (d < td) { td = d; th = e; } }
@@ -2484,6 +2613,15 @@ class Bot {
         }
       }
     }
+    // a chase that stops getting closer to its target (pinned at a wall, bowl rim or container side, or re-planning to
+    // the node it already stands on) climbs straight at the target for a moment instead of following the plan
+    // (only for a target that is close and staying put, i.e. hiding; a running target is just a chase)
+    const tq = this.target, dd = tq ? Math.hypot(tq.H.x - this.H.x, tq.H.z - this.H.z) + Math.abs(tq.H.y - this.H.y) * 0.5 : 1e9;
+    if (this.state === 'chase' && tq && this.freeze <= 0 && dd < 9 && Math.hypot(tq.V.x, tq.V.z) < 1.5) {
+      if (dd < this.dBest - 0.25) { this.dBest = dd; this.dStuck = 0; } else this.dStuck += dt;
+      if (this.dStuck > 1.5) { this.dStuck = 0; this.dBest = 1e9; this.unstick = 1.4; this.path = null; this.hopCD = 0; }
+    } else { this.dBest = 1e9; this.dStuck = 0; this.unstick = 0; }
+    if (this.unstick > 0) this.unstick -= dt;
     // face direction
     const hv = Math.hypot(this.V.x, this.V.z);
     let wantYaw = this.yaw;
@@ -2502,7 +2640,11 @@ class Bot {
         const urgent = this.state === 'chase' || this.state === 'flee' || this.state === 'fetch';
         const sk = this.skill * (this.it ? 1.12 : 1) * (urgent ? 1 : 0.62);
         const kind = (!direct && this.path && this.pi > 0) ? edgeKind(this.path[this.pi - 1], this.path[this.pi]) : (dh < 3.6 && Math.abs(dy) < 0.6 ? 'walk' : 'jump');
-        if (direct && dh < 3.2 && this.state === 'chase') {
+        if (direct && this.unstick > 0) {
+          // stuck: a tall hop at the target (the wall push below takes over against a wall)
+          const k = Math.max(dh, 0.3), vh = Math.min(3.2, dh * 2 + 0.5);
+          this.V.set((tgt.x - f.x) / k * vh, 6.4 * Math.sqrt(g / 9.8), (tgt.z - f.z) / k * vh);
+        } else if (direct && dh < 3.2 && this.state === 'chase') {
           // fast, flat lunge at where the target is going (works in any gravity)
           const lead = _bl.copy(this.target.V).multiplyScalar(0.2).add(tgt); lead.y += 0.25;
           const lx = lead.x - f.x, lz = lead.z - f.z, ldh = Math.max(0.3, Math.hypot(lx, lz)), vh = Math.min(BOT_VMAX * sk * 1.05, 9.2), T = ldh / vh;
@@ -2513,12 +2655,13 @@ class Bot {
           this.V.set((tgt.x - f.x) / Math.max(dh, 1e-3) * s, vy, (tgt.z - f.z) / Math.max(dh, 1e-3) * s);
         } else {
           _bl.copy(tgt); _bl.y += 0.12;
-          launchVel(f, _bl, g, BOT_VMAX * Math.max(0.9, sk), this.V, urgent ? (g < 6 ? 0.72 : 0.92) : rr(1.0, 1.2));
+          if (!(kind === 'loft' && loftVel(f, _bl, g, BOT_VMAX * 0.95, this.V))) // up over an edge: high arc
+            launchVel(f, _bl, g, BOT_VMAX * Math.max(0.9, sk), this.V, urgent ? (g < 6 ? 0.72 : 0.92) : rr(1.0, 1.2));
         }
         this.onGround = false; this.hopCD = rr(0.02, 0.16) / Math.max(0.6, sk); this.airT = 0;
         this.plantHands(true);
         if (this.contact.gsurf && this.gT > 0.12) SFX.tap(this.contact.gsurf, 0.5, this.H);
-      } else if (!this.onGround && this.contact.wall && dy > 0.6 && dh < 3 && this.hopCD <= 0) {
+      } else if (!this.onGround && this.contact.wall && (dy > 0.6 || (this.unstick > 0 && dy > -0.3)) && dh < 3 && this.hopCD <= 0) {
         // wall-climb push: paws on the wall, shove upward
         this.V.set(-this.contact.wn.x * 0.9, 5.3 * Math.sqrt(g / 9.8), -this.contact.wn.z * 0.9);
         this.hopCD = 0.28; this.climb = 0.3;
@@ -2627,17 +2770,26 @@ function makeHand(i) {
     local: new THREE.Vector3(), target: new THREE.Vector3(), last: new THREE.Vector3(), anchor: new THREE.Vector3(), cn: new THREE.Vector3(0, 1, 0), pt: new THREE.Vector3(), ph: new THREE.Vector3(), lv: new THREE.Vector3(), still: true, out: 0, rise: 0, age: 0, vn: 0, dep: 0, pmax: 0, tv: new THREE.Vector3(), vok: false, hold: false,
     hit: false, was: false, surf: null, col: null, grab: false, held: null, vh: [], vel: new THREE.Vector3(), prev: new THREE.Vector3(), q: new THREE.Quaternion() };
   grip.addEventListener('connected', e => { h.src = e.data; h.connected = true; h.side = e.data.handedness === 'left' ? -1 : 1; h.init = false; h.vok = false; });
-  grip.addEventListener('disconnected', () => { h.connected = false; h.src = null; });
-  const on = () => { SFX.init(); grabBall(h, true); }, off = () => grabBall(h, false); // trigger/grip = a user gesture: (re)start audio
-  ctrl.addEventListener('squeezestart', on); ctrl.addEventListener('squeezeend', off);
-  ctrl.addEventListener('selectstart', on); ctrl.addEventListener('selectend', off);
+  grip.addEventListener('disconnected', () => { h.connected = false; h.src = null; dropHeld(h); });
+  // grip and trigger both grab; the ball is only let go when BOTH are released (kids squeeze the whole controller).
+  // Any press is also a user gesture: (re)start audio.
+  const press = k => () => { SFX.init(); h[k] = true; grabBall(h, true); };
+  const release = k => () => { h[k] = false; if (!h.sq && !h.sel) grabBall(h, false); };
+  ctrl.addEventListener('squeezestart', press('sq')); ctrl.addEventListener('squeezeend', release('sq'));
+  ctrl.addEventListener('selectstart', press('sel')); ctrl.addEventListener('selectend', release('sel'));
   return h;
+}
+// a controller went to sleep / the VR session ended while holding a ball: let it fall instead of hanging in mid-air
+function dropHeld(h) {
+  h.sq = h.sel = false; h.grab = false;
+  if (!h.held) return;
+  const b = h.held; h.held = null; b.held = null; b.vel.set(0, 0, 0); Items.thrown(b);
 }
 function grabBall(h, down) {
   h.grab = down;
   if (down && !h.held) {
-    let best = null, bd = 0.3;
-    for (const b of Items.balls) { if (b.held && b.held !== h) continue; const d = b.pos.distanceTo(h.last); if (d < bd) { bd = d; best = b; } }
+    let best = null, bd = 0.3; // a ball a bot is carrying can be taken (as on desktop)
+    for (const b of Items.balls) { if (b.held && b.held !== h && !b.held.isBot) continue; const d = b.pos.distanceTo(h.last); if (d < bd) { bd = d; best = b; } }
     if (best) { if (best.held && best.held.isBot) best.held.heldBall = null; best.held = h; h.held = best; haptic(h, 0.4, 30); SFX.tap('rubber', 0.5); }
   } else if (!down && h.held) {
     const b = h.held; h.held = null; b.held = null;
@@ -2839,27 +2991,37 @@ function turnAndStick(dt, headLocal) {
   const mode = save.settings.turn;
   if (mode === 'snap') { if (Math.abs(rx) > 0.7 && stickTurnArmed) { rotateRig(-Math.sign(rx) * Math.PI / 4); stickTurnArmed = false; } if (Math.abs(rx) < 0.3) stickTurnArmed = true; }
   else if (mode === 'smooth' && Math.abs(rx) > 0.2) rotateRig(-rx * 2.4 * dt);
-  if (save.settings.stick && Math.hypot(lx, ly) > 0.2 && P.onGround) {
+  // stick-move works standing on the body or on paws resting on the floor (how kids hold the controllers)
+  const floorPaw = h => h.connected && h.was && h.cn.y > 0.6;
+  if (save.settings.stick && Math.hypot(lx, ly) > 0.2 && (P.onGround || hands.some(floorPaw))) {
     camera.getWorldDirection(_sd); _sd.y = 0; _sd.normalize();
     _sp.set(-_sd.z, 0, _sd.x);
     const sp = 4.2 * (P.zoom > 0 ? 1.4 : 1);
-    rig.position.addScaledVector(_sd, -ly * sp * dt).addScaledVector(_sp, lx * sp * dt);
+    _stk.set(0, 0, 0).addScaledVector(_sd, -ly * sp * dt).addScaledVector(_sp, lx * sp * dt);
+    rig.position.add(_stk);
+    // paws on the floor slide along with the body (otherwise their grip pulls it straight back), unless something is in
+    // the way; and the stick motion isn't body velocity, so it never turns into a launch when the paws push off
+    const len = _stk.length();
+    if (len > 1e-6) for (const h of hands) if (floorPaw(h) && !raycast(h.last.x, h.last.y, h.last.z, _stk.x / len, 0, _stk.z / len, len + LOCO.handR)) { h.last.add(_stk); h.prev.add(_stk); }
+    for (const e of P.hist) e.p.add(_stk);
   }
 }
+const _stk = new THREE.Vector3(), _fpc = new THREE.Vector3();
 
 // ---------------- desktop / mobile ----------------
 const INPUT = { keys: {}, mx: 0, mz: 0, jump: false, jumpHeld: false, grab: false, use: false, click: false, touchMove: [0, 0], touchGrab: false, touchJump: false };
 const fp = { group: new THREE.Group(), arms: [], paws: [], ball: null };
 function buildFP() {
-  camera.add(fp.group);
+  camera.add(fp.group); fp.group.visible = false; // shown by startGame (the title flyover must not look through the paws)
   for (let i = 0; i < 2; i++) {
     const a = new THREE.Mesh(GEO.fore, P.avatar.mat), p = new THREE.Mesh(GEO.hand[i === 0 ? 1 : 0], P.avatar.mat); // fp 0 = left
     a.layers.set(LAYER_FP); p.layers.set(LAYER_FP); p.scale.setScalar(0.85); a.scale.x = a.scale.y = 0.85; fp.group.add(a, p); fp.arms.push(a); fp.paws.push(p);
-    p.userData.pos = new THREE.Vector3(); p.userData.want = new THREE.Vector3();
+    p.userData.pos = new THREE.Vector3(i === 0 ? -0.27 : 0.27, -0.38, -0.58); p.userData.want = new THREE.Vector3(); p.position.copy(p.userData.pos); // start at the rest pose, not inside the eye
   }
 }
 const _f = new THREE.Vector3(), _r = new THREE.Vector3(), _w = new THREE.Vector3(), _look = new THREE.Vector3(), _e2 = new THREE.Euler();
 function desktopStep(dt) {
+  { const k = INPUT.keys, t = ((k.ArrowLeft ? 1 : 0) - (k.ArrowRight ? 1 : 0)) * 2.4 * dt; if (t) P.yaw += t; }
   rig.rotation.set(0, P.yaw, 0); camera.rotation.set(P.pitch, 0, 0); camera.position.set(0, 0, 0);
   rig.position.copy(P.H);
   const g = playerGravity();
@@ -2973,6 +3135,8 @@ function animateFP(dt) {
   // world-space paw points for tagging
   P.handPts[0].copy(fp.paws[0].position).applyMatrix4(camera.matrixWorld);
   P.handPts[1].copy(fp.paws[1].position).applyMatrix4(camera.matrixWorld);
+  // the paws are drawn at fixed spots in front of the camera; for tagging (and the held ball) keep them on this side of walls
+  for (const hp of P.handPts) { _fpc.copy(hp).sub(P.H); const L = _fpc.length(); if (L > 1e-4) { const w = raycast(P.H.x, P.H.y, P.H.z, _fpc.x / L, _fpc.y / L, _fpc.z / L, L); if (w) hp.copy(P.H).addScaledVector(_fpc, Math.max(0, w.t - 0.05) / L); } }
   if (P.heldBall) P.heldBall.pos.copy(P.handPts[1]).addScaledVector(_look, 0.05);
 }
 // landing impact: paw tap for small drops, layered thuds for bigger ones
@@ -3022,12 +3186,16 @@ function updateVRUI(dt) {
   VRUI.t -= dt; if (VRUI.t > 0) return; VRUI.t = 0.25;
   const ctx = VRUI.wctx; ctx.fillStyle = P.it ? '#8f1b12' : '#10203a'; ctx.fillRect(0, 0, 128, 72);
   ctx.fillStyle = P.it ? '#ff5a2a' : '#3cf08a'; ctx.fillRect(0, 0, 128, 20);
-  drawText(ctx, Game.phase === 'pre' ? 'GET READY' : P.it ? 'YOU ARE IT' : save.settings.mode === 'casual' ? 'CASUAL' : 'RUN!', 64, 6, 1, '#0d1020', 'center');
+  drawText(ctx, Game.phase === 'pre' ? 'GET READY' : P.it ? (P.freeze > 0 ? 'LAVA! WAIT ' + Math.ceil(P.freeze) : 'YOU ARE IT') : save.settings.mode === 'casual' || Game.entities.length < 2 ? 'CASUAL' : 'RUN!', 64, 6, 1, '#0d1020', 'center');
   drawText(ctx, Game.timerText(), 64, 28, 2, '#ffffff', 'center');
   drawText(ctx, '$' + save.bones, 6, 54, 2, '#ffd23f');
   drawText(ctx, Game.countText(), 122, 54, 1, '#c8d0ff', 'right');
   if (SFX.silent()) drawText(ctx, 'NO SOUND-PULL TRIGGER', 64, 44, 1, '#fff27a', 'center');
   else if (SFX.muted()) drawText(ctx, 'SFX OFF: PRESS SOUND', 64, 44, 1, '#fff27a', 'center');
+  else { // power-ups (the desktop HUD shows these as chips)
+    const pu = []; if (P.zoom > 0) pu.push('ZOOM ' + Math.ceil(P.zoom)); if (P.moon > 0) pu.push('MOON ' + Math.ceil(P.moon)); if (P.shield > 0) pu.push('BUBBLE');
+    if (pu.length) drawText(ctx, pu.join(' ').slice(0, 21), 64, 44, 1, '#9fe8ff', 'center');
+  }
   VRUI.wtex.needsUpdate = true;
 }
 
@@ -3051,19 +3219,31 @@ const Game = {
   // ---------------- setup ----------------
   setBots(n) {
     n = clamp(n, 0, 11); save.settings.bots = n; writeSave();
-    while (this.bots.length > n) { const b = this.bots.pop(); b.dispose(); }
+    const wasSolo = this.entities.length < 2, hadIT = this.entities.some(e => e.it);
+    while (this.bots.length > n) {
+      // remove a pug that isn't lava first, so pressing BOTS - never leaves a round with nobody IT
+      let i = this.bots.length - 1; while (i > 0 && this.bots[i].it) i--;
+      const b = this.bots.splice(i, 1)[0]; b.dispose();
+    }
     while (this.bots.length < n) { const b = new Bot(this.bots.length); this.bots.push(b); this.entities = [P, ...this.bots]; const s = pick(world.botSpawns.length ? world.botSpawns : world.spawns); b.spawn(s.p); }
     this.entities = [P, ...this.bots];
+    if (this.started) {
+      // going between solo free-play and a real game (0 <-> 1+ bots) starts a fresh round: no instant fake win, no lava pug with nobody to tag
+      if (wasSolo !== (this.entities.length < 2)) this.startRound();
+      else if (this.phase === 'play' && hadIT && save.settings.mode !== 'casual' && !this.entities.some(e => e.it)) { const e = pick(this.entities); this.makeIT(e, null, true); if (e === P) this.banner("YOU'RE LAVA!", 'TAG THE OTHER PUGS', '#ff7a50'); }
+    }
     Menu.sync();
   },
   cycleMap(d) { const ids = Object.keys(MAPS); this.pendingMap = ids[(ids.indexOf(this.pendingMap) + d + ids.length) % ids.length]; Menu.sync(); },
   cycleMode() { save.settings.mode = MODE_ORDER[(MODE_ORDER.indexOf(save.settings.mode) + 1) % 3]; writeSave(); this.startRound(); Menu.sync(); },
-  setMode(m) { save.settings.mode = m; writeSave(); this.startRound(); Menu.sync(); },
+  setMode(m) { if (m === save.settings.mode) return; save.settings.mode = m; writeSave(); this.startRound(); Menu.sync(); },
   cycleDiff() { save.settings.diff = (save.settings.diff + 1) % 3; writeSave(); for (const b of this.bots) b.setSkill(); Menu.sync(); },
   setFur(hex) { save.fur = hex; P.fur = hex; P.avatar.setFur(hex); writeSave(); Menu.sync(); },
   randomName() { save.name = pick(PLAYER_NAMES) + Math.floor(10 + Math.random() * 90); this.applyLook(); writeSave(); },
   applyLook() { P.name = save.name; P.avatar.setName(save.name); P.avatar.setEquip(save.equip); if (P.avatar.fur !== save.fur) P.avatar.setFur(save.fur); Menu.sync(); },
-  toast(msg) {
+  // vr: also show it on the floating VR banner (VR players never see the DOM feed), unless a banner is up
+  toast(msg, vr = false) {
+    if (vr && renderer.xr.isPresenting && VRUI.bT <= 0.3) vrBanner(msg, '', '#ffd23f');
     const el = document.createElement('div'); el.textContent = msg; $('feed').prepend(el);
     while ($('feed').children.length > 5) $('feed').lastChild.remove();
     setTimeout(() => el.remove(), 4200);
@@ -3073,7 +3253,7 @@ const Game = {
     clearTimeout(this._bt); this._bt = setTimeout(() => b.style.opacity = 0, 1900);
     vrBanner(msg.replace(/<[^>]+>/g, ''), sub, col);
   },
-  reward(n, why) { if (n <= 0) return; save.bones += n; writeSave(); this.toast('+' + n + ' BONES  ' + why); bumpBones(); },
+  reward(n, why) { if (n <= 0) return; save.bones += n; writeSave(); this.toast('+' + n + ' BONES  ' + why, true); bumpBones(); },
   // ---------------- rounds ----------------
   startRound() {
     for (const e of this.entities) { e.it = false; e.immune = 0; e.freeze = 0; e.tags = 0; e.itTime = 0; if (e.avatar) e.avatar.setIT(false); }
@@ -3235,7 +3415,7 @@ const Items = {
       if (near) {
         p.active = false; p.mesh.visible = false; p.t = PICK[p.type].respawn;
         if (p.type === 'bone') { save.bones += 1; writeSave(); bumpBones(); SFX.pickup(false); }
-        else if (p.type === 'bigbone') { save.bones += 10; writeSave(); bumpBones(); SFX.pickup(true); Game.toast('+10 GOLD BONE!'); }
+        else if (p.type === 'bigbone') { save.bones += 10; writeSave(); bumpBones(); SFX.pickup(true); Game.toast('+10 GOLD BONE!', true); }
         else { P[p.type === 'bubble' ? 'shield' : p.type] = PICK[p.type].dur; if (p.type === 'bubble') P.avatar.setBubble(true); SFX.power(); Game.banner(PICK[p.type].name + '!', p.type === 'zoom' ? 'FASTER PUSHES & RUNS' : p.type === 'bubble' ? 'BLOCKS ONE TAG' : 'LOW GRAVITY', PICK[p.type].color); }
         for (const h of hands) haptic(h, 0.6, 60);
       }
@@ -3302,14 +3482,19 @@ function updateHover() {
   Hover.btn = found;
 }
 // VR: paws press buttons
+// Each paw is on at most one key: it keeps the key it's on while it stays inside it, otherwise the nearest key whose zone
+// it's in. That key is pressed once, when the paw comes down onto it.
 function vrButtons() {
-  for (const b of world.buttons) {
-    for (let i = 0; i < hands.length; i++) {
-      const h = hands[i]; if (!h.connected) continue;
-      const inside = b.test(h.last, LOCO.handR);
-      if (inside && !b.inside[i]) b.press(h);
-      b.inside[i] = inside;
+  const r = LOCO.handR;
+  for (const h of hands) {
+    let cur = null;
+    if (h.connected) {
+      if (h.btn && h.btn.mesh.parent && h.btn.test(h.last, r)) cur = h.btn;
+      else { let bd = Infinity; for (const b of world.buttons) if (b.test(h.last, r)) { const d = b.off2(h.last); if (d < bd) { bd = d; cur = b; } } }
     }
+    if (cur !== h.btn) { h.btn = cur; h.btnDone = false; }
+    if (cur && !h.btnDone && h.btnPrevOk && cur.pushing(h.btnPrev, h.last, r)) { h.btnDone = true; cur.press(h); }
+    (h.btnPrev || (h.btnPrev = new THREE.Vector3())).copy(h.last); h.btnPrevOk = h.connected;
   }
 }
 
@@ -3412,7 +3597,7 @@ function updateHUD(dt) {
   if (P.zoom > 0) chips.push(['ZOOMIES ' + Math.ceil(P.zoom), '#b88a00']);
   if (P.shield > 0) chips.push(['BUBBLE ' + Math.ceil(P.shield), '#1f6aa8']);
   if (P.moon > 0) chips.push(['MOON PAWS ' + Math.ceil(P.moon), '#5a6070']);
-  if (P.heldBall) chips.push(['BALL - CLICK TO THROW', '#4f7a10']);
+  if (P.heldBall) chips.push([isTouch ? 'BALL - USE TO THROW' : 'BALL - CLICK TO THROW', '#4f7a10']);
   if (SFX.silent()) chips.push([isTouch ? 'NO SOUND - TAP THE SCREEN' : 'NO SOUND - CLICK OR PRESS A KEY', '#8f1b12']);
   else if (SFX.muted()) chips.push([isTouch ? 'SFX OFF - MENU FOR SETTINGS' : 'SFX OFF - P FOR SETTINGS', '#5a6070']);
   const html = chips.map(c => `<div class="chip" style="background:${c[1]}">${c[0]}</div>`).join('');
@@ -3420,7 +3605,7 @@ function updateHUD(dt) {
   // hint
   let hint = '';
   if (Hover.btn) hint = (isTouch ? 'TAP USE' : 'CLICK / E') + ' : ' + (Hover.btn.label || 'COLOR');
-  else if (P.anchor) hint = 'CLIMBING - W TO CLIMB, SPACE TO LEAP, RELEASE TO FLING';
+  else if (P.anchor) hint = isTouch ? 'CLIMBING - STICK UP, JUMP TO LEAP' : 'CLIMBING - W TO CLIMB, SPACE TO LEAP, RELEASE TO FLING';
   const hEl = $('hint'); if (hEl.textContent !== hint) hEl.textContent = hint; hEl.style.opacity = hint ? 1 : 0;
   $('crosshair').classList.toggle('hot', !!Hover.btn);
   const vg = $('vignette');
@@ -3577,12 +3762,12 @@ const MAPS = {
       }
       pk('bubble', -14, 1.2, 12);
       // ===== TREES =====
-      const trees = [[-14, -2, 1.15, [3.2]], [-22, -8, 1.3, [3.4, 6.4]], [-28, 6, 1.1], [-17, 24, 1.25, [3.6]], [-31, -22, 1.2], [-6, 27, 1.0], [8, 31, 1.2], [21, 26, 1.15, [3.4]], [34, 14, 1.3], [35, -6, 1.1],
-        [27, -28, 1.35, [3.4, 6.4]], [-25, -32, 1.25], [12, -31, 1.1], [-36, 33, 1.0], [36, 35, 1.05], [-37, -37, 1.1], [37, -36, 1.2], [-37, 16, 1.1], [2, -35, 1.2, [3.6]]];
+      const trees = [[-14, -2, 1.15, [3.2]], [-22, -8, 1.3, [3.4, 5.6]], [-28, 6, 1.1], [-17, 24, 1.25, [3.6]], [-31, -22, 1.2], [-6, 27, 1.0], [8, 31, 1.2], [21, 26, 1.15, [3.4]], [34, 14, 1.3], [35, -6, 1.1],
+        [27, -28, 1.35, [3.4, 5.6]], [-25, -32, 1.25], [12, -31, 1.1], [-36, 33, 1.0], [36, 35, 1.05], [-37, -37, 1.1], [37, -36, 1.2], [-37, 16, 1.1], [2, -35, 1.2, [3.6]]];
       trees.forEach((t, i) => tree(t[0], t[1], t[2], { decks: t[3] || [], leaf: SR() < 0.18 ? 'leavesPink' : 'leaves', bone: i === 1 ? 'bigbone' : (i % 2 === 0 || i === 7) ? 'bone' : null }));
       // treetop bridge
-      slab(-20.5, 8.55, -6.3, -15.4, 3.82, -3.0, 1.2, 0.18, 'planks');
-      rod(-20.5, 9.1, -5.8, -15.4, 4.4, -2.5, 0.04, 'darkwood', { col: false }); rod(-20.9, 9.1, -6.8, -15.8, 4.4, -3.5, 0.04, 'darkwood', { col: false });
+      slab(-20.5, 7.5, -6.3, -15.4, 3.82, -3.0, 1.2, 0.18, 'planks'); // high end on the upper deck of the gold-bone tree (deck lowered to clear the canopy)
+      rod(-20.5, 8.05, -5.8, -15.4, 4.4, -2.5, 0.04, 'darkwood', { col: false }); rod(-20.9, 8.05, -6.8, -15.8, 4.4, -3.5, 0.04, 'darkwood', { col: false });
       // fallen log + rocks + stumps
       rod(-6, 0.7, 32, 2, 0.7, 35, 0.7, 'bark', { seg: 10 });
       rockAt(8, 14, 1.3); rockAt(-9, -5, 1.6); rockAt(29, 2, 1.8); rockAt(-33, -6, 2.2); rockAt(14, 22, 1.1); rockAt(-3, 20, 1.2); rockAt(31, -32, 1.4);
@@ -3729,12 +3914,12 @@ const MAPS = {
       blk(-38, 0, -41, 38, 3.5, -26, { top: 'mint', side: 'cake' });
       blk(-28, 3.5, -41, 28, 7, -31, { top: 'frosting', side: 'cake' });
       blk(-16, 7, -41, 16, 10.5, -35.5, { top: 'mint', side: 'cake' });
-      stairs(0, -22.4, -1, 0, 4, 0.875, 0.9, 4, 'choco'); stairs(-18, -26.0, -1, 3.5, 4, 0.875, 1.1, 3.5, 'choco'); stairs(8, -31.0, -1, 7, 4, 0.875, 1.0, 3.5, 'choco');
+      stairs(0, -26, 1, 0, 4, 0.875, 0.9, 4, 'choco'); stairs(-18, -31, 1, 3.5, 4, 0.875, 1.1, 3.5, 'choco'); stairs(8, -35.5, 1, 7, 4, 0.875, 1.0, 3.5, 'choco'); // tallest step against the tier, stepping down outward
       // east mesa + wafer ramp
       blk(26, 0, -12, 40, 6, 14, { top: 'mint', side: 'cake' }); slab(17.5, 0, 1, 26, 6, 1, 3.2, 0.3, 'wafer');
       // west tower
       blk(-34, 0, -10, -26, 4, -2, { top: 'frosting', side: 'cake' }); blk(-33, 4, -9, -28, 7.5, -4, 'choco'); blk(-32.5, 7.5, -8.5, -29, 11, -5, 'wafer');
-      stairs(-30, 0.6, -1, 0, 3, 1.3, 1.0, 2.5, 'choco');
+      stairs(-30, -2, 1, 0, 3, 1.3, 1.0, 2.5, 'choco');
       cyl(-30.75, -6.75, 11, 11.4, 1.3, 'lolly', { nav: true });
       // lollipops
       for (const [x, z, h, r] of [[-12, 8, 5.5, 2.0], [10, 12, 6.5, 2.2], [-22, 18, 4.5, 1.8], [20, -6, 7, 2.4], [4, 24, 5, 2.0], [-6, -15, 6, 2.2], [28, 26, 8, 2.4], [-30, 28, 6, 2.0], [16, -20, 5, 1.8]]) {
@@ -3817,7 +4002,16 @@ function drawMapThumb(cnv, def) {
 // =====================================================================
 //  MENU (desktop / mobile pause menu)
 // =====================================================================
-const isTouch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window && navigator.maxTouchPoints > 0);
+// on-screen touch controls vs mouse: first guess from the device (a phone / tablet without a mouse), then the input actually
+// used decides, so a touchscreen laptop or Chromebook played with a mouse keeps full mouse controls
+let isTouch = window.matchMedia ? matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches : 'ontouchstart' in window;
+function setInputMode(touch) {
+  if (touch === isTouch) return; isTouch = touch;
+  if (!Game.started || renderer.xr.isPresenting) return;
+  if (touch) { if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock(); setupTouch(); }
+  else { $('touch').style.display = 'none'; document.body.classList.remove('touch'); }
+}
+window.addEventListener('pointerdown', e => setInputMode(e.pointerType === 'touch' || e.pointerType === 'pen'), { capture: true, passive: true });
 const Menu = {
   open: false, built: false,
   build() {
@@ -3836,7 +4030,7 @@ const Menu = {
     $('mTravel').onclick = () => { SFX.click(); this.hide(); if (Game.pendingMap !== world.id) Game.travel(Game.pendingMap); else { respawnPlayer(); Game.startRound(); } };
     $('mResume').onclick = () => this.hide();
     document.querySelectorAll('.tabs .pbtn').forEach(b => b.onclick = () => { document.querySelectorAll('.tabs .pbtn').forEach(x => x.classList.toggle('sel', x === b)); document.querySelectorAll('.tabpage').forEach(p => p.classList.toggle('on', p.id === b.dataset.tab)); SFX.click(); });
-    $('mName').oninput = e => { save.name = (e.target.value || 'PUG').toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 10) || 'PUG'; Game.applyLook(); writeSave(); };
+    $('mName').oninput = e => { save.name = (e.target.value || 'PUG').toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 10).trim() || 'PUG'; Game.applyLook(); writeSave(); };
     $('mName').onkeydown = e => e.stopPropagation();
     for (const f of FURS) { const b = document.createElement('button'); b.style.background = f; b.dataset.f = f; b.onclick = () => { Game.setFur(f); refreshSwatches(); SFX.click(); }; $('furSw').append(b); }
     const rng = (id, key, fmt, after) => { const el = $(id); el.value = save.settings[key]; const v = $('v' + id.slice(1)); const upd = () => { save.settings[key] = parseFloat(el.value); v.textContent = fmt(save.settings[key]); writeSave(); after && after(); }; el.oninput = upd; v.textContent = fmt(save.settings[key]); };
@@ -3846,7 +4040,7 @@ const Menu = {
     for (const t of ['snap', 'smooth', 'off']) { const b = document.createElement('button'); b.className = 'pbtn small'; b.textContent = t.toUpperCase(); b.dataset.t = t; b.onclick = () => { save.settings.turn = t; writeSave(); this.sync(); SFX.click(); }; $('turnBtns').append(b); }
     const tog = (id, key) => $(id).onclick = () => { save.settings[key] = !save.settings[key]; writeSave(); this.sync(); SFX.click(); };
     tog('stickBtn', 'stick'); tog('invBtn', 'inv'); tog('fpsBtn', 'fps');
-    $('resetSave').onclick = () => { if (!confirm('Reset all bones, cosmetics and settings?')) return; try { localStorage.removeItem(SAVE_KEY); } catch (e) { } location.reload(); };
+    $('resetSave').onclick = () => { if (!confirm('Reset all bones, cosmetics and settings?')) return; saveOff = true; try { localStorage.removeItem(SAVE_KEY); } catch (e) { } location.reload(); }; // saveOff: the unload's save-on-hide mustn't write it back
     this.built = true; this.sync();
   },
   sync() {
@@ -3869,7 +4063,7 @@ const Menu = {
     }
   },
   show() { if (!Game.started || renderer.xr.isPresenting) return; this.open = true; $('menu').style.display = 'flex'; this.sync(); if (document.pointerLockElement) document.exitPointerLock(); },
-  hide() { this.open = false; $('menu').style.display = 'none'; INPUT.keys = {}; if (!isTouch) lockPointer(); }
+  hide() { this.open = false; $('menu').style.display = 'none'; INPUT.keys = {}; if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); if (!isTouch) lockPointer(); }
 };
 function lockPointer() { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => { }); } catch (e) { } }
 
@@ -3878,15 +4072,17 @@ function lockPointer() { try { const p = canvas.requestPointerLock(); if (p && p
 // =====================================================================
 let pointerLocked = false;
 document.addEventListener('keydown', e => {
-  if (e.target && e.target.tagName === 'INPUT') return;
+  if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'range') return;
   SFX.init();
   if (e.code === 'Tab') { e.preventDefault(); if (Game.started) $('board').style.display = 'block'; return; }
   if (!Game.started || Menu.open) { if (e.code === 'Escape' && Menu.open) Menu.hide(); return; }
   INPUT.keys[e.code] = true;
-  if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) INPUT.jump = true; }
+  if (e.code === 'Space') e.preventDefault();
+  if (e.repeat) return; // holding E/Q/M/P doesn't re-fire (no throw/re-grab loop, no repeated key presses)
+  if (e.code === 'Space') INPUT.jump = true;
   if (e.code === 'KeyE' || e.code === 'KeyF') deskUse();
   if (e.code === 'KeyQ' && P.heldBall) deskThrow();
-  if (e.code === 'KeyM') { save.settings.music = save.settings.music > 0 ? 0 : 0.45; SFX.applyVolumes(); writeSave(); Game.toast('MUSIC ' + (save.settings.music > 0 ? 'ON' : 'OFF')); }
+  if (e.code === 'KeyM') Game.toast('MUSIC ' + (SFX.toggle('music', 0.45) ? 'ON' : 'OFF'));
   if (e.code === 'KeyP') Menu.show();
 });
 // any tap or click anywhere (iOS only unlocks audio on touchend / click, and most of the touch screen has no handler of its own)
@@ -3896,6 +4092,7 @@ window.addEventListener('blur', () => { INPUT.keys = {}; INPUT.grab = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('mousedown', e => {
   if (!Game.started || Menu.open || isTouch || renderer.xr.isPresenting) return;
+  if (e.target && e.target.closest && e.target.closest('button')) return; // HUD buttons (ENTER VR) are clicks, not pointer-lock / game input
   SFX.init();
   if (!pointerLocked) { lockPointer(); return; }
   if (e.button === 0) {
@@ -3921,7 +4118,8 @@ document.addEventListener('mousemove', e => {
 });
 // ---- touch ----
 function setupTouch() {
-  $('touch').style.display = 'block';
+  $('touch').style.display = 'block'; document.body.classList.add('touch');
+  if (setupTouch.done) return; setupTouch.done = true; // listeners only once (the mode can switch back and forth)
   const joy = $('joy'), knob = $('joyK'); let jid = null, jc = null;
   joy.addEventListener('touchstart', e => { e.preventDefault(); SFX.init(); const t = e.changedTouches[0]; jid = t.identifier; const r = joy.getBoundingClientRect(); jc = [r.left + r.width / 2, r.top + r.height / 2]; }, { passive: false });
   const jmove = e => { for (const t of e.changedTouches) if (t.identifier === jid) { let dx = t.clientX - jc[0], dy = t.clientY - jc[1]; const L = Math.hypot(dx, dy), m = 55; if (L > m) { dx *= m / L; dy *= m / L; } knob.style.transform = `translate(${dx}px,${dy}px)`; INPUT.touchMove = [dx / m, -dy / m]; } };
@@ -3941,7 +4139,9 @@ function tapWorld(x, y) {
   const ndc = { x: x / innerWidth * 2 - 1, y: -(y / innerHeight) * 2 + 1 };
   Hover.ray.setFromCamera(ndc, camera); Hover.ray.far = 3.5;
   const hit = Hover.ray.intersectObjects(world.buttons.map(b => b.mesh), false)[0];
-  if (hit) hit.object.userData.btn.press(null);
+  if (!hit) return;
+  const d = Hover.ray.ray.direction, w = raycast(P.H.x, P.H.y, P.H.z, d.x, d.y, d.z, hit.distance); // not through a wall (as on desktop)
+  if (!w || w.t > hit.distance - 0.08) hit.object.userData.btn.press(null);
 }
 
 // =====================================================================
@@ -3951,19 +4151,24 @@ function startGame() {
   if (Game.started) return;
   SFX.init();
   Game.started = true;
-  $('title').classList.add('hidden'); $('hud').style.display = 'block';
+  $('title').classList.add('hidden'); $('hud').style.display = 'block'; fp.group.visible = !renderer.xr.isPresenting;
   if (isTouch && !renderer.xr.isPresenting) setupTouch();
   respawnPlayer();
   Game.startRound();
   Game.banner(MAPS[world.id].name, MAPS[world.id].blurb);
 }
+// ENTER VR on the HUD and in the pause menu: after a VR session ends (Meta menu, headset asleep) or if PLAY was pressed
+// first, you can go (back) into VR without reloading the page
+let vrOK = false;
+function syncVRBtn() { const show = vrOK && !renderer.xr.isPresenting ? '' : 'none'; $('hudVR').style.display = show === '' ? 'block' : 'none'; $('mVR').style.display = show; }
 async function enterVR() {
   SFX.init();
+  if (renderer.xr.isPresenting) return;
   if (!navigator.xr) { $('vrmsg').textContent = 'WebXR not available in this browser.'; return; }
   try {
     const session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor'] });
     await renderer.xr.setSession(session);
-  } catch (e) { $('vrmsg').textContent = 'Could not start VR: ' + (e && e.message || e); }
+  } catch (e) { $('vrmsg').textContent = 'Could not start VR: ' + (e && e.message || e); if (Game.started) Game.toast('COULD NOT START VR'); }
 }
 function setVRBodyLayers(vr) {
   const l = vr ? 0 : LAYER_SELF;
@@ -3975,12 +4180,13 @@ renderer.xr.addEventListener('sessionstart', () => {
   setVRBodyLayers(true); INPUT.grab = false; Hover.btn = null; for (const b of world.buttons) b.hover = false;
   SFX.init();
   if (!Game.started) startGame();
-  $('menu').style.display = 'none'; Menu.open = false;
+  $('menu').style.display = 'none'; Menu.open = false; syncVRBtn();
 });
 renderer.xr.addEventListener('sessionend', () => {
   P.vr = false; camera.position.set(0, 0, 0); camera.quaternion.identity(); rig.rotation.set(0, P.yaw, 0); rig.position.copy(P.H);
-  fp.group.visible = true; setVRBodyLayers(false);
-  fitCamera();
+  fp.group.visible = true; setVRBodyLayers(false); for (const h of hands) dropHeld(h);
+  fitCamera(); syncVRBtn();
+  Menu.show(); // left VR (Meta menu, headset asleep): pause, with ENTER VR / RESUME right there
 });
 
 // =====================================================================
@@ -4016,6 +4222,19 @@ function attractCam(dt) {
   P.H.set(0, -50, 0);
 }
 const clock = new THREE.Clock();
+// a mirror re-renders the whole scene, so only when it's near, in front of you and not behind a wall
+const _mn = new THREE.Vector3(), _mp = new THREE.Vector3(), _mx = new THREE.Vector3();
+function mirrorInView(m, eye) {
+  if (eye.distanceTo(m.position) > 9) return false;
+  _mn.set(0, 0, 1).applyQuaternion(m.quaternion); if (_mp.copy(eye).sub(m.position).dot(_mn) < 0.05) return false;
+  _mx.set(1, 0, 0).applyQuaternion(m.quaternion);
+  for (const k of [0, -0.4, 0.4]) {
+    _mp.copy(m.position).addScaledVector(_mx, k * m.userData.w).addScaledVector(_mn, 0.12).sub(eye); const L = _mp.length(); if (L < 1e-3) return true;
+    const w = raycast(eye.x, eye.y, eye.z, _mp.x / L, _mp.y / L, _mp.z / L, L);
+    if (!w) return true;
+  }
+  return false;
+}
 function animTextures(dt) { for (const k in MAT_DEF) { const d = MAT_DEF[k]; if (d.anim && TEX[d.tex]) { TEX[d.tex].offset.x += d.anim[0] * dt; TEX[d.tex].offset.y += d.anim[1] * dt; } } }
 function loop() {
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -4024,20 +4243,20 @@ function loop() {
   if (saveTimer > 0) { saveTimer -= dt; if (saveTimer <= 0) writeSave(true); }
   animTextures(dt);
   const vr = renderer.xr.isPresenting;
+  const paused = Game.started && !vr && Menu.open; // the desktop/phone PAUSED menu really pauses: round timer, bots, tagging, balls
   if (Game.started) {
     if (Game.traveling !== true) { // paused while the screen fades out and the map loads ('arriving' = fading in at the spawn)
       if (vr) { vrStep(dt); vrButtons(); }
       else { if (!Menu.open) desktopStep(dt); else animateFP(dt); updateHover(); }
-      Game.update(dt);
+      if (!paused) Game.update(dt);
     }
   } else attractCam(dt);
-  for (const b of Game.bots) b.update(dt);
-  Items.update(dt);
+  if (!paused) { for (const b of Game.bots) b.update(dt); Items.update(dt); }
   if (Game.started) updateSelfAvatar(dt);
   for (const b of world.buttons) b.update(dt);
   for (const s of world.screens) s.update(dt);
   camera.getWorldPosition(_cw);
-  for (const m of world.mirrors) m.visible = _cw.distanceTo(m.position) < 15;
+  for (const m of world.mirrors) m.visible = mirrorInView(m, _cw);
   if (Shop.preview) { Shop.preview.rotation.y += dt * 0.8; const sp = Shop.preview.children[0].userData.spin; if (sp) sp.rotation.y += dt * 12; }
   sky.group.position.copy(_cw);
   if (Game.started) { updateHUD(dt); updateVRUI(dt); }
@@ -4066,14 +4285,15 @@ function init() {
   Menu.build();
   drawLogo();
   $('nameInput').value = save.name;
-  $('nameInput').oninput = e => { save.name = (e.target.value || 'PUG').toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 10) || 'PUG'; Game.applyLook(); writeSave(); };
+  $('nameInput').oninput = e => { save.name = (e.target.value || 'PUG').toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 10).trim() || 'PUG'; Game.applyLook(); writeSave(); };
   $('nameInput').onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') { startGame(); if (!isTouch) lockPointer(); } };
   $('btnPlay').onclick = () => { startGame(); if (!isTouch) lockPointer(); };
   $('btnVR').onclick = enterVR;
+  $('hudVR').onclick = $('mVR').onclick = e => { e.stopPropagation(); enterVR(); }; // the sessionstart handler closes the menu
   if (navigator.xr && navigator.xr.isSessionSupported) {
     navigator.xr.isSessionSupported('immersive-vr').then(ok => {
       $('vrmsg').textContent = ok ? 'VR headset ready! Press ENTER VR.' : 'No VR headset found here. Press PLAY (open this page in a Quest browser for VR).';
-      $('btnVR').disabled = !ok;
+      $('btnVR').disabled = !ok; vrOK = !!ok; syncVRBtn();
     }).catch(() => { $('vrmsg').textContent = 'Press PLAY to start.'; $('btnVR').disabled = true; });
   } else { $('vrmsg').textContent = 'This browser has no WebXR. Press PLAY (open in a Quest browser for VR).'; $('btnVR').disabled = true; }
   fitCamera();
