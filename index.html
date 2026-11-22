@@ -128,8 +128,8 @@
   #tJump{ right:30px; bottom:40px; width:96px; height:96px; }
   #tGrab{ right:140px; bottom:30px; }
   #tUse{ right:40px; bottom:150px; }
-  #tMenu{ left:14px; top:14px; width:58px; height:44px; font-size:8px; }
-  body.touch #mapName{ left:84px; }
+  #tMenu{ left:14px; top:62px; width:58px; height:44px; font-size:8px; }
+  body.touch #feed{ top:114px; }
   /* short landscape phones: USE joins the bottom row; narrow portrait phones: a right-hand column, clear of the joystick */
   @media (max-height:420px){ #tUse{ right:236px; bottom:30px; } }
   @media (max-width:420px){ #tGrab{ right:30px; bottom:150px; } #tUse{ right:30px; bottom:242px; } }
@@ -940,9 +940,9 @@ function resolveSphere(p, r, info, skipFn) {
           if (_co.ny > 0.6) { info.ground = true; info.gn.set(_co.nx, _co.ny, _co.nz); info.gsurf = c.surf; info.gcol = c; }
           else if (_co.ny < -0.6) info.ceil = true;
           else { info.wall = true; info.wn.set(_co.nx, _co.ny, _co.nz); }
-          // bouncy only off the top of pads (trampoline, sponge, mattress); gumdrop spheres bounce every way. The bounce
-          // follows the bouncy contacts' own normal, so brushing a pad's side while on the floor doesn't catapult you
-          if (c.bouncy && (c.t === 2 || _co.ny > 0.5)) { info.bouncy = Math.max(info.bouncy, c.bouncy); const bn = info.bn || (info.bn = new THREE.Vector3()); bn.x += _co.nx; bn.y += _co.ny; bn.z += _co.nz; }
+          // bouncy only off the top of pads (trampoline cylinder, sponge and mattress boxes); gumdrop spheres (t 1) bounce every
+          // way. The bounce follows the bouncy contacts' own normal, so brushing a pad's side while on the floor doesn't catapult you
+          if (c.bouncy && (c.t === 1 || _co.ny > 0.5)) { info.bouncy = Math.max(info.bouncy, c.bouncy); const bn = info.bn || (info.bn = new THREE.Vector3()); bn.x += _co.nx; bn.y += _co.ny; bn.z += _co.nz; }
           if (c.slip) info.slip = Math.max(info.slip, c.slip);
         }
       }
@@ -2295,8 +2295,8 @@ function buildNav() {
         M.copy(A).lerp(Bv, 0.5); M.y = Math.max(A.y, Bv.y) + 0.6 + dh * 0.12;
         const arc = losClear(A, M) && losClear(M, Bv);
         if (!arc) { M.copy(A); M.y = Math.max(A.y, Bv.y) + 0.6; }
-        if (!(arc || (dh < 3.6 && losClear(A, M) && losClear(M, Bv))) || !loftVel(a.p, b.p, g, BOT_VMAX * 0.9, _n1)) continue;
-        a.e.push({ to: b.i, cost: dh + dy * 1.6 + 2, kind: 'loft' });
+        if (!(arc || (dh < 3.6 && losClear(A, M) && losClear(M, Bv))) || !loftVel(a.p, b.p, g, BOT_VMAX * 0.9, _n1) || !loftFlies(a.p, b.p, g)) continue;
+        a.e.push({ to: b.i, cost: dh + dy * 1.6 + 14, kind: 'loft' }); // a last resort: only where walking/jumping can't get there
         made++; continue;
       }
       let kind = 'walk';
@@ -2362,6 +2362,24 @@ function reachFrom(s) {
   while (q.length) { const c = q.pop(); for (const e of N[c].e) if (!r[e.to]) { r[e.to] = 1; q.push(e.to); } }
   nav.reach.set(s, r); return r;
 }
+// fly a loft hop the way a bot does it (head + torso spheres against the world, from rest on node a) and keep the edge
+// only if it lands on b: the head-height line test alone passes hops whose torso clips the face being climbed
+const _lh = new THREE.Vector3(), _lt = new THREE.Vector3(), _lv = new THREE.Vector3();
+let LOFT_SIM = null;
+function loftFlies(a, b, g) {
+  LOFT_SIM = LOFT_SIM || Object.assign({}, CONTACT, { gn: new THREE.Vector3(), wn: new THREE.Vector3(), n: new THREE.Vector3() });
+  const H = _lh.set(a.x, a.y + STAND_H, a.z), V = loftVel(a, _lt.set(b.x, b.y + 0.12, b.z), g, BOT_VMAX * 0.95, _lv);
+  if (!V) return false;
+  const dt = 1 / 60, lowest = Math.min(a.y, b.y) - 2;
+  for (let i = 0; i < 360; i++) {
+    V.y -= g * dt;
+    const steps = Math.min(8, Math.ceil(V.length() * dt / 0.12) || 1); let gnd = false;
+    for (let s = 0; s < steps; s++) { H.addScaledVector(V, dt / steps); bodyResolve(H, V, LOFT_SIM); if (LOFT_SIM.ground) gnd = true; }
+    if (gnd && i > 3 && V.y <= 0.5) return Math.hypot(H.x - b.x, H.z - b.z) < 1.0 && Math.abs(H.y - STAND_H - b.y) < 0.5;
+    if (H.y < lowest) return false;
+  }
+  return false;
+}
 // high-apex hop velocity (apex 0.6 m above the higher end) for 'loft' edges; null if it needs more than vmax
 function loftVel(p0, p1, g, vmax, out) {
   const dx = p1.x - p0.x, dy = p1.y - p0.y, dz = p1.z - p0.z, dh = Math.hypot(dx, dz), up = Math.max(0, dy) + 0.6 + dh * 0.12;
@@ -2414,7 +2432,7 @@ function astar(s, t, maxIter = 1600) {
     if (cur === t) { const path = [cur]; let c = cur; while (came.has(c)) { c = came.get(c); path.push(c); } return path.reverse(); }
     if (closed.has(cur)) continue; closed.add(cur);
     for (const e of N[cur].e) {
-      const ng = gS.get(cur) + e.cost;
+      const ng = gS.get(cur) + e.cost + (e.pen || 0);
       if (ng < (gS.has(e.to) ? gS.get(e.to) : 1e9)) { gS.set(e.to, ng); came.set(e.to, cur); push([ng + h(e.to), e.to]); }
     }
   }
@@ -2492,7 +2510,7 @@ class Bot {
     this.onGround = false; this.yaw = Math.random() * TAU; this.lookYaw = this.yaw; this.lookPitch = 0;
     this.hands = [0, 1].map(i => ({ pos: new THREE.Vector3(), plant: null, side: i ? 1 : -1 }));
     this.it = false; this.immune = 0; this.freeze = 0; this.tags = 0; this.itTime = 0; this.shield = 0;
-    this.dBest = 1e9; this.dStuck = 0; this.unstick = 0;
+    this.dBest = 1e9; this.dStuck = 0; this.unstick = 0; this.tqRef = null; this.tqMoved = Infinity; this.tqAge = 0; this.tqP = null;
     this.skill = 1; this.state = 'wander'; this.path = null; this.pi = 0; this.think = Math.random(); this.hopCD = 0; this.goal = null;
     this.target = null; this.stuckT = 0; this.bestD = 1e9; this.idleT = 0; this.wave = 0; this.cheer = 0; this.chatCD = rr(4, 12);
     this.climb = 0; this.fetchBall = null; this.heldBall = null; this.lastGround = 0; this.airT = 0;
@@ -2528,8 +2546,10 @@ class Bot {
     // of re-running a failing search every think; the direct chase / climb takes over from there
     if (s >= 0 && t >= 0 && !reachFrom(s)[t]) t = nearestReachable(s, goal);
     const path = astar(s, t);
+    // re-planning (chasers do it every think) keeps the stuck timer while the next waypoint is still the one we're stuck on
+    const same = path && path.length > 1 && this.path && this.pi < this.path.length && path[1] === this.path[this.pi];
     this.path = path; this.pi = path && path.length > 1 ? 1 : 0;
-    this.stuckT = 0; this.bestD = 1e9;
+    if (!same) { this.stuckT = 0; this.bestD = 1e9; }
     return !!path;
   }
   randomGoal(radius) {
@@ -2609,19 +2629,27 @@ class Bot {
         if (dh < 0.9 && Math.abs(dy) < 0.9 && this.onGround) { this.pi++; this.bestD = 1e9; this.stuckT = 0; }
         else {
           if (dh < this.bestD - 0.25) { this.bestD = dh; this.stuckT = 0; } else this.stuckT += dt;
-          if (this.stuckT > 2.6) { this.stuckT = 0; this.path = null; this.think = 0; this.hopCD = 0; if (this.onGround) { this.V.set(rr(-3.6, 3.6), 5.4, rr(-3.6, 3.6)); } }
+          if (this.stuckT > 2.6) { if (this.pi > 0) for (const e of world.nav.nodes[this.path[this.pi - 1]].e) if (e.to === this.path[this.pi]) e.pen = Math.min(75, (e.pen || 0) + 25); this.stuckT = 0; this.path = null; this.think = 0; this.hopCD = 0; if (this.onGround) { this.V.set(rr(-3.6, 3.6), 5.4, rr(-3.6, 3.6)); } }
         }
       }
     }
     // a chase that stops getting closer to its target (pinned at a wall, bowl rim or container side, or re-planning to
     // the node it already stands on) climbs straight at the target for a moment instead of following the plan
-    // (only for a target that is close and staying put, i.e. hiding; a running target is just a chase)
-    const tq = this.target, dd = tq ? Math.hypot(tq.H.x - this.H.x, tq.H.z - this.H.z) + Math.abs(tq.H.y - this.H.y) * 0.5 : 1e9;
-    if (this.state === 'chase' && tq && this.freeze <= 0 && dd < 9 && Math.hypot(tq.V.x, tq.V.z) < 1.5) {
-      if (dd < this.dBest - 0.25) { this.dBest = dd; this.dStuck = 0; } else this.dStuck += dt;
-      if (this.dStuck > 1.5) { this.dStuck = 0; this.dBest = 1e9; this.unstick = 1.4; this.path = null; this.hopCD = 0; }
-    } else { this.dBest = 1e9; this.dStuck = 0; this.unstick = 0; }
-    if (this.unstick > 0) this.unstick -= dt;
+    // Only for a target that is close and really staying put (hiding), judged by how far it actually moved in the last
+    // 1.5 s (a VR player's stick-move doesn't show in its velocity), and only once the plan has nothing left to offer
+    // (path used up / standing on the goal node), so ordinary detours around walls aren't 'stuck'.
+    const tq = this.state === 'chase' ? this.target : null;
+    if (tq !== this.tqRef) { this.tqRef = tq; this.tqMoved = Infinity; this.tqAge = 0; if (tq) (this.tqP || (this.tqP = new THREE.Vector3())).copy(tq.H); }
+    else if (tq && (this.tqAge += dt) > 1.5) { this.tqMoved = this.tqP.distanceTo(tq.H); this.tqP.copy(tq.H); this.tqAge = 0; }
+    if (this.unstick > 0) { this.unstick -= dt; if (this.unstick <= 0) { this.dBest = 1e9; this.dStuck = 0; } } // a fair new try afterwards
+    else {
+      const dd = tq ? Math.hypot(tq.H.x - this.H.x, tq.H.z - this.H.z) + Math.abs(tq.H.y - this.H.y) * 0.5 : 1e9;
+      const planDone = !this.path || this.pi >= this.path.length - 1;
+      if (tq && this.freeze <= 0 && dd < 9 && planDone && this.tqMoved < 1 && Math.hypot(tq.V.x, tq.V.z) < 1.5) {
+        if (dd < this.dBest - 0.25) { this.dBest = dd; this.dStuck = 0; } else this.dStuck += dt;
+        if (this.dStuck > 1.5) { this.dStuck = 0; this.dBest = 1e9; this.unstick = 1.4; this.path = null; this.hopCD = 0; }
+      } else { this.dBest = 1e9; this.dStuck = 0; }
+    }
     // face direction
     const hv = Math.hypot(this.V.x, this.V.z);
     let wantYaw = this.yaw;
@@ -2749,7 +2777,7 @@ const P = {
   it: false, immune: 0, freeze: 0, tags: 0, itTime: 0, shield: 0, zoom: 0, moon: 0,
   yaw: 0, pitch: 0, onGround: false, airT: 0,
   contact: Object.assign({}, CONTACT, { gn: new THREE.Vector3(), wn: new THREE.Vector3(), n: new THREE.Vector3() }),
-  hist: [], handPts: [new THREE.Vector3(), new THREE.Vector3()], heldBall: null,
+  hist: [], stickD: new THREE.Vector3(), stickFrom: new THREE.Vector3(), handPts: [new THREE.Vector3(), new THREE.Vector3()], heldBall: null,
   anchor: null, anchorN: new THREE.Vector3(), wallT: 0, groundT: 0, wallJumped: false, swipe: 0, stepPhase: 0, stepT: 0,
   avatar: null, vr: false, vrInit: false, lastBouncy: 0
 };
@@ -2914,6 +2942,13 @@ function vrStep(dt) {
   if (P.onGround && !wasG && !n && (!P.vrBounced || P.vrHardG)) landSound(-vyBefore, gs); // a bounce plays its boing, not a crash landing
   if (!n && P.onGround) { const fr = P.contact.slip ? Math.exp(-0.5 * dt) : Math.exp(-6 * dt); P.V.x *= fr; P.V.z *= fr; }
   // 3) velocity from recent body motion → becomes momentum when paws leave the surface
+  // stick motion isn't body velocity: take out the part of it that really happened (none when walking into a wall),
+  // so letting go of the floor after stick-walking never launches you
+  if (P.stickD.lengthSq() > 0) {
+    const L = P.stickD.length(), real = clamp(_stk2.copy(rig.position).sub(P.stickFrom).dot(P.stickD) / L, 0, L);
+    if (real > 0) for (const e of P.hist) e.p.addScaledVector(P.stickD, real / L);
+    P.stickD.set(0, 0, 0);
+  }
   P.hist.push({ p: rig.position.clone(), dt });
   { let T = 0; for (let i = 1; i < P.hist.length; i++) T += P.hist[i].dt; while (P.hist.length > 2 && (T - P.hist[1].dt >= LOCO.histT || P.hist.length > 48)) { T -= P.hist[1].dt; P.hist.shift(); } }
   if (n && P.hist.length > 1) {
@@ -2998,15 +3033,14 @@ function turnAndStick(dt, headLocal) {
     _sp.set(-_sd.z, 0, _sd.x);
     const sp = 4.2 * (P.zoom > 0 ? 1.4 : 1);
     _stk.set(0, 0, 0).addScaledVector(_sd, -ly * sp * dt).addScaledVector(_sp, lx * sp * dt);
-    rig.position.add(_stk);
+    P.stickFrom.copy(rig.position); rig.position.add(_stk); P.stickD.copy(_stk);
     // paws on the floor slide along with the body (otherwise their grip pulls it straight back), unless something is in
-    // the way; and the stick motion isn't body velocity, so it never turns into a launch when the paws push off
+    // the way. (The stick motion is kept out of the launch velocity in vrStep, by however far the body really moved.)
     const len = _stk.length();
     if (len > 1e-6) for (const h of hands) if (floorPaw(h) && !raycast(h.last.x, h.last.y, h.last.z, _stk.x / len, 0, _stk.z / len, len + LOCO.handR)) { h.last.add(_stk); h.prev.add(_stk); }
-    for (const e of P.hist) e.p.add(_stk);
   }
 }
-const _stk = new THREE.Vector3(), _fpc = new THREE.Vector3();
+const _stk = new THREE.Vector3(), _stk2 = new THREE.Vector3(), _fpc = new THREE.Vector3();
 
 // ---------------- desktop / mobile ----------------
 const INPUT = { keys: {}, mx: 0, mz: 0, jump: false, jumpHeld: false, grab: false, use: false, click: false, touchMove: [0, 0], touchGrab: false, touchJump: false };
@@ -3838,7 +3872,7 @@ const MAPS = {
       cyl(18.2, -6.05, 2.4, 4.8, 1.1, 'metal', { tint: 0x3ab05a, seg: 12 });
       for (const y of [4.5, 8.5, 12.5]) blk(18.8, y, -12, 22, y + 0.4, 4, 'planks');
       blk(19.2, 4.9, -11.5, 21.8, 6.9, -9.5, 'cereal'); blk(19.2, 8.9, 0, 21.8, 10.9, 3, 'crate'); blk(19.4, 12.9, -6, 21.6, 14.4, -3, 'white', { tint: 0xffb0d0 });
-      blk(-21.6, 0, -14, -18, 3.2, -10, 'crate'); blk(-21.4, 3.2, -13.6, -18.6, 6.0, -10.6, 'crate');
+      blk(-21.6, 0, -14, -18, 3.2, -10, 'crate'); blk(-21.4, 3.2, -13.6, -19.8, 6.0, -10.6, 'crate'); // a ledge on the lower crate to hop up from (bots too)
       // lamp + clock
       rod(0, 18, 0, 0, 15.5, 0, 0.06, 'darkmetal', { col: false }); cone(0, 14.4, 0, 1.2, 1.6, 'white', { tint: 0xffe07a, seg: 8 });
       cyl(-8, -21.9, 13, 13.2, 1.4, 'white', { col: false, tint: 0xffffff });
@@ -3846,7 +3880,7 @@ const MAPS = {
       kennel(14, 16.5, Math.PI, { wall: 'whitewood', roof: 'roof', floor: 'carpet', trim: 'darkwood' }, 'GIANT KITCHEN');
       ballBucket(9.5, 0, 16, 'white', 0xffd23f);
       // pickups
-      for (const [x, y, z] of [[0, 7.0, 0], [-5, 6.9, -3], [12, 14.5, -19], [-10, 15.0, -21], [20.5, 13.1, -10], [20.5, 9.3, -6], [0, 4.3, 7], [0, 4.3, -7], [-14, 2.2, 8], [-21, 7.8, 2], [-7, 6.5, -19], [14, 1.6, 6], [18.2, 5.2, -6], [-19.8, 6.5, -12], [6, 10.8, -20.6]]) pk('bone', x, y, z);
+      for (const [x, y, z] of [[0, 7.0, 0], [-5, 6.9, -3], [12, 14.5, -19], [-10, 15.0, -21], [20.5, 13.1, -10], [20.5, 9.3, -6], [0, 4.3, 7], [0, 4.3, -7], [-14, 2.2, 8], [-21, 7.8, 2], [-7, 6.5, -19], [14, 1.6, 6], [18.2, 5.2, -6], [-20.6, 6.5, -12], [6, 10.8, -20.6]]) pk('bone', x, y, z);
       pk('bigbone', -18, 15.1, -21); pk('zoom', -14, 3, 8); pk('bubble', 3, 7.0, 3); pk('moon', 20.4, 11.4, 1.5);
       for (const [x, z] of [[0, 12], [-12, 0], [12, 0], [-14, -12], [14, -10], [-8, 18], [6, -12]]) botSpawn(x, 0, z);
     }
@@ -4006,7 +4040,7 @@ function drawMapThumb(cnv, def) {
 // used decides, so a touchscreen laptop or Chromebook played with a mouse keeps full mouse controls
 let isTouch = window.matchMedia ? matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches : 'ontouchstart' in window;
 function setInputMode(touch) {
-  if (touch === isTouch) return; isTouch = touch;
+  if (touch === isTouch) return; isTouch = touch; syncVRBtn();
   if (!Game.started || renderer.xr.isPresenting) return;
   if (touch) { if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock(); setupTouch(); }
   else { $('touch').style.display = 'none'; document.body.classList.remove('touch'); }
@@ -4160,7 +4194,7 @@ function startGame() {
 // ENTER VR on the HUD and in the pause menu: after a VR session ends (Meta menu, headset asleep) or if PLAY was pressed
 // first, you can go (back) into VR without reloading the page
 let vrOK = false;
-function syncVRBtn() { const show = vrOK && !renderer.xr.isPresenting ? '' : 'none'; $('hudVR').style.display = show === '' ? 'block' : 'none'; $('mVR').style.display = show; }
+function syncVRBtn() { const show = vrOK && !renderer.xr.isPresenting ? '' : 'none'; $('hudVR').style.display = show === '' && !isTouch ? 'block' : 'none'; $('mVR').style.display = show; } // touch: the on-screen controls cover the HUD button, so it's in the menu only
 async function enterVR() {
   SFX.init();
   if (renderer.xr.isPresenting) return;
@@ -4179,6 +4213,8 @@ renderer.xr.addEventListener('sessionstart', () => {
   P.vr = true; P.vrInit = false; rig.rotation.set(0, P.yaw, 0); camera.rotation.set(0, 0, 0); fp.group.visible = false;
   setVRBodyLayers(true); INPUT.grab = false; Hover.btn = null; for (const b of world.buttons) b.hover = false;
   SFX.init();
+  if (P.heldBall) { const b = P.heldBall; P.heldBall = null; b.held = null; b.vel.set(0, 0, 0); Items.thrown(b); } // a ball held on desktop drops (VR paws grab their own)
+  P.anchor = null;
   if (!Game.started) startGame();
   $('menu').style.display = 'none'; Menu.open = false; syncVRBtn();
 });
@@ -4225,7 +4261,7 @@ const clock = new THREE.Clock();
 // a mirror re-renders the whole scene, so only when it's near, in front of you and not behind a wall
 const _mn = new THREE.Vector3(), _mp = new THREE.Vector3(), _mx = new THREE.Vector3();
 function mirrorInView(m, eye) {
-  if (eye.distanceTo(m.position) > 9) return false;
+  if (eye.distanceTo(m.position) > 15) return false; // the whole lodge; in-front and line-of-sight do the rest
   _mn.set(0, 0, 1).applyQuaternion(m.quaternion); if (_mp.copy(eye).sub(m.position).dot(_mn) < 0.05) return false;
   _mx.set(1, 0, 0).applyQuaternion(m.quaternion);
   for (const k of [0, -0.4, 0.4]) {
