@@ -38,7 +38,7 @@
   kbd{ font-family:'Press Start 2P',monospace; font-size:9px; background:#2b3466; padding:3px 6px; box-shadow: inset -2px -2px 0 #161b3b, 0 0 0 2px var(--edge); color:#fff; margin:0 1px; }
 
   /* ---------- TITLE ---------- */
-  #title{ position:fixed; inset:0; z-index:30; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:20px;
+  #title{ position:fixed; inset:0; z-index:30; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:14px; padding:20px; /* centred by the auto margins on #logo / #cards; scrolls from the top when taller than the screen */
     background:linear-gradient(180deg, rgba(11,14,31,.25) 0%, rgba(11,14,31,.55) 55%, rgba(11,14,31,.92) 100%); overflow:auto; }
   #logo{ display:flex; align-items:center; gap:18px; margin-top:auto; }
   #logoPug{ width:96px; height:96px; image-rendering:pixelated; filter:drop-shadow(6px 6px 0 rgba(0,0,0,.45)); }
@@ -162,7 +162,7 @@
     <div class="card ppanel"><h3>DESKTOP</h3>
       <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> run &middot; <kbd>SPACE</kbd> jump (also wall-jump) &middot; <kbd>MOUSE</kbd> look<br>
       Hold <kbd>LMB</kbd> near a wall to <b>grab &amp; climb</b>, release to fling. Click a pug to <b>tag</b> it.<br>
-      <kbd>E</kbd> press buttons / grab ball &middot; <kbd>TAB</kbd> scores &middot; <kbd>ESC</kbd> menu &middot; Laser tag: <kbd>CLICK</kbd> fires</div>
+      <kbd>E</kbd> press buttons / grab ball &middot; <kbd>TAB</kbd> scores &middot; <kbd>ESC</kbd> menu &middot; Laser tag: <kbd>LMB</kbd> fires (hold = auto), hold <kbd>RMB</kbd> to climb</div>
     <div class="card ppanel"><h3>PHONE / TABLET</h3>
       Left stick runs, drag on the right side to look. <b>JUMP</b>, hold <b>GRAB</b> to climb, <b>USE</b> for buttons &amp; balls. Tap world buttons directly. Laser tag: hold <b>FIRE</b>.</div>
   </div>
@@ -2857,7 +2857,7 @@ function makeHand(i) {
 }
 // a controller went to sleep / the VR session ended while holding a ball: let it fall instead of hanging in mid-air
 function dropHeld(h) {
-  h.sq = h.sel = false; h.grab = false;
+  h.sq = h.sel = h.trig = false; h.grab = false;
   if (!h.held) return;
   const b = h.held; h.held = null; b.held = null; b.vel.set(0, 0, 0); Items.thrown(b);
 }
@@ -3257,7 +3257,7 @@ function vrBanner(text, sub, col = '#ffd23f') {
   ctx.fillStyle = 'rgba(12,16,36,0.78)'; ctx.fillRect(0, 10, 512, 108);
   const s = textWidth(text, 5) > 490 ? 3 : 5;
   drawText(ctx, text, 256, sub ? 26 : 42, s, col, 'center', '#000');
-  if (sub) drawText(ctx, sub, 256, 84, 2, '#ffffff', 'center', '#000');
+  if (sub) drawText(ctx, sub, 256, 84, textWidth(sub, 2) > 500 ? 1 : 2, '#ffffff', 'center', '#000');
   VRUI.btex.needsUpdate = true; VRUI.bT = 2.2;
 }
 function updateVRUI(dt) {
@@ -3272,7 +3272,7 @@ function updateVRUI(dt) {
   drawText(ctx, Game.phase === 'pre' ? 'GET READY' : laser ? (zapped ? 'ZAPPED! ' + P.zap.toFixed(1) : 'LASER TAG') : P.it ? (P.freeze > 0 ? 'LAVA! WAIT ' + Math.ceil(P.freeze) : 'YOU ARE IT') : save.settings.mode === 'casual' || Game.entities.length < 2 ? 'CASUAL' : 'RUN!', 64, 6, 1, '#0d1020', 'center');
   drawText(ctx, Game.timerText(), 64, 28, 2, '#ffffff', 'center');
   drawText(ctx, '$' + save.bones, 6, 54, 2, '#ffd23f');
-  drawText(ctx, Game.countText(), 122, 54, 1, '#c8d0ff', 'right');
+  drawText(ctx, laser ? 'Z' + P.tags + ' #' + (Game.laserRank().indexOf(P) + 1) : Game.countText(), 122, 54, 1, '#c8d0ff', 'right'); // short in laser tag (clear of the bones)
   if (SFX.silent()) drawText(ctx, 'NO SOUND-PULL TRIGGER', 64, 44, 1, '#fff27a', 'center');
   else if (SFX.muted()) drawText(ctx, 'SFX OFF: PRESS SOUND', 64, 44, 1, '#fff27a', 'center');
   else { // power-ups (the desktop HUD shows these as chips)
@@ -3288,7 +3288,7 @@ function updateVRUI(dt) {
 const MODES = {
   infection: { name: 'INFECTION', time: 180, desc: 'Lava spreads with every touch.' },
   classic: { name: 'CLASSIC TAG', time: 150, desc: 'Pass IT on. No tag-backs.' },
-  laser: { name: 'LASER TAG', time: 150, desc: 'Zap pugs with your blaster. Most zaps wins!' },
+  laser: { name: 'LASER TAG', time: 150, desc: 'Zap pugs. Most zaps wins!' },
   casual: { name: 'CASUAL', time: 0, desc: 'No tagging. Explore & collect.' }
 };
 const MODE_ORDER = ['infection', 'classic', 'laser', 'casual'];
@@ -3338,7 +3338,7 @@ const Game = {
     clearTimeout(this._bt); this._bt = setTimeout(() => b.style.opacity = 0, 1900);
     vrBanner(msg.replace(/<[^>]+>/g, ''), sub, col);
   },
-  reward(n, why) { if (n <= 0) return; save.bones += n; writeSave(); this.toast('+' + n + ' BONES  ' + why, true); bumpBones(); },
+  reward(n, why, vr = true) { if (n <= 0) return; save.bones += n; writeSave(); this.toast('+' + n + ' BONES  ' + why, vr); bumpBones(); },
   // ---------------- rounds ----------------
   startRound() {
     for (const e of this.entities) { e.it = false; e.immune = 0; e.freeze = 0; e.tags = 0; e.itTime = 0; if (e.avatar) e.avatar.setIT(false); }
@@ -3348,7 +3348,8 @@ const Game = {
   },
   beginPlay() {
     this.phase = 'play'; this.roundT = MODES[save.settings.mode].time;
-    if (save.settings.mode === 'laser') { SFX.beep(true); this.banner('LASER TAG!', 'ZAP THE OTHER PUGS - MOST ZAPS WINS', '#3cf0ff'); for (const b of this.bots) b.think = rr(0, 0.4); return; }
+    if (save.settings.mode === 'laser') { for (const e of this.entities) e.immune = 2; // a moment of start protection: nobody is zapped the instant it's GO
+      SFX.beep(true); this.banner('LASER TAG!', 'ZAP THE OTHER PUGS - MOST ZAPS WINS', '#3cf0ff'); for (const b of this.bots) b.think = rr(0, 0.4); return; }
     const n = save.settings.mode === 'infection' && this.entities.length > 9 ? 2 : 1;
     const pool = this.entities.slice(); for (let i = 0; i < n; i++) { const e = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]; this.makeIT(e, null, true); }
     SFX.beep(true);
@@ -3571,10 +3572,10 @@ function updateHover() {
     Hover.ray.setFromCamera({ x: 0, y: 0 }, camera); Hover.ray.far = 3.2;
     Hover.meshes.length = 0; for (const b of world.buttons) Hover.meshes.push(b.mesh);
     const hit = Hover.ray.intersectObjects(Hover.meshes, false)[0];
-    if (hit) { const d = Hover.ray.ray.direction; const w = raycast(P.H.x, P.H.y, P.H.z, d.x, d.y, d.z, hit.distance); if (!w || w.t > hit.distance - 0.08) found = hit.object.userData.btn; }
+    if (hit) { const d = Hover.ray.ray.direction; const w = raycast(P.H.x, P.H.y, P.H.z, d.x, d.y, d.z, hit.distance); if (!w || w.t > hit.distance - 0.08) { found = hit.object.userData.btn; Hover.hitD = hit.distance; } }
   }
   for (const b of world.buttons) b.hover = b === found;
-  Hover.btn = found;
+  Hover.btn = found; Hover.dist = found ? Hover.hitD : Infinity;
 }
 // VR: paws press buttons
 // Each paw is on at most one key: it keeps the key it's on while it stays inside it, otherwise the nearest key whose zone
@@ -3736,7 +3737,7 @@ const BOT_AIM = [
   { react: [0.55, 0.95], cd: [1.15, 1.8], spread: 0.037, track: 4.0, lead: 0.5, range: 24 },
   { react: [0.4, 0.7], cd: [0.9, 1.45], spread: 0.029, track: 5.5, lead: 0.7, range: 28 }
 ];
-const BEAM_COLS = ['#3cf0ff', '#ff3a6a', '#7dff3a', '#ffd23f', '#b06bff', '#ff8a1a', '#3a8cff', '#ff5ad2', '#5affc8', '#ff6b3a', '#c8ff3a', '#ffffff'];
+const BEAM_COLS = ['#3cf0ff', '#ff3a6a', '#7dff3a', '#ffd23f', '#b06bff', '#ff8a1a', '#3a8cff', '#ff5ad2', '#5affc8', '#ff6b3a', '#c8ff3a', '#e0a0ff']; // player first; one each for up to 11 bots
 const BLASTER_GEO = {}, BLASTER_MAT = new THREE.MeshBasicMaterial({ vertexColors: true });
 // a chunky toy blaster built along +Z (barrel forward), tinted with its owner's beam colour
 function blasterGeo(col) {
@@ -3758,7 +3759,14 @@ const Laser = {
   on() { return save.settings.mode === 'laser'; },
   // zaps only count during a real round
   live() { return this.on() && Game.phase === 'play' && Game.entities.length > 1; },
-  col(e) { if (e.beamCol === undefined) e.beamCol = e === P ? BEAM_COLS[0] : BEAM_COLS[1 + (this.colN++ % (BEAM_COLS.length - 1))]; return e.beamCol; },
+  // each pug's beam / blaster / scoreboard colour: the player's is fixed, bots get the first colour no other pug has
+  col(e) {
+    if (e.beamCol === undefined) {
+      if (e === P) e.beamCol = BEAM_COLS[0];
+      else { const used = new Set(Game.entities.map(x => x.beamCol)); e.beamCol = BEAM_COLS.slice(1).find(c => !used.has(c)) || BEAM_COLS[1 + (this.colN++ % (BEAM_COLS.length - 1))]; }
+    }
+    return e.beamCol;
+  },
   init() {
     if (this.ready) return; this.ready = true;
     const bg = new THREE.BoxGeometry(1, 1, 1).translate(0, 0, 0.5), sg = new THREE.BoxGeometry(1, 1, 1);
@@ -3772,6 +3780,7 @@ const Laser = {
     }
     // desktop / phone: first-person blaster in the right paw
     this.fpGun = new THREE.Mesh(blasterGeo(BEAM_COLS[0]), BLASTER_MAT); this.fpGun.layers.set(LAYER_FP); this.fpGun.visible = false; fp.group.add(this.fpGun);
+    this.selfGun = new THREE.Mesh(blasterGeo(BEAM_COLS[0]), BLASTER_MAT); this.selfGun.scale.setScalar(1.4); this.selfGun.layers.set(LAYER_SELF); this.selfGun.visible = false; P.avatar.group.add(this.selfGun); // in the mirror
     this.fireBtn = document.getElementById('tFire');
   },
   // ---------------- effects ----------------
@@ -3785,22 +3794,25 @@ const Laser = {
   },
   // ---------------- shooting ----------------
   // first thing the ray hits: a pug (head + torso spheres; pad widens them a little for the player's own shots) or a wall
-  trace(shooter, o, d, maxT, pad) {
+  // back: pugs are tested from this far behind the muzzle too, so a blaster poked right into a pug's face (muzzle
+  // already inside it) still counts; walls are tested from the muzzle itself
+  trace(shooter, o, d, maxT, pad, back = 0) {
     const w = raycast(o.x, o.y, o.z, d.x, d.y, d.z, maxT); let best = w ? w.t : maxT, who = null;
     for (const e of Game.entities) {
       if (e === shooter) continue;
       for (let k = 0; k < 2; k++) {
-        const r = (k ? BODY.torsoR : 0.2) + pad; _lz.c.set(e.H.x, e.H.y - (k ? BODY.torsoOff : 0), e.H.z).sub(o);
-        const tc = _lz.c.dot(d); if (tc < 0) continue;
-        const d2 = _lz.c.lengthSq() - tc * tc; if (d2 > r * r) continue;
-        const t = tc - Math.sqrt(r * r - d2); if (t >= 0 && t < best) { best = t; who = e; }
+        const r = (k ? BODY.torsoR : 0.2) + pad; _lz.c.set(e.H.x, e.H.y - (k ? BODY.torsoOff : 0), e.H.z).sub(o).addScaledVector(d, back);
+        const tc = _lz.c.dot(d), c2 = _lz.c.lengthSq(); let t2;
+        if (c2 <= r * r) t2 = 0; // the ray starts inside this sphere
+        else { if (tc < 0) continue; const d2 = c2 - tc * tc; if (d2 > r * r) continue; t2 = tc - Math.sqrt(r * r - d2); }
+        const t = Math.max(0, t2 - back); if (t < best || (t === 0 && best > 0)) { best = t; who = e; }
       }
     }
     return { t: best, who, wall: !who && !!w };
   },
-  fire(shooter, o, d, from) {
+  fire(shooter, o, d, from, back = 0) {
     const col = this.col(shooter), pad = shooter === P ? LASER.pad : 0;
-    const r = this.trace(shooter, o, d, LASER.range, pad);
+    const r = this.trace(shooter, o, d, LASER.range, pad, back);
     _lz.e.copy(o).addScaledVector(d, r.t);
     this.beam(from || o, _lz.e, col);
     if (r.who || r.wall) this.spark(_lz.e, col);
@@ -3816,10 +3828,12 @@ const Laser = {
     SFX.zapHit(B === P ? null : B.H);
     if (B === P) { SFX.zapped(); for (const h of hands) haptic(h, 1, 180); Game.banner('ZAPPED!', 'BY ' + A.name + ' - RECHARGING', '#ff5a8a'); }
     else if (B.isBot) { B.avatar.say('ZAPPED!', 1.2); B.path = null; B.think = 0; }
-    if (A === P) { SFX.gotOne(); Game.reward(2, 'ZAPPED ' + B.name); save.stats.tags++; }
+    if (A === P) { SFX.gotOne(); Game.reward(2, 'ZAPPED ' + B.name, false); save.stats.tags++; for (const h of hands) if (h.trig) haptic(h, 0.6, 60); } // (no big VR banner per zap: the watch counts them)
     else if (A.isBot) A.say('tag', 0.5);
     Game.toast(A.name + ' ZAPPED ' + B.name);
   },
+  // is a pug in the crosshair nearer than d (a key behind a pug mustn't eat the shot)?
+  pugBefore(d) { camera.getWorldPosition(_lz.o); _lz.d.set(0, 0, -1).applyQuaternion(camera.getWorldQuaternion(_lz.q)); const r = this.trace(P, _lz.o, _lz.d, Math.min(d, 6), LASER.pad); return !!r.who && r.t < d; },
   canShoot() { return this.on() && Game.started && !(P.zap > 0) && !(Menu.open && !renderer.xr.isPresenting) && Game.traveling !== true; },
   // desktop / phone: from the crosshair (screen centre); the beam is drawn from the first-person blaster
   fireFlat() {
@@ -3835,7 +3849,7 @@ const Laser = {
     if (!this.canShoot() || !h.connected || (h.laserCD || 0) > 0) return false;
     this.init(); h.laserCD = LASER.cd;
     this.muzzle(h, _lz.o, _lz.d);
-    this.fire(P, _lz.o, _lz.d);
+    this.fire(P, _lz.o, _lz.d, null, 0.35);
     haptic(h, 0.35, 30);
     return true;
   },
@@ -3876,7 +3890,7 @@ const Laser = {
     _lz.u.set(-_lz.d.z, 0, _lz.d.x); if (_lz.u.lengthSq() < 1e-6) _lz.u.set(1, 0, 0); _lz.u.normalize(); _lz.v.crossVectors(_lz.d, _lz.u);
     _lz.d.addScaledVector(_lz.u, gauss() * wob).addScaledVector(_lz.v, gauss() * wob).normalize();
     b.shots = (b.shots || 0) + 1;
-    this.fire(b, mz, _lz.d);
+    this.fire(b, mz, _lz.d, null, 0.35);
     b.laserCD = rr(A.cd[0], A.cd[1]);
   },
   botMuzzle(b, out) {
@@ -3884,7 +3898,7 @@ const Laser = {
     return out.copy(b.H);
   },
   // ---------------- per frame ----------------
-  update(dt) {
+  update(dt, paused = false) {
     this.t += dt;
     const on = this.on(), vr = renderer.xr.isPresenting;
     if (on) this.init();
@@ -3893,11 +3907,12 @@ const Laser = {
     for (const m of this.sparks) if (m.userData.life > 0) { m.userData.life -= dt; const k = m.userData.big ? 0.3 : 0.18, f = 1 - m.userData.life / k; m.scale.setScalar((m.userData.big ? 0.5 : 0.22) * (0.4 + f)); m.material.opacity = Math.max(0, 1 - f); if (m.userData.life <= 0) m.visible = false; }
     // zap timers (immune counts down in the game / bot update); bots blink while they can't be zapped
     for (const e of Game.entities) {
+      if (paused) break; // timers (and the blink, which follows immunity) wait while the desktop/phone game is paused
       if (e.zap > 0) { e.zap -= dt; if (e.zap <= 0 && e === P && on) SFX.recharged(); }
       if (e.laserCD > 0 && e === P) e.laserCD -= dt;
-      if (e.isBot) e.avatar.group.visible = !(on && e.immune > 0 && Math.floor(this.t * 12) % 2);
+      if (e.isBot) this.ghost(e, on && e.immune > 0 && Math.floor(e.immune * 4) % 2 === 1);
     }
-    for (const h of hands) if (h.laserCD > 0) h.laserCD -= dt;
+    if (!paused) for (const h of hands) if (h.laserCD > 0) h.laserCD -= dt;
     // blasters
     for (const b of Game.bots) {
       if (on && !b.gun) { b.gun = new THREE.Mesh(blasterGeo(this.col(b)), BLASTER_MAT); b.gun.scale.setScalar(1.4); b.avatar.group.add(b.gun); } // a bit bigger so it reads from across the map
@@ -3911,6 +3926,8 @@ const Laser = {
     const playing = on && Game.started;
     this.fpGun.visible = playing && !vr;
     if (this.fpGun.visible) { const p = fp.paws[1].position; this.fpGun.position.set(p.x - 0.02, p.y + 0.03, p.z - 0.04); this.fpGun.rotation.set(0, Math.PI, 0); }
+    this.selfGun.visible = this.fpGun.visible;
+    if (this.selfGun.visible) { const paw = P.avatar.paws[0]; this.selfGun.position.copy(paw.position); _lz.d.set(0, 0, -1).applyQuaternion(camera.getWorldQuaternion(_lz.q)); this.selfGun.lookAt(_lz.t.copy(paw.position).add(_lz.d)); this.selfGun.position.addScaledVector(_lz.d, 0.05); }
     for (let i = 0; i < 2; i++) {
       const h = hands[i], g = this.vrGuns[i], s = this.sights[i], show = playing && vr && h.connected;
       g.visible = show; s.visible = show && !(P.zap > 0);
@@ -3919,15 +3936,20 @@ const Laser = {
       g.position.copy(h.last).addScaledVector(_lz.d, 0.05); g.lookAt(_lz.t.copy(g.position).add(_lz.d));
       s.position.copy(_lz.o); s.lookAt(_lz.t.copy(_lz.o).add(_lz.d));
       // auto-fire while the trigger is held
-      if (h.trig) this.fireHand(h);
+      if (h.trig && !paused) this.fireHand(h);
     }
     // phone: FIRE button (shown in laser tag only); held = auto-fire
     if (this.fireBtn) { const want = playing && isTouch && !vr ? '' : 'none'; if (this.fireBtn.style.display !== want) this.fireBtn.style.display = want; }
-    if (INPUT.fire && playing && !vr) this.fireFlat();
+    if (INPUT.fire && playing && !vr && !paused) this.fireFlat();
+  },
+  // a pug that can't be zapped blinks its body (2 blinks a second, gentle on the eyes); name tag, chat and blaster stay
+  ghost(e, on) {
+    if (e.ghosted === on) return; e.ghosted = on; const a = e.avatar, v = !on;
+    a.head.visible = a.body.visible = v; for (const m of a.arms) m.visible = v; for (const m of a.paws) m.visible = v;
   },
   // a fresh round / mode switch: clear zaps, show everyone again
   reset() {
-    for (const e of Game.entities) { e.zap = 0; e.zappedN = 0; e.laserCD = 0; e.zapBy = null; e.aimTgt = null; e.seeT = 0; if (e.isBot) e.avatar.group.visible = true; }
+    for (const e of Game.entities) { e.zap = 0; e.zappedN = 0; e.laserCD = 0; e.zapBy = null; e.aimTgt = null; e.seeT = 0; if (e.isBot) this.ghost(e, false); }
   }
 };
 
@@ -4407,15 +4429,17 @@ document.addEventListener('mousedown', e => {
   if (e.target && e.target.closest && e.target.closest('button')) return; // HUD buttons (ENTER VR) are clicks, not pointer-lock / game input
   SFX.init();
   if (!pointerLocked) { lockPointer(); return; }
+  const laser = Laser.on();
   if (e.button === 0) {
     if (P.heldBall) { deskThrow(); return; }
-    if (Hover.btn) { Hover.btn.press(null); return; }
+    if (Hover.btn && !(laser && Laser.pugBefore(Hover.dist))) { Hover.btn.press(null); return; }
+    // laser tag: the left button fires (held = auto-fire) and doesn't grab walls; the right button climbs instead
+    if (laser) { INPUT.fire = true; Laser.fireFlat(); return; }
     if (P.it) Game.swipe();
-    if (Laser.on()) Laser.fireFlat(); // laser tag: click fires (holding still grabs / climbs)
     INPUT.grab = true;
-  } else if (e.button === 2) deskUse();
+  } else if (e.button === 2) { if (laser) INPUT.grab = true; else deskUse(); }
 });
-document.addEventListener('mouseup', e => { if (e.button === 0) INPUT.grab = false; });
+document.addEventListener('mouseup', e => { if (e.button === 0) { INPUT.grab = false; INPUT.fire = false; } else if (e.button === 2 && Laser.on()) INPUT.grab = false; });
 document.addEventListener('pointerlockchange', () => {
   pointerLocked = document.pointerLockElement === canvas; if (pointerLocked) skipMoves = 2;
   if (!pointerLocked && Game.started && !renderer.xr.isPresenting && !isTouch && !Menu.open) Menu.show();
@@ -4448,6 +4472,9 @@ function setupTouch() {
   hold('tUse', () => { if (!deskUse() && P.it) Game.swipe(); });
   hold('tMenu', () => Menu.show());
   hold('tFire', () => { INPUT.fire = true; Laser.fireFlat(); }, () => INPUT.fire = false); // laser tag (held = auto-fire)
+  { const f = $('tFire'); let fid = null, fl = null; // dragging from FIRE also turns the view, so one thumb can aim while firing
+    f.addEventListener('touchstart', e => { const t = e.changedTouches[0]; fid = t.identifier; fl = [t.clientX, t.clientY]; }, { passive: true });
+    f.addEventListener('touchmove', e => { e.preventDefault(); for (const t of e.changedTouches) if (t.identifier === fid) { const dx = t.clientX - fl[0], dy = t.clientY - fl[1]; fl = [t.clientX, t.clientY]; const k = 0.0055 * save.settings.sens; P.yaw -= dx * k; P.pitch = clamp(P.pitch - dy * k * (save.settings.inv ? -1 : 1), -1.5, 1.5); } }, { passive: false }); }
 }
 function tapWorld(x, y) {
   const ndc = { x: x / innerWidth * 2 - 1, y: -(y / innerHeight) * 2 + 1 };
@@ -4494,7 +4521,7 @@ renderer.xr.addEventListener('sessionstart', () => {
   setVRBodyLayers(true); INPUT.grab = false; Hover.btn = null; for (const b of world.buttons) b.hover = false;
   SFX.init();
   if (P.heldBall) { const b = P.heldBall; P.heldBall = null; b.held = null; b.vel.set(0, 0, 0); Items.thrown(b); } // a ball held on desktop drops (VR paws grab their own)
-  P.anchor = null;
+  P.anchor = null; for (const h of hands) h.trig = false;
   if (!Game.started) startGame();
   $('menu').style.display = 'none'; Menu.open = false; syncVRBtn();
 });
@@ -4569,7 +4596,7 @@ function loop() {
   } else attractCam(dt);
   if (!paused) { for (const b of Game.bots) b.update(dt); Items.update(dt); }
   if (Game.started) updateSelfAvatar(dt);
-  Laser.update(dt);
+  Laser.update(dt, paused);
   for (const b of world.buttons) b.update(dt);
   for (const s of world.screens) s.update(dt);
   camera.getWorldPosition(_cw);
