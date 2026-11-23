@@ -129,10 +129,11 @@
   #tGrab{ right:140px; bottom:30px; }
   #tUse{ right:40px; bottom:150px; }
   #tMenu{ left:14px; top:62px; width:58px; height:44px; font-size:8px; }
+  #tFire{ right:140px; bottom:122px; width:86px; height:86px; background:rgba(20,120,150,.75); }
   body.touch #feed{ top:114px; }
   /* short landscape phones: USE joins the bottom row; narrow portrait phones: a right-hand column, clear of the joystick */
-  @media (max-height:420px){ #tUse{ right:236px; bottom:30px; } }
-  @media (max-width:420px){ #tGrab{ right:30px; bottom:150px; } #tUse{ right:30px; bottom:242px; } }
+  @media (max-height:420px){ #tUse{ right:236px; bottom:30px; } #tFire{ right:140px; bottom:122px; width:78px; height:78px; } }
+  @media (max-width:420px){ #tGrab{ right:30px; bottom:150px; } #tUse{ right:30px; bottom:242px; } #tFire{ right:30px; bottom:334px; } }
   #lookPad{ position:absolute; right:0; top:0; width:55%; height:100%; pointer-events:auto; touch-action:none; }
 
   #fade{ position:fixed; inset:0; z-index:40; background:#000; opacity:0; pointer-events:none; transition:opacity .35s; }
@@ -157,13 +158,13 @@
   <div id="cards">
     <div class="card ppanel"><h3>VR (QUEST ETC.)</h3>
       No buttons needed to move. <b>Slap your paws on the ground and push</b> to run. Push down hard and let go to <b>launch</b>. Paws stick to any surface, so you can <b>climb walls &amp; trees</b>.<br>
-      <b>Grip/trigger</b>: grab &amp; throw tennis balls. <b>Right stick</b>: turn. Tap the in-world <b>buttons</b> with your paws.</div>
+      <b>Grip/trigger</b>: grab &amp; throw tennis balls. <b>Right stick</b>: turn. Tap the in-world <b>buttons</b> with your paws.<br><b>Laser tag</b>: pull a <b>trigger</b> to fire that paw's blaster (hold for auto-fire).</div>
     <div class="card ppanel"><h3>DESKTOP</h3>
       <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> run &middot; <kbd>SPACE</kbd> jump (also wall-jump) &middot; <kbd>MOUSE</kbd> look<br>
       Hold <kbd>LMB</kbd> near a wall to <b>grab &amp; climb</b>, release to fling. Click a pug to <b>tag</b> it.<br>
-      <kbd>E</kbd> press buttons / grab ball &middot; <kbd>TAB</kbd> scores &middot; <kbd>ESC</kbd> menu</div>
+      <kbd>E</kbd> press buttons / grab ball &middot; <kbd>TAB</kbd> scores &middot; <kbd>ESC</kbd> menu &middot; Laser tag: <kbd>CLICK</kbd> fires</div>
     <div class="card ppanel"><h3>PHONE / TABLET</h3>
-      Left stick runs, drag on the right side to look. <b>JUMP</b>, hold <b>GRAB</b> to climb, <b>USE</b> for buttons &amp; balls. Tap world buttons directly.</div>
+      Left stick runs, drag on the right side to look. <b>JUMP</b>, hold <b>GRAB</b> to climb, <b>USE</b> for buttons &amp; balls. Tap world buttons directly. Laser tag: hold <b>FIRE</b>.</div>
   </div>
   <div id="saveNote">Your bones, cosmetics &amp; settings save in this browser.</div>
 </div>
@@ -241,6 +242,7 @@
   <div class="tb" id="tGrab">GRAB</div>
   <div class="tb" id="tUse">USE</div>
   <div class="tb" id="tMenu">MENU</div>
+  <div class="tb" id="tFire" style="display:none">FIRE</div>
 </div>
 <div id="fade"></div>
 
@@ -1226,6 +1228,22 @@ const SFX = {
   win() { if (SFXBANK.play('win', { jitter: 0 })) return; if (!this.ok) return; const t = this.ctx.currentTime, d = this.out(0.8, 0); [523, 659, 784, 1046, 784, 1046].forEach((f, i) => this.tone(d, t + i * 0.1, 'square', f, f, 0.16, 0.14)); },
   lose() { if (SFXBANK.play('lose', { jitter: 0 })) return; if (!this.ok) return; const t = this.ctx.currentTime, d = this.out(0.8, 0); [392, 370, 349, 262].forEach((f, i) => this.tone(d, t + i * 0.16, 'triangle', f, f, 0.3, 0.2)); },
   whoosh(k) { if (SFXBANK.play(k >= 0.45 ? 'launch' : 'swipe', { gain: clamp(0.6 + k, 0.6, 1.3) })) return; if (!this.ok) return; const t = this.ctx.currentTime, d = this.out(clamp(k, 0.1, 0.6), 0); this.noiseHit(d, t, 'bandpass', 700 + k * 900, 0.8, 0.5, 0.25); },
+  // ---- laser tag (synth): a 'pew' per shot, an electric buzz on a hit, a bigger one when YOU are zapped, a ding when recharged
+  laser(pos, pitch = 1, gain = 1) {
+    if (!this.ok || this.ctx.state !== 'running') return; const sp = this.spatial(pos), t = this.ctx.currentTime, d = this.out(Math.max(sp.g, pos ? 0.12 : 0) * 0.55 * gain, sp.pan);
+    this.tone(d, t, 'square', 2100 * pitch, 380 * pitch, 0.32, 0.13, 0.002); this.tone(d, t, 'sawtooth', 1050 * pitch, 190 * pitch, 0.14, 0.16, 0.002);
+    this.noiseHit(d, t, 'highpass', 5200, 0.8, 0.12, 0.025);
+  },
+  zapHit(pos) {
+    if (!this.ok || this.ctx.state !== 'running') return; const sp = this.spatial(pos), t = this.ctx.currentTime, d = this.out(Math.max(sp.g, 0.15) * 0.7, sp.pan);
+    this.tone(d, t, 'sawtooth', 140, 70, 0.45, 0.28, 0.003); this.tone(d, t + 0.01, 'square', 880, 1760, 0.12, 0.09); this.noiseHit(d, t, 'bandpass', 2400, 1.2, 0.35, 0.2);
+  },
+  zapped() {
+    if (!this.ok || this.ctx.state !== 'running') return; const t = this.ctx.currentTime, d = this.out(0.8, 0);
+    for (let i = 0; i < 3; i++) this.tone(d, t + i * 0.07, 'sawtooth', 220 - i * 40, 90, 0.35, 0.12, 0.003);
+    this.noiseHit(d, t, 'bandpass', 1600, 0.9, 0.4, 0.35); this.tone(d, t + 0.22, 'square', 520, 260, 0.14, 0.25);
+  },
+  recharged() { if (!this.ok || this.ctx.state !== 'running') return; const t = this.ctx.currentTime, d = this.out(0.35, 0); this.tone(d, t, 'sine', 1320, 1320, 0.25, 0.1); this.tone(d, t + 0.07, 'sine', 1980, 1980, 0.2, 0.12); },
   bonk(pos) { if (SFXBANK.play('bonk', { pos })) return; if (!this.ok) return; const sp = this.spatial(pos); const t = this.ctx.currentTime, d = this.out(sp.g, sp.pan); this.tone(d, t, 'sine', 300, 140, 0.5, 0.12); },
   warp() { if (SFXBANK.play('warp')) return; if (!this.ok) return; const t = this.ctx.currentTime, d = this.out(0.7, 0); this.tone(d, t, 'sine', 200, 1400, 0.3, 0.45); this.tone(d, t, 'square', 100, 700, 0.06, 0.45); }
 };
@@ -2151,14 +2169,16 @@ function drawScoreboard(ctx, w, h) {
   ctx.fillStyle = '#141833'; ctx.fillRect(0, 0, w, h);
   ctx.fillStyle = '#ffd23f'; ctx.fillRect(0, 0, w, 22);
   drawText(ctx, (MODES[save.settings.mode] || MODES.infection).name + ' - ' + (MAPS[world.id] ? MAPS[world.id].name : ''), w / 2, 7, 1, '#1a1206', 'center');
-  const ents = Game.entities.slice().sort((a, b) => (b.tags - a.tags) || (a.itTime - b.itTime));
+  const laser = save.settings.mode === 'laser';
+  const ents = laser ? Game.laserRank() : Game.entities.slice().sort((a, b) => (b.tags - a.tags) || (a.itTime - b.itTime));
   const rows = ents.slice(0, 10); if (!rows.includes(Game.player)) rows[9] = Game.player;
   rows.forEach((e, i) => {
     const y = 30 + i * 17;
-    ctx.fillStyle = e.it ? '#ff5a2a' : e.fur; ctx.fillRect(8, y, 10, 10);
+    ctx.fillStyle = laser ? Laser.col(e) : e.it ? '#ff5a2a' : e.fur; ctx.fillRect(8, y, 10, 10);
     drawText(ctx, e.name, 24, y + 2, 1, e === Game.player ? '#ffd23f' : '#ffffff');
-    drawText(ctx, e.it ? 'LAVA' : 'RUN', 150, y + 2, 1, e.it ? '#ff7a50' : '#7fe08a');
-    drawText(ctx, 'TAGS ' + e.tags, 196, y + 2, 1, '#c8d0ff');
+    if (laser) drawText(ctx, e.zap > 0 ? 'ZAPPED' : 'READY', 150, y + 2, 1, e.zap > 0 ? '#ff5a8a' : '#7fe08a');
+    else drawText(ctx, e.it ? 'LAVA' : 'RUN', 150, y + 2, 1, e.it ? '#ff7a50' : '#7fe08a');
+    drawText(ctx, (laser ? 'ZAPS ' : 'TAGS ') + e.tags, 196, y + 2, 1, '#c8d0ff');
     if (save.settings.mode === 'classic') drawText(ctx, fmtTime(e.itTime), 270, y + 2, 1, '#c8d0ff');
   });
 }
@@ -2565,6 +2585,7 @@ class Bot {
     // fetch distraction
     if (this.fetchBall && (this.fetchBall.held || this.fetchBall.age > 8)) this.fetchBall = null;
     if (this.fetchBall) { this.state = 'fetch'; this.planTo(this.fetchBall.pos); return; }
+    if (mode === 'laser' && Game.phase === 'play' && Game.entities.length > 1) { this.laserBrain(); return; }
     if (Game.phase !== 'play' || mode === 'casual') { this.wander(); return; }
     if (this.it) {
       if (this.freeze > 0) { this.state = 'idle'; return; }
@@ -2587,6 +2608,30 @@ class Bot {
         });
         if (bestN) this.planTo(bestN.p); else this.randomGoal(12);
       } else this.wander();
+    }
+  }
+  // laser tag: hunt the nearest pug that can be zapped; once it's in view keep hopping around at blaster range (a
+  // moving pug is harder to hit) while Laser.bot does the aiming; after being zapped, run from the zapper
+  laserBrain() {
+    const A = BOT_AIM[save.settings.diff] || BOT_AIM[1];
+    if (this.zap > 0 && this.zapBy && this.zapBy !== this) {
+      const th = this.zapBy; this.state = 'flee'; this.target = th;
+      let bestN = null, bs = -1e9;
+      world.nav.near(this.H.x, this.H.z, 13, n => { const dme = n.p.distanceTo(this.H); if (dme < 3 || dme > 13) return; const s = n.p.distanceTo(th.H) - dme * 0.35 + Math.random() * 2; if (s > bs) { bs = s; bestN = n; } });
+      if (bestN) this.planTo(bestN.p); else this.randomGoal(12);
+      return;
+    }
+    let best = null, bs = 1e9;
+    for (const e of Game.entities) { if (e === this || e.immune > 0) continue; const s = e.H.distanceTo(this.H) - (e === this.target ? 3 : 0); if (s < bs) { bs = s; best = e; } }
+    if (!best) { this.target = null; this.wander(); return; }
+    if (best !== this.target) this.target = best;
+    const d = best.H.distanceTo(this.H), see = d < A.range * 0.8 && losClear(this.H, best.H, 0.1);
+    if (!see) { this.state = 'hunt'; const tp = _bt.copy(best.H); tp.y -= STAND_H; this.planTo(tp); return; }
+    this.state = 'strafe';
+    if (!this.path || this.pi >= this.path.length || Math.random() < 0.2) {
+      let bn = null, sc = -1e9;
+      world.nav.near(this.H.x, this.H.z, 7, n => { const dm = n.p.distanceTo(this.H); if (dm < 2 || dm > 7) return; const s = -Math.abs(n.p.distanceTo(best.H) - 9) + Math.random() * 3; if (s > sc) { sc = s; bn = n; } });
+      if (bn) this.planTo(bn.p);
     }
   }
   wander() {
@@ -2653,11 +2698,12 @@ class Bot {
     // face direction
     const hv = Math.hypot(this.V.x, this.V.z);
     let wantYaw = this.yaw;
-    if (tgt) wantYaw = Math.atan2(tgt.x - this.H.x, tgt.z - this.H.z);
+    if (this.state === 'strafe' && this.target) wantYaw = Math.atan2(this.target.H.x - this.H.x, this.target.H.z - this.H.z); // face who you're shooting at
+    else if (tgt) wantYaw = Math.atan2(tgt.x - this.H.x, tgt.z - this.H.z);
     else if (hv > 0.5) wantYaw = Math.atan2(this.V.x, this.V.z);
     let dyaw = ((wantYaw - this.yaw + Math.PI * 3) % TAU) - Math.PI; this.yaw += dyaw * damp(8, dt);
     // look at player / target with the head
-    const P = Game.player; let lookAt = (this.target && (this.state === 'chase' || this.state === 'flee')) ? this.target.H : (P && P.H.distanceTo(this.H) < 6 ? P.H : null);
+    const P = Game.player; let lookAt = (this.target && (this.state === 'chase' || this.state === 'flee' || this.state === 'hunt' || this.state === 'strafe')) ? this.target.H : (P && P.H.distanceTo(this.H) < 6 ? P.H : null);
     let ly = this.yaw, lp = 0;
     if (lookAt) { ly = Math.atan2(lookAt.x - this.H.x, lookAt.z - this.H.z); lp = -Math.atan2(lookAt.y - this.H.y, Math.hypot(lookAt.x - this.H.x, lookAt.z - this.H.z)) * 0.6; let d2 = ((ly - this.yaw + Math.PI * 3) % TAU) - Math.PI; d2 = clamp(d2, -1.3, 1.3); ly = this.yaw + d2; }
     this.lookYaw += (((ly - this.lookYaw + Math.PI * 3) % TAU) - Math.PI) * damp(10, dt); this.lookPitch += (clamp(lp, -0.6, 0.6) - this.lookPitch) * damp(8, dt);
@@ -2760,6 +2806,7 @@ class Bot {
     const lean = clamp(Math.hypot(this.V.x, this.V.z) * 0.05, 0, 0.3);
     _be.set(this.lookPitch, this.lookYaw, 0, 'YXZ'); _bq.setFromEuler(_be);
     this.avatar.update(this.H, _bq, this.yaw, [this.hands[0].pos, this.hands[1].pos], dt, lean);
+    Laser.bot(this, dt);
   }
   dispose() { this.avatar.dispose(); if (this.heldBall) this.heldBall.held = null; }
 }
@@ -2801,8 +2848,9 @@ function makeHand(i) {
   grip.addEventListener('disconnected', () => { h.connected = false; h.src = null; dropHeld(h); });
   // grip and trigger both grab; the ball is only let go when BOTH are released (kids squeeze the whole controller).
   // Any press is also a user gesture: (re)start audio.
-  const press = k => () => { SFX.init(); h[k] = true; grabBall(h, true); };
-  const release = k => () => { h[k] = false; if (!h.sq && !h.sel) grabBall(h, false); };
+  // laser tag: the trigger fires this paw's blaster (held = auto-fire) and the grip still grabs balls
+  const press = k => () => { SFX.init(); if (k === 'sel' && Laser.on() && Game.started) { h.trig = true; Laser.fireHand(h); return; } h[k] = true; grabBall(h, true); };
+  const release = k => () => { if (k === 'sel') h.trig = false; h[k] = false; if (!h.sq && !h.sel) grabBall(h, false); };
   ctrl.addEventListener('squeezestart', press('sq')); ctrl.addEventListener('squeezeend', release('sq'));
   ctrl.addEventListener('selectstart', press('sel')); ctrl.addEventListener('selectend', release('sel'));
   return h;
@@ -3043,7 +3091,7 @@ function turnAndStick(dt, headLocal) {
 const _stk = new THREE.Vector3(), _stk2 = new THREE.Vector3(), _fpc = new THREE.Vector3();
 
 // ---------------- desktop / mobile ----------------
-const INPUT = { keys: {}, mx: 0, mz: 0, jump: false, jumpHeld: false, grab: false, use: false, click: false, touchMove: [0, 0], touchGrab: false, touchJump: false };
+const INPUT = { keys: {}, mx: 0, mz: 0, jump: false, jumpHeld: false, grab: false, use: false, click: false, touchMove: [0, 0], touchGrab: false, touchJump: false, fire: false };
 const fp = { group: new THREE.Group(), arms: [], paws: [], ball: null };
 function buildFP() {
   camera.add(fp.group); fp.group.visible = false; // shown by startGame (the title flyover must not look through the paws)
@@ -3218,9 +3266,10 @@ function updateVRUI(dt) {
   if (VRUI.bT > 0) { VRUI.bT -= dt; VRUI.banner.material.opacity = clamp(VRUI.bT * 2, 0, 1); }
   if (!vr) return;
   VRUI.t -= dt; if (VRUI.t > 0) return; VRUI.t = 0.25;
-  const ctx = VRUI.wctx; ctx.fillStyle = P.it ? '#8f1b12' : '#10203a'; ctx.fillRect(0, 0, 128, 72);
-  ctx.fillStyle = P.it ? '#ff5a2a' : '#3cf08a'; ctx.fillRect(0, 0, 128, 20);
-  drawText(ctx, Game.phase === 'pre' ? 'GET READY' : P.it ? (P.freeze > 0 ? 'LAVA! WAIT ' + Math.ceil(P.freeze) : 'YOU ARE IT') : save.settings.mode === 'casual' || Game.entities.length < 2 ? 'CASUAL' : 'RUN!', 64, 6, 1, '#0d1020', 'center');
+  const zapped = P.zap > 0, laser = Laser.on() && Game.entities.length > 1;
+  const ctx = VRUI.wctx; ctx.fillStyle = P.it || zapped ? '#8f1b12' : '#10203a'; ctx.fillRect(0, 0, 128, 72);
+  ctx.fillStyle = P.it || zapped ? '#ff5a2a' : laser ? '#3cf0ff' : '#3cf08a'; ctx.fillRect(0, 0, 128, 20);
+  drawText(ctx, Game.phase === 'pre' ? 'GET READY' : laser ? (zapped ? 'ZAPPED! ' + P.zap.toFixed(1) : 'LASER TAG') : P.it ? (P.freeze > 0 ? 'LAVA! WAIT ' + Math.ceil(P.freeze) : 'YOU ARE IT') : save.settings.mode === 'casual' || Game.entities.length < 2 ? 'CASUAL' : 'RUN!', 64, 6, 1, '#0d1020', 'center');
   drawText(ctx, Game.timerText(), 64, 28, 2, '#ffffff', 'center');
   drawText(ctx, '$' + save.bones, 6, 54, 2, '#ffd23f');
   drawText(ctx, Game.countText(), 122, 54, 1, '#c8d0ff', 'right');
@@ -3239,9 +3288,10 @@ function updateVRUI(dt) {
 const MODES = {
   infection: { name: 'INFECTION', time: 180, desc: 'Lava spreads with every touch.' },
   classic: { name: 'CLASSIC TAG', time: 150, desc: 'Pass IT on. No tag-backs.' },
+  laser: { name: 'LASER TAG', time: 150, desc: 'Zap pugs with your blaster. Most zaps wins!' },
   casual: { name: 'CASUAL', time: 0, desc: 'No tagging. Explore & collect.' }
 };
-const MODE_ORDER = ['infection', 'classic', 'casual'];
+const MODE_ORDER = ['infection', 'classic', 'laser', 'casual'];
 const DIFFS = [{ name: 'CHILL', mult: 0.78, react: 0.75 }, { name: 'NORMAL', mult: 0.92, react: 0.5 }, { name: 'PRO', mult: 1.03, react: 0.3 }];
 const PLAYER_NAMES = ['SNOOT', 'WIGGLES', 'BUTTERBEAN', 'SIRPUG', 'TURBO', 'BISCOTTI', 'NACHO', 'PANCAKE', 'ROCKET', 'SPUD', 'ZOOMER', 'WAFFLE'];
 
@@ -3249,7 +3299,8 @@ const Game = {
   entities: [], bots: [], player: P, phase: 'pre', phaseT: 0, roundT: 0, pendingMap: save.settings.map, started: false,
   traveling: false, lastCount: -1, feed: [],
   timerText() { if (this.phase === 'pre') return 'START ' + Math.ceil(this.phaseT); if (save.settings.mode === 'casual') return 'FREE PLAY'; if (this.phase === 'post') return 'NEXT ' + Math.ceil(this.phaseT); return fmtTime(this.roundT); },
-  countText() { const n = this.entities.filter(e => e.it).length; return save.settings.mode === 'casual' ? this.entities.length + ' PUGS' : 'LAVA ' + n + '/' + this.entities.length; },
+  laserRank() { return this.entities.slice().sort((a, b) => (b.tags - a.tags) || ((a.zappedN || 0) - (b.zappedN || 0))); },
+  countText() { if (save.settings.mode === 'laser' && this.entities.length > 1) return 'ZAPS ' + P.tags + '  #' + (this.laserRank().indexOf(P) + 1); const n = this.entities.filter(e => e.it).length; return save.settings.mode === 'casual' ? this.entities.length + ' PUGS' : 'LAVA ' + n + '/' + this.entities.length; },
   // ---------------- setup ----------------
   setBots(n) {
     n = clamp(n, 0, 11); save.settings.bots = n; writeSave();
@@ -3269,7 +3320,7 @@ const Game = {
     Menu.sync();
   },
   cycleMap(d) { const ids = Object.keys(MAPS); this.pendingMap = ids[(ids.indexOf(this.pendingMap) + d + ids.length) % ids.length]; Menu.sync(); },
-  cycleMode() { save.settings.mode = MODE_ORDER[(MODE_ORDER.indexOf(save.settings.mode) + 1) % 3]; writeSave(); this.startRound(); Menu.sync(); },
+  cycleMode() { save.settings.mode = MODE_ORDER[(MODE_ORDER.indexOf(save.settings.mode) + 1) % MODE_ORDER.length]; writeSave(); this.startRound(); Menu.sync(); },
   setMode(m) { if (m === save.settings.mode) return; save.settings.mode = m; writeSave(); this.startRound(); Menu.sync(); },
   cycleDiff() { save.settings.diff = (save.settings.diff + 1) % 3; writeSave(); for (const b of this.bots) b.setSkill(); Menu.sync(); },
   setFur(hex) { save.fur = hex; P.fur = hex; P.avatar.setFur(hex); writeSave(); Menu.sync(); },
@@ -3291,11 +3342,13 @@ const Game = {
   // ---------------- rounds ----------------
   startRound() {
     for (const e of this.entities) { e.it = false; e.immune = 0; e.freeze = 0; e.tags = 0; e.itTime = 0; if (e.avatar) e.avatar.setIT(false); }
+    Laser.reset();
     if (save.settings.mode === 'casual' || this.entities.length < 2) { this.phase = 'play'; this.roundT = 0; this.banner('CASUAL', this.entities.length < 2 ? 'ADD BOTS AT THE TERMINAL TO PLAY TAG' : 'EXPLORE, CLIMB & COLLECT BONES'); return; }
     this.phase = 'pre'; this.phaseT = 4; this.lastCount = -1;
   },
   beginPlay() {
     this.phase = 'play'; this.roundT = MODES[save.settings.mode].time;
+    if (save.settings.mode === 'laser') { SFX.beep(true); this.banner('LASER TAG!', 'ZAP THE OTHER PUGS - MOST ZAPS WINS', '#3cf0ff'); for (const b of this.bots) b.think = rr(0, 0.4); return; }
     const n = save.settings.mode === 'infection' && this.entities.length > 9 ? 2 : 1;
     const pool = this.entities.slice(); for (let i = 0; i < n; i++) { const e = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]; this.makeIT(e, null, true); }
     SFX.beep(true);
@@ -3334,6 +3387,11 @@ const Game = {
       const top = ents.slice().sort((a, b) => b.tags - a.tags)[0];
       if (top === P) this.reward(20, 'TOP TAGGER'); else if (P.tags > 0) this.reward(4, 'GOOD HUNTING');
       SFX.lose(); this.banner('ALL LAVA!', 'TOP TAGGER: ' + top.name + ' (' + top.tags + ')', '#ff7a50');
+    } else if (kind === 'laser') {
+      const rank = this.laserRank(), pr = rank.indexOf(P);
+      const bonus = [20, 12, 8][pr] || 0; if (bonus) { this.reward(bonus, 'RANK #' + (pr + 1)); SFX.win(); save.stats.wins += pr === 0 ? 1 : 0; } else SFX.lose();
+      this.banner('ROUND OVER', 'TOP ZAPPER: ' + rank[0].name + ' (' + rank[0].tags + ')  YOU: #' + (pr + 1), pr === 0 ? '#6be36b' : '#3cf0ff');
+      for (const b of this.bots) if (b === rank[0]) b.say('win', 1);
     } else if (kind === 'classic') {
       const rank = ents.slice().sort((a, b) => a.itTime - b.itTime);
       const pr = rank.indexOf(P);
@@ -3348,6 +3406,9 @@ const Game = {
       const c = Math.ceil(this.phaseT);
       if (c !== this.lastCount && c <= 3 && c > 0) { this.lastCount = c; SFX.beep(false); this.banner(String(c), MODES[mode].name + ' - ' + MODES[mode].desc); }
       if (this.phaseT <= 0) this.beginPlay();
+    } else if (this.phase === 'play' && mode === 'laser' && this.entities.length > 1) {
+      this.roundT -= dt; // laser tag: no touch tagging, the blasters do it (Laser.fire); most zaps at the buzzer wins
+      if (this.roundT <= 0) this.endRound('laser');
     } else if (this.phase === 'play' && mode !== 'casual' && this.entities.length > 1) {
       this.roundT -= dt;
       for (const e of this.entities) if (e.it) e.itTime += dt;
@@ -3622,6 +3683,7 @@ function updateHUD(dt) {
   if (Game.phase === 'pre') st.textContent = 'GET READY... ' + Math.ceil(Game.phaseT);
   else if (Game.phase === 'post') st.textContent = 'ROUND OVER';
   else if (mode === 'casual' || Game.entities.length < 2) st.textContent = 'CASUAL - EXPLORE!';
+  else if (mode === 'laser') { if (P.zap > 0) { st.textContent = 'ZAPPED! RECHARGING ' + P.zap.toFixed(1); st.classList.add('it'); } else { st.textContent = P.immune > 0 ? 'BLASTER READY - SAFE FOR ' + Math.ceil(P.immune) : 'LASER TAG - ZAP THEM!'; st.classList.add('safe'); } }
   else if (P.it) { st.textContent = P.freeze > 0 ? 'LAVA! (WAIT ' + P.freeze.toFixed(1) + ')' : "YOU'RE LAVA! TAG 'EM"; st.classList.add('it'); }
   else { st.textContent = P.immune > 0 ? 'SAFE (NO TAG-BACKS)' : 'RUN! DON\'T GET TAGGED'; st.classList.add('safe'); }
   $('sub').textContent = MODES[mode].name + '  -  ' + Game.timerText() + '  -  ' + Game.countText();
@@ -3649,9 +3711,225 @@ function updateHUD(dt) {
   if ($('board').style.display === 'block') drawBoardDOM();
 }
 function drawBoardDOM() {
+  if (save.settings.mode === 'laser') {
+    $('boardT').innerHTML = '<tr><td>PUG</td><td>STATUS</td><td>ZAPS</td><td>ZAPPED</td></tr>' + Game.laserRank().map(e => `<tr class="${e === P ? 'me' : ''}"><td><span class="sw" style="background:${Laser.col(e)}"></span>${e.name}</td><td>${e.zap > 0 ? 'ZAPPED' : 'READY'}</td><td>${e.tags}</td><td>${e.zappedN || 0}</td></tr>`).join('');
+    return;
+  }
   const ents = Game.entities.slice().sort((a, b) => (b.tags - a.tags) || (a.itTime - b.itTime));
   $('boardT').innerHTML = '<tr><td>PUG</td><td>STATUS</td><td>TAGS</td><td>IT TIME</td></tr>' + ents.map(e => `<tr class="${e === P ? 'me' : ''}"><td><span class="sw" style="background:${e.it ? '#ff5a2a' : e.fur}"></span>${e.name}</td><td>${e.it ? 'LAVA' : 'RUN'}</td><td>${e.tags}</td><td>${fmtTime(e.itTime)}</td></tr>`).join('');
 }
+
+// =====================================================================
+//  LASER TAG — every pug carries a toy blaster. A hit "zaps" a pug: it can't
+//  shoot while it recharges and can't be zapped again until it has recovered.
+//  Most zaps when the timer runs out wins.
+//  Bots aim like people, not aimbots: they need a moment to react when they first
+//  see you, their aim trails behind a moving target, every shot wobbles (more
+//  while they hop or run), they fire on a cooldown, and never through walls.
+// =====================================================================
+const LASER = { range: 45, cd: 0.32, zapT: 2.5, safeT: 2.5, pad: 0.1, beamW: 0.035, beamLife: 0.14 };
+// per bot skill (CHILL / NORMAL / PRO): reaction after first seeing a target (s), seconds between shots, aim wobble
+// (radians, 1 sd), how fast the aim catches up with a moving target (1/s; lower = trails further behind), how much of
+// that lag it makes up by leading a running target (0..1, from the target's observed motion), max range (m)
+const BOT_AIM = [
+  { react: [0.8, 1.3], cd: [1.5, 2.3], spread: 0.05, track: 3.0, lead: 0.2, range: 20 },
+  { react: [0.55, 0.95], cd: [1.15, 1.8], spread: 0.037, track: 4.0, lead: 0.5, range: 24 },
+  { react: [0.4, 0.7], cd: [0.9, 1.45], spread: 0.029, track: 5.5, lead: 0.7, range: 28 }
+];
+const BEAM_COLS = ['#3cf0ff', '#ff3a6a', '#7dff3a', '#ffd23f', '#b06bff', '#ff8a1a', '#3a8cff', '#ff5ad2', '#5affc8', '#ff6b3a', '#c8ff3a', '#ffffff'];
+const BLASTER_GEO = {}, BLASTER_MAT = new THREE.MeshBasicMaterial({ vertexColors: true });
+// a chunky toy blaster built along +Z (barrel forward), tinted with its owner's beam colour
+function blasterGeo(col) {
+  if (BLASTER_GEO[col]) return BLASTER_GEO[col];
+  const b = MB(), body = C(0xf4f4f8), dark = C(0x2a2f3a), acc = C(col), grey = C(0x8a93a6);
+  b.box(0, 0, 0.03, 0.062, 0.072, 0.2, body);
+  b.box(0, 0.043, 0.02, 0.04, 0.018, 0.13, acc, { glow: 1.1 });
+  b.box(0, -0.062, -0.045, 0.044, 0.085, 0.05, dark, { rx: -0.25 });
+  b.box(0, -0.03, 0.035, 0.012, 0.03, 0.03, dark);
+  b.box(0, 0, 0.16, 0.034, 0.034, 0.08, grey);
+  b.box(0, 0, 0.205, 0.048, 0.048, 0.024, acc, { glow: 1.3 });
+  return BLASTER_GEO[col] = b.geo();
+}
+const _lz = { o: new THREE.Vector3(), d: new THREE.Vector3(), e: new THREE.Vector3(), q: new THREE.Quaternion(), u: new THREE.Vector3(), v: new THREE.Vector3(), t: new THREE.Vector3(), c: new THREE.Vector3() };
+const gauss = () => { let u = 0, v = 0; while (u === 0) u = Math.random(); while (v === 0) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * v); };
+
+const Laser = {
+  beams: [], sparks: [], vrGuns: [], sights: [], fpGun: null, t: 0, colN: 0, ready: false, fireBtn: null,
+  on() { return save.settings.mode === 'laser'; },
+  // zaps only count during a real round
+  live() { return this.on() && Game.phase === 'play' && Game.entities.length > 1; },
+  col(e) { if (e.beamCol === undefined) e.beamCol = e === P ? BEAM_COLS[0] : BEAM_COLS[1 + (this.colN++ % (BEAM_COLS.length - 1))]; return e.beamCol; },
+  init() {
+    if (this.ready) return; this.ready = true;
+    const bg = new THREE.BoxGeometry(1, 1, 1).translate(0, 0, 0.5), sg = new THREE.BoxGeometry(1, 1, 1);
+    const add = (geo, list, n) => { for (let i = 0; i < n; i++) { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); m.visible = false; m.frustumCulled = false; m.userData.life = 0; scene.add(m); list.push(m); } };
+    add(bg, this.beams, 18); add(sg, this.sparks, 14);
+    // VR: a blaster in each paw, with a faint aiming line
+    for (let i = 0; i < 2; i++) {
+      const g = new THREE.Mesh(blasterGeo(BEAM_COLS[0]), BLASTER_MAT); g.visible = false; scene.add(g); this.vrGuns.push(g);
+      const s = new THREE.Mesh(bg, new THREE.MeshBasicMaterial({ color: BEAM_COLS[0], transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+      s.scale.set(0.006, 0.006, 3); s.visible = false; s.frustumCulled = false; scene.add(s); this.sights.push(s);
+    }
+    // desktop / phone: first-person blaster in the right paw
+    this.fpGun = new THREE.Mesh(blasterGeo(BEAM_COLS[0]), BLASTER_MAT); this.fpGun.layers.set(LAYER_FP); this.fpGun.visible = false; fp.group.add(this.fpGun);
+    this.fireBtn = document.getElementById('tFire');
+  },
+  // ---------------- effects ----------------
+  take(list) { let m = list[0]; for (const x of list) { if (x.userData.life <= 0) return x; if (x.userData.life < m.userData.life) m = x; } return m; },
+  beam(a, b, col) {
+    const m = this.take(this.beams), L = a.distanceTo(b); if (L < 0.02) return;
+    m.position.copy(a); m.lookAt(b); m.scale.set(LASER.beamW, LASER.beamW, L); m.material.color.set(col); m.material.opacity = 1; m.userData.life = LASER.beamLife; m.visible = true;
+  },
+  spark(p, col, big = false) {
+    const m = this.take(this.sparks); m.position.copy(p); m.material.color.set(col); m.material.opacity = 1; m.userData.life = big ? 0.3 : 0.18; m.userData.big = big; m.scale.setScalar(0.1); m.visible = true;
+  },
+  // ---------------- shooting ----------------
+  // first thing the ray hits: a pug (head + torso spheres; pad widens them a little for the player's own shots) or a wall
+  trace(shooter, o, d, maxT, pad) {
+    const w = raycast(o.x, o.y, o.z, d.x, d.y, d.z, maxT); let best = w ? w.t : maxT, who = null;
+    for (const e of Game.entities) {
+      if (e === shooter) continue;
+      for (let k = 0; k < 2; k++) {
+        const r = (k ? BODY.torsoR : 0.2) + pad; _lz.c.set(e.H.x, e.H.y - (k ? BODY.torsoOff : 0), e.H.z).sub(o);
+        const tc = _lz.c.dot(d); if (tc < 0) continue;
+        const d2 = _lz.c.lengthSq() - tc * tc; if (d2 > r * r) continue;
+        const t = tc - Math.sqrt(r * r - d2); if (t >= 0 && t < best) { best = t; who = e; }
+      }
+    }
+    return { t: best, who, wall: !who && !!w };
+  },
+  fire(shooter, o, d, from) {
+    const col = this.col(shooter), pad = shooter === P ? LASER.pad : 0;
+    const r = this.trace(shooter, o, d, LASER.range, pad);
+    _lz.e.copy(o).addScaledVector(d, r.t);
+    this.beam(from || o, _lz.e, col);
+    if (r.who || r.wall) this.spark(_lz.e, col);
+    if (shooter === P) SFX.laser(null, 1, 0.8); else SFX.laser(shooter.H, 0.85 + ((shooter.pitch || 1) - 0.75) * 0.5);
+    if (r.who && this.live()) this.zap(shooter, r.who);
+    return r;
+  },
+  zap(A, B) {
+    if (B.immune > 0 || B.zap > 0) { this.spark(_lz.e, '#ffffff'); return; } // still recovering: the hit doesn't count
+    if (B.shield > 0) { B.shield = 0; B.immune = 1.5; if (B.avatar) B.avatar.setBubble(false); SFX.ev('shield_pop', { pos: B === P ? null : B.H }, () => SFX.bonk(B.H)); if (B === P) Game.banner('BUBBLE POPPED!', 'YOU WERE SAVED'); return; }
+    A.tags++; B.zap = LASER.zapT; B.immune = LASER.zapT + LASER.safeT; B.zappedN = (B.zappedN || 0) + 1; B.zapBy = A;
+    this.spark(_lz.e, this.col(A), true);
+    SFX.zapHit(B === P ? null : B.H);
+    if (B === P) { SFX.zapped(); for (const h of hands) haptic(h, 1, 180); Game.banner('ZAPPED!', 'BY ' + A.name + ' - RECHARGING', '#ff5a8a'); }
+    else if (B.isBot) { B.avatar.say('ZAPPED!', 1.2); B.path = null; B.think = 0; }
+    if (A === P) { SFX.gotOne(); Game.reward(2, 'ZAPPED ' + B.name); save.stats.tags++; }
+    else if (A.isBot) A.say('tag', 0.5);
+    Game.toast(A.name + ' ZAPPED ' + B.name);
+  },
+  canShoot() { return this.on() && Game.started && !(P.zap > 0) && !(Menu.open && !renderer.xr.isPresenting) && Game.traveling !== true; },
+  // desktop / phone: from the crosshair (screen centre); the beam is drawn from the first-person blaster
+  fireFlat() {
+    if (!this.canShoot() || P.laserCD > 0) return false;
+    this.init(); P.laserCD = LASER.cd; P.swipe = 0.12;
+    camera.getWorldPosition(_lz.o); _lz.d.set(0, 0, -1).applyQuaternion(camera.getWorldQuaternion(_lz.q));
+    this.fpGun.updateWorldMatrix(true, false); _lz.t.set(0, 0, 0.22).applyMatrix4(this.fpGun.matrixWorld);
+    this.fire(P, _lz.o, _lz.d, this.fpGun.visible ? _lz.t : null);
+    return true;
+  },
+  // VR: from the blaster in this paw, along the controller's pointing ray
+  fireHand(h) {
+    if (!this.canShoot() || !h.connected || (h.laserCD || 0) > 0) return false;
+    this.init(); h.laserCD = LASER.cd;
+    this.muzzle(h, _lz.o, _lz.d);
+    this.fire(P, _lz.o, _lz.d);
+    haptic(h, 0.35, 30);
+    return true;
+  },
+  // muzzle point + aim direction of a VR hand's blaster (kept on this side of walls the paw is touching)
+  muzzle(h, o, d) {
+    h.ctrl.getWorldQuaternion(_lz.q); d.set(0, 0, -1).applyQuaternion(_lz.q);
+    o.copy(h.last).addScaledVector(d, 0.27);
+    _lz.c.copy(o).sub(P.H); const L = _lz.c.length();
+    if (L > 1e-4) { const w = raycast(P.H.x, P.H.y, P.H.z, _lz.c.x / L, _lz.c.y / L, _lz.c.z / L, L); if (w) o.copy(P.H).addScaledVector(_lz.c, Math.max(0, w.t - 0.05) / L); }
+  },
+  // ---------------- bots ----------------
+  bot(b, dt) {
+    if (b.laserCD > 0) b.laserCD -= dt;
+    if (!this.on()) return;
+    const A = BOT_AIM[save.settings.diff] || BOT_AIM[1], t = b.target;
+    if (!this.live() || !t || t === b || t.immune > 0 || b.zap > 0 || (b.state !== 'hunt' && b.state !== 'strafe')) { b.seeT = 0; b.aimTgt = null; return; }
+    const mz = this.botMuzzle(b, _lz.o);
+    _lz.t.set(t.H.x, t.H.y - 0.3, t.H.z);
+    // the aim catches up with the target at a human-ish rate, so a running target is aimed at where it WAS; it makes up
+    // part of that lag by leading the target, judged from how it has actually been moving (not its true velocity)
+    if (b.aimTgt !== t) {
+      b.aimTgt = t; (b.aimP || (b.aimP = new THREE.Vector3())).copy(_lz.t).add(_lz.u.set(rr(-0.9, 0.9), rr(-0.3, 0.5), rr(-0.9, 0.9)));
+      (b.tPrev || (b.tPrev = new THREE.Vector3())).copy(t.H); (b.tVel || (b.tVel = new THREE.Vector3())).set(0, 0, 0);
+      b.seeT = 0; b.losT = 0; b.los = false; b.reactAim = rr(A.react[0], A.react[1]);
+    } else {
+      _lz.u.copy(t.H).sub(b.tPrev).multiplyScalar(1 / Math.max(dt, 1e-4)); if (_lz.u.lengthSq() > 144) _lz.u.setLength(12);
+      b.tVel.lerp(_lz.u, 1 - Math.exp(-6 * dt)); b.tPrev.copy(t.H);
+      _lz.t.addScaledVector(b.tVel, A.lead / A.track);
+      b.aimP.lerp(_lz.t, 1 - Math.exp(-A.track * dt));
+    }
+    if ((b.losT -= dt) <= 0) { b.losT = 0.15; b.los = losClear(mz, _lz.t, 0.02) && losClear(b.H, t.H, 0.02); }
+    if (!b.los || mz.distanceTo(_lz.t) > A.range) { b.seeT = 0; return; }
+    b.seeT += dt;
+    if (b.seeT < b.reactAim || b.laserCD > 0) return;
+    // shoot where it thinks the target is, with a wobble (bigger while hopping or running)
+    _lz.d.copy(b.aimP).sub(mz).normalize();
+    const wob = A.spread * (1 + (b.onGround ? 0 : 0.7) + Math.min(1, Math.hypot(b.V.x, b.V.z) / 8) * 0.5);
+    _lz.u.set(-_lz.d.z, 0, _lz.d.x); if (_lz.u.lengthSq() < 1e-6) _lz.u.set(1, 0, 0); _lz.u.normalize(); _lz.v.crossVectors(_lz.d, _lz.u);
+    _lz.d.addScaledVector(_lz.u, gauss() * wob).addScaledVector(_lz.v, gauss() * wob).normalize();
+    b.shots = (b.shots || 0) + 1;
+    this.fire(b, mz, _lz.d);
+    b.laserCD = rr(A.cd[0], A.cd[1]);
+  },
+  botMuzzle(b, out) {
+    if (b.gun) { b.gun.updateWorldMatrix(true, false); return out.set(0, 0, 0.22).applyMatrix4(b.gun.matrixWorld); }
+    return out.copy(b.H);
+  },
+  // ---------------- per frame ----------------
+  update(dt) {
+    this.t += dt;
+    const on = this.on(), vr = renderer.xr.isPresenting;
+    if (on) this.init();
+    if (!this.ready) return;
+    for (const m of this.beams) if (m.userData.life > 0) { m.userData.life -= dt; m.material.opacity = Math.max(0, m.userData.life / LASER.beamLife); if (m.userData.life <= 0) m.visible = false; }
+    for (const m of this.sparks) if (m.userData.life > 0) { m.userData.life -= dt; const k = m.userData.big ? 0.3 : 0.18, f = 1 - m.userData.life / k; m.scale.setScalar((m.userData.big ? 0.5 : 0.22) * (0.4 + f)); m.material.opacity = Math.max(0, 1 - f); if (m.userData.life <= 0) m.visible = false; }
+    // zap timers (immune counts down in the game / bot update); bots blink while they can't be zapped
+    for (const e of Game.entities) {
+      if (e.zap > 0) { e.zap -= dt; if (e.zap <= 0 && e === P && on) SFX.recharged(); }
+      if (e.laserCD > 0 && e === P) e.laserCD -= dt;
+      if (e.isBot) e.avatar.group.visible = !(on && e.immune > 0 && Math.floor(this.t * 12) % 2);
+    }
+    for (const h of hands) if (h.laserCD > 0) h.laserCD -= dt;
+    // blasters
+    for (const b of Game.bots) {
+      if (on && !b.gun) { b.gun = new THREE.Mesh(blasterGeo(this.col(b)), BLASTER_MAT); b.gun.scale.setScalar(1.4); b.avatar.group.add(b.gun); } // a bit bigger so it reads from across the map
+      if (!b.gun) continue;
+      b.gun.visible = on;
+      if (!on) continue;
+      const paw = b.avatar.paws[0]; b.gun.position.copy(paw.position);
+      if (b.aimTgt && b.seeT > 0) b.gun.lookAt(b.aimP); else { _lz.t.set(Math.sin(b.yaw), -0.15, Math.cos(b.yaw)).add(paw.position); b.gun.lookAt(_lz.t); }
+      b.gun.position.addScaledVector(_lz.d.set(0, 0, 1).applyQuaternion(b.gun.quaternion), 0.05);
+    }
+    const playing = on && Game.started;
+    this.fpGun.visible = playing && !vr;
+    if (this.fpGun.visible) { const p = fp.paws[1].position; this.fpGun.position.set(p.x - 0.02, p.y + 0.03, p.z - 0.04); this.fpGun.rotation.set(0, Math.PI, 0); }
+    for (let i = 0; i < 2; i++) {
+      const h = hands[i], g = this.vrGuns[i], s = this.sights[i], show = playing && vr && h.connected;
+      g.visible = show; s.visible = show && !(P.zap > 0);
+      if (!show) continue;
+      this.muzzle(h, _lz.o, _lz.d);
+      g.position.copy(h.last).addScaledVector(_lz.d, 0.05); g.lookAt(_lz.t.copy(g.position).add(_lz.d));
+      s.position.copy(_lz.o); s.lookAt(_lz.t.copy(_lz.o).add(_lz.d));
+      // auto-fire while the trigger is held
+      if (h.trig) this.fireHand(h);
+    }
+    // phone: FIRE button (shown in laser tag only); held = auto-fire
+    if (this.fireBtn) { const want = playing && isTouch && !vr ? '' : 'none'; if (this.fireBtn.style.display !== want) this.fireBtn.style.display = want; }
+    if (INPUT.fire && playing && !vr) this.fireFlat();
+  },
+  // a fresh round / mode switch: clear zaps, show everyone again
+  reset() {
+    for (const e of Game.entities) { e.zap = 0; e.zappedN = 0; e.laserCD = 0; e.zapBy = null; e.aimTgt = null; e.seeT = 0; if (e.isBot) e.avatar.group.visible = true; }
+  }
+};
 
 // =====================================================================
 //  MAPS  (all original layouts)
@@ -4122,7 +4400,7 @@ document.addEventListener('keydown', e => {
 // any tap or click anywhere (iOS only unlocks audio on touchend / click, and most of the touch screen has no handler of its own)
 for (const ev of ['touchend', 'pointerup', 'click']) document.addEventListener(ev, () => SFX.init(), { capture: true, passive: true });
 document.addEventListener('keyup', e => { INPUT.keys[e.code] = false; if (e.code === 'Tab') $('board').style.display = 'none'; });
-window.addEventListener('blur', () => { INPUT.keys = {}; INPUT.grab = false; });
+window.addEventListener('blur', () => { INPUT.keys = {}; INPUT.grab = false; INPUT.fire = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('mousedown', e => {
   if (!Game.started || Menu.open || isTouch || renderer.xr.isPresenting) return;
@@ -4133,6 +4411,7 @@ document.addEventListener('mousedown', e => {
     if (P.heldBall) { deskThrow(); return; }
     if (Hover.btn) { Hover.btn.press(null); return; }
     if (P.it) Game.swipe();
+    if (Laser.on()) Laser.fireFlat(); // laser tag: click fires (holding still grabs / climbs)
     INPUT.grab = true;
   } else if (e.button === 2) deskUse();
 });
@@ -4168,6 +4447,7 @@ function setupTouch() {
   hold('tGrab', () => { INPUT.touchGrab = true; if (P.it) Game.swipe(); }, () => INPUT.touchGrab = false);
   hold('tUse', () => { if (!deskUse() && P.it) Game.swipe(); });
   hold('tMenu', () => Menu.show());
+  hold('tFire', () => { INPUT.fire = true; Laser.fireFlat(); }, () => INPUT.fire = false); // laser tag (held = auto-fire)
 }
 function tapWorld(x, y) {
   const ndc = { x: x / innerWidth * 2 - 1, y: -(y / innerHeight) * 2 + 1 };
@@ -4289,6 +4569,7 @@ function loop() {
   } else attractCam(dt);
   if (!paused) { for (const b of Game.bots) b.update(dt); Items.update(dt); }
   if (Game.started) updateSelfAvatar(dt);
+  Laser.update(dt);
   for (const b of world.buttons) b.update(dt);
   for (const s of world.screens) s.update(dt);
   camera.getWorldPosition(_cw);
@@ -4356,6 +4637,7 @@ function simStep(dt) {
   for (const b of Game.bots) b.update(dt);
   Items.update(dt);
   if (Game.started) updateSelfAvatar(dt);
+  Laser.update(dt);
 }
 // debug / test hook
 window.PUG = { SFXBANK, simStep, Game, P, world, MAPS, loadMap, hands, vrStep, desktopStep, INPUT, save, Items, rig, camera, renderer, nearest, raycast, startGame, Menu, COS, SFX, LOCO };
